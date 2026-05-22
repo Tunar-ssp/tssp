@@ -1,0 +1,19 @@
+[package]
+name = "tssp-adapter-system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "System clock, UUID, and random token adapters for TSSP"
+
+[dependencies]
+base64.workspace = true
+getrandom.workspace = true
+tssp-domain = { path = "../tssp-domain" }
+tssp-ports = { path = "../tssp-ports" }
+uuid.workspace = true
+
+[lints]
+workspace = true

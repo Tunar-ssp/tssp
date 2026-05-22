@@ -1,0 +1,16 @@
+[package]
+name = "tssp-ports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Infrastructure boundary traits for TSSP"
+
+[dependencies]
+thiserror.workspace = true
+tssp-domain = { path = "../tssp-domain" }
+
+[lints]
+workspace = true

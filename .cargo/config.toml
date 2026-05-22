@@ -1,0 +1,5 @@
+[term]
+progress.when = "auto"
+
+[build]
+rustflags = ["-Dwarnings"]

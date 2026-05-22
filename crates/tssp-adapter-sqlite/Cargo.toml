@@ -1,0 +1,21 @@
+[package]
+name = "tssp-adapter-sqlite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SQLite metadata adapter for TSSP"
+
+[dependencies]
+rusqlite.workspace = true
+thiserror.workspace = true
+tssp-domain = { path = "../tssp-domain" }
+tssp-ports = { path = "../tssp-ports" }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

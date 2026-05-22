@@ -1,0 +1,22 @@
+[package]
+name = "tsspd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "TSSP backend daemon"
+
+[dependencies]
+axum.workspace = true
+clap.workspace = true
+serde.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

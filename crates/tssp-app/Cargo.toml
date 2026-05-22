@@ -1,0 +1,20 @@
+[package]
+name = "tssp-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Application services for TSSP use cases"
+
+[dependencies]
+thiserror.workspace = true
+tssp-domain = { path = "../tssp-domain" }
+tssp-ports = { path = "../tssp-ports" }
+
+[dev-dependencies]
+tssp-domain = { path = "../tssp-domain" }
+
+[lints]
+workspace = true

@@ -1,0 +1,6 @@
+/target/
+/node_modules/
+/web/tssp-web/.svelte-kit/
+/web/tssp-web/build/
+*.log
+*.tmp

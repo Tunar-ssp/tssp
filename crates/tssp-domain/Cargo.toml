@@ -1,0 +1,16 @@
+[package]
+name = "tssp-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Pure domain model and validation rules for TSSP"
+
+[dependencies]
+thiserror.workspace = true
+unicode-normalization.workspace = true
+
+[lints]
+workspace = true
