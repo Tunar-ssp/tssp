@@ -52,8 +52,20 @@ config
 completions
 ```
 
-Command execution is still being wired to backend services. Parsing and shell
-completion generation are implemented.
+`status` is wired to the daemon. Other command execution is still being wired to
+backend services. Parsing and shell completion generation are implemented for the
+full command surface.
+
+## `tssp status`
+
+```sh
+tssp --host 127.0.0.1 --port 8421 status
+tssp --json status
+```
+
+Calls `/api/v1/status` with a 5 second connect timeout and 60 second total
+timeout. Network failures return exit code `4`; daemon `5xx` responses return
+exit code `5`.
 
 ## Completions
 

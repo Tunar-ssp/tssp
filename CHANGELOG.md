@@ -20,6 +20,8 @@ The format follows Keep a Changelog, and this project uses Semantic Versioning.
 - System adapter for UTC timestamps, UUIDv7 file ids, and random 128-bit
   session tokens.
 - Clap-based CLI command surface and completion generation.
+- Functional `tssp status` command using reqwest/rustls with pretty and JSON
+  output plus network/server exit-code mapping.
 - Minimal Axum daemon with health, readiness, status, and web fallback routes.
 - Daemon startup wiring for data directory creation, SQLite metadata, blob
   storage initialization, and repository-backed status counts.

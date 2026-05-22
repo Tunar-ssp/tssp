@@ -64,11 +64,12 @@ curl http://127.0.0.1:8421/api/v1/status
 ```sh
 cargo run -p tssp -- --help
 cargo run -p tssp -- completions bash
+cargo run -p tssp -- --host 127.0.0.1 --port 8421 status
 ```
 
-Most command handlers are not connected to the daemon yet. The command surface is
-present so generated documentation, completions, and future handlers share one
-source of truth.
+The `status` command is connected to the daemon. Most other command handlers are
+not connected yet. The command surface is present so generated documentation,
+completions, and future handlers share one source of truth.
 
 ## Documentation
 
