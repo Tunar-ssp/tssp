@@ -125,7 +125,10 @@ The daemon foundation lives in `tsspd`. It currently exposes:
 - `GET /api/v1/status`
 - `GET /<any-non-api-path>` as a placeholder web shell
 
-Handlers are thin and will call application services as capabilities are added.
+The binary initializes the data directory, opens the SQLite metadata repository,
+verifies blob storage can be initialized, and wires repository-backed status
+counts into the HTTP state. Other handlers will call application services as
+capabilities are added.
 
 ## Dependency Direction
 

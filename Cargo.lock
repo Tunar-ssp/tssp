@@ -1029,6 +1029,11 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower",
+ "tssp-adapter-fs",
+ "tssp-adapter-sqlite",
+ "tssp-adapter-system",
+ "tssp-domain",
+ "tssp-ports",
 ]
 
 [[package]]

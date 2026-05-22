@@ -46,6 +46,19 @@ Example:
 }
 ```
 
+The count fields are read from the metadata repository. If metadata is
+unavailable, the endpoint returns `503 Service Unavailable` with the standard
+error shape:
+
+```json
+{
+  "error": {
+    "code": "metadata_unavailable",
+    "message": "metadata database is unavailable"
+  }
+}
+```
+
 ## Web Fallback
 
 `GET /` and non-API paths return the embedded placeholder web shell with:

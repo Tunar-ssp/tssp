@@ -13,6 +13,11 @@ axum.workspace = true
 clap.workspace = true
 serde.workspace = true
 tokio.workspace = true
+tssp-adapter-fs = { path = "../tssp-adapter-fs" }
+tssp-adapter-sqlite = { path = "../tssp-adapter-sqlite" }
+tssp-adapter-system = { path = "../tssp-adapter-system" }
+tssp-domain = { path = "../tssp-domain" }
+tssp-ports = { path = "../tssp-ports" }
 
 [dev-dependencies]
 serde_json.workspace = true

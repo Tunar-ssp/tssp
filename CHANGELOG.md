@@ -21,4 +21,6 @@ The format follows Keep a Changelog, and this project uses Semantic Versioning.
   session tokens.
 - Clap-based CLI command surface and completion generation.
 - Minimal Axum daemon with health, readiness, status, and web fallback routes.
+- Daemon startup wiring for data directory creation, SQLite metadata, blob
+  storage initialization, and repository-backed status counts.
 - Initial project documentation and CI workflow.

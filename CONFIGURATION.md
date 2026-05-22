@@ -8,6 +8,7 @@ Implemented daemon flags:
 | --- | --- | --- | --- |
 | `bind` | `127.0.0.1` | `TSSPD_BIND` | IP address to bind. |
 | `port` | `8421` | `TSSPD_PORT` | TCP port to listen on. |
+| `data-dir` | `data` | `TSSPD_DATA_DIR` | Directory for `metadata.sqlite3` and blob storage. |
 
 The daemon also supports `--check-config`, which validates the currently parsed
 configuration and exits.

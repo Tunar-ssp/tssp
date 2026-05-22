@@ -22,7 +22,8 @@ The foundation currently includes:
 - An application upload service with cleanup-on-commit-failure behavior.
 - A Clap-based CLI command surface with shell completion generation.
 - A minimal Axum daemon exposing `/healthz`, `/readyz`, `/api/v1/status`, and an
-  embedded placeholder web shell.
+  embedded placeholder web shell, backed by real metadata status counts when
+  started from the binary.
 - A filesystem blob adapter that streams uploads into content-addressed BLAKE3
   storage with fanout directories and deduplication.
 - A SQLite metadata adapter with embedded migrations, WAL configuration,
@@ -48,7 +49,7 @@ cargo fmt --check
 ## Run The Daemon
 
 ```sh
-cargo run -p tsspd -- --bind 127.0.0.1 --port 8421
+cargo run -p tsspd -- --bind 127.0.0.1 --port 8421 --data-dir data
 ```
 
 Then check:

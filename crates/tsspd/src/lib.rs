@@ -5,15 +5,18 @@
 //! services instead of placing business logic in handlers.
 
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 use std::time::Instant;
 
 use axum::body::Body;
 use axum::http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
-use axum::http::HeaderValue;
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
+use tssp_domain::UnixTimestamp;
+use tssp_ports::{Clock, FileRepository, RepositoryStats};
 
 /// Server configuration required to bind the daemon.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,16 +36,86 @@ impl DaemonConfig {
 }
 
 /// Shared HTTP state.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HttpState {
     started_at: Instant,
+    stats_provider: Arc<dyn MetadataStatsProvider>,
 }
 
 impl HttpState {
     /// Creates HTTP state using the current process start instant.
     #[must_use]
     pub fn new(started_at: Instant) -> Self {
-        Self { started_at }
+        Self {
+            started_at,
+            stats_provider: Arc::new(StaticMetadataStatsProvider),
+        }
+    }
+
+    /// Creates HTTP state with a real metadata stats provider.
+    #[must_use]
+    pub fn with_stats_provider(
+        started_at: Instant,
+        stats_provider: Arc<dyn MetadataStatsProvider>,
+    ) -> Self {
+        Self {
+            started_at,
+            stats_provider,
+        }
+    }
+}
+
+/// Supplies metadata counts to the status endpoint.
+pub trait MetadataStatsProvider: Send + Sync {
+    /// Returns the latest metadata stats.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when counts cannot be read.
+    fn stats(&self) -> Result<RepositoryStats, String>;
+}
+
+#[derive(Debug)]
+struct StaticMetadataStatsProvider;
+
+impl MetadataStatsProvider for StaticMetadataStatsProvider {
+    fn stats(&self) -> Result<RepositoryStats, String> {
+        Ok(RepositoryStats {
+            file_count: 0,
+            tag_count: 0,
+            pinned_count: 0,
+            recent_upload_count: 0,
+        })
+    }
+}
+
+/// Metadata stats provider backed by a repository and clock.
+#[derive(Debug)]
+pub struct RepositoryMetadataStatsProvider<R, C> {
+    repository: R,
+    clock: C,
+}
+
+impl<R, C> RepositoryMetadataStatsProvider<R, C> {
+    /// Creates a repository-backed stats provider.
+    #[must_use]
+    pub const fn new(repository: R, clock: C) -> Self {
+        Self { repository, clock }
+    }
+}
+
+impl<R, C> MetadataStatsProvider for RepositoryMetadataStatsProvider<R, C>
+where
+    R: FileRepository + Send + Sync,
+    C: Clock + Send + Sync,
+{
+    fn stats(&self) -> Result<RepositoryStats, String> {
+        let now = self.clock.now();
+        let cutoff = now.seconds().saturating_sub(86_400);
+        let recent_since = UnixTimestamp::new(cutoff).map_err(|error| error.to_string())?;
+        self.repository
+            .stats_since(recent_since)
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -64,19 +137,30 @@ async fn readyz() -> impl IntoResponse {
     ([(CONTENT_TYPE, "text/plain; charset=utf-8")], "ready")
 }
 
-async fn status(
-    axum::extract::State(state): axum::extract::State<HttpState>,
-) -> Json<StatusResponse> {
-    Json(StatusResponse {
-        schema_version: 1,
-        version: env!("CARGO_PKG_VERSION"),
-        status: "ok",
-        uptime_seconds: state.started_at.elapsed().as_secs(),
-        file_count: 0,
-        tag_count: 0,
-        pinned_count: 0,
-        recent_upload_count_24h: 0,
-    })
+async fn status(axum::extract::State(state): axum::extract::State<HttpState>) -> Response {
+    match state.stats_provider.stats() {
+        Ok(repository_stats) => Json(StatusResponse {
+            schema_version: 1,
+            version: env!("CARGO_PKG_VERSION"),
+            status: "ok",
+            uptime_seconds: state.started_at.elapsed().as_secs(),
+            file_count: repository_stats.file_count,
+            tag_count: repository_stats.tag_count,
+            pinned_count: repository_stats.pinned_count,
+            recent_upload_count_24h: repository_stats.recent_upload_count,
+        })
+        .into_response(),
+        Err(message) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "metadata_unavailable",
+                    message,
+                },
+            }),
+        )
+            .into_response(),
+    }
 }
 
 async fn web_fallback() -> Response<Body> {
@@ -117,6 +201,17 @@ pub struct StatusResponse {
     pub recent_upload_count_24h: u64,
 }
 
+#[derive(Debug, Serialize)]
+struct ErrorResponse {
+    error: ErrorBody,
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorBody {
+    code: &'static str,
+    message: String,
+}
+
 const WEB_PLACEHOLDER: &str = r#"<!doctype html>
 <html lang="en">
 <head>
@@ -155,13 +250,15 @@ pub fn bind_error_message(address: SocketAddr, error: &std::io::Error) -> String
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
+    use std::sync::Arc;
     use std::time::Instant;
 
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    use super::{bind_error_message, build_router, DaemonConfig, HttpState};
+    use super::{bind_error_message, build_router, DaemonConfig, HttpState, MetadataStatsProvider};
+    use tssp_ports::RepositoryStats;
 
     #[test]
     fn config_builds_socket_address() {
@@ -195,7 +292,10 @@ mod tests {
 
     #[tokio::test]
     async fn status_endpoint_returns_schema_version() {
-        let app = build_router(HttpState::new(Instant::now()));
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+        ));
         let response = app
             .oneshot(
                 Request::builder()
@@ -213,6 +313,33 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("json parse failed: {error}"));
         assert_eq!(parsed["schema_version"], 1);
+        assert_eq!(parsed["file_count"], 7);
+        assert_eq!(parsed["tag_count"], 3);
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_reports_metadata_failure() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FailingStatsProvider),
+        ));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/status")
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request build failed: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        let parsed: serde_json::Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("json parse failed: {error}"));
+        assert_eq!(parsed["error"]["code"], "metadata_unavailable");
     }
 
     #[test]
@@ -226,5 +353,26 @@ mod tests {
 
         assert!(message.contains("8421"));
         assert!(message.contains("--port"));
+    }
+
+    struct FixedStatsProvider;
+
+    impl MetadataStatsProvider for FixedStatsProvider {
+        fn stats(&self) -> Result<RepositoryStats, String> {
+            Ok(RepositoryStats {
+                file_count: 7,
+                tag_count: 3,
+                pinned_count: 2,
+                recent_upload_count: 1,
+            })
+        }
+    }
+
+    struct FailingStatsProvider;
+
+    impl MetadataStatsProvider for FailingStatsProvider {
+        fn stats(&self) -> Result<RepositoryStats, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
     }
 }
