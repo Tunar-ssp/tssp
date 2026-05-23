@@ -11,7 +11,7 @@ Tasks are intentionally small, verifiable, and ordered by dependency.
 
 - [x] Implement full `GET /api/v1/files` query model in the daemon: multi-tag filtering, MIME prefix, name substring, time bounds, pinned-only, sorting, and cursor pagination
 - [x] Wire CLI `tssp list` to the full query model, including repeated tags, sort selection, pinned filter, and cursor paging
-- [ ] Implement CLI `tssp today` on top of the list query model
+- [x] Implement CLI `tssp today` on top of the list query model
 - [ ] Extend `tssp pull` to resolve `id|name`, warn on ambiguous filename matches, and honor `--all`
 
 ## Upload And Metadata Surface

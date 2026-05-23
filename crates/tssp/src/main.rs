@@ -47,6 +47,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     if let Some(Command::Last(args)) = cli.command.as_ref() {
         return list::run_last(cli, args);
     }
+    if matches!(cli.command, Some(Command::Today)) {
+        return list::run_today(cli);
+    }
     if let Some(Command::Info(args)) = cli.command.as_ref() {
         return info::run(cli, args);
     }
@@ -222,6 +225,13 @@ mod tests {
     #[test]
     fn run_last_branch() {
         let mut c = cli(Some(Command::Last(tssp::LastArgs { count: 10 })));
+        c.connection.host = Some("bad/host".to_owned());
+        assert_eq!(run(&c), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_today_branch() {
+        let mut c = cli(Some(Command::Today));
         c.connection.host = Some("bad/host".to_owned());
         assert_eq!(run(&c), Ok(CliExitCode::Usage));
     }

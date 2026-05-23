@@ -41,6 +41,19 @@ pub(crate) fn run_last(cli: &Cli, args: &LastArgs) -> Result<CliExitCode, String
     run_list_request(cli, &query)
 }
 
+/// Runs `tssp today`.
+pub(crate) fn run_today(cli: &Cli) -> Result<CliExitCode, String> {
+    let query = match build_today_query() {
+        Ok(query) => query,
+        Err(message) => {
+            eprintln!("error: {message}");
+            return Ok(CliExitCode::Usage);
+        }
+    };
+
+    run_list_request(cli, &query)
+}
+
 fn run_list_request(cli: &Cli, query: &[(String, String)]) -> Result<CliExitCode, String> {
     let address = match BackendAddress::from_connection_args(&cli.connection) {
         Ok(value) => value,
@@ -126,6 +139,22 @@ fn build_last_query(args: &LastArgs) -> Result<Vec<(String, String)>, String> {
     Ok(vec![
         ("limit".to_owned(), args.count.to_string()),
         ("sort".to_owned(), "-uploaded".to_owned()),
+    ])
+}
+
+fn build_today_query() -> Result<Vec<(String, String)>, String> {
+    let now = OffsetDateTime::now_local()
+        .map_err(|error| format!("could not determine local time for `tssp today`: {error}"))?;
+    build_today_query_at(now)
+}
+
+fn build_today_query_at(now: OffsetDateTime) -> Result<Vec<(String, String)>, String> {
+    Ok(vec![
+        ("limit".to_owned(), DEFAULT_LIMIT.to_string()),
+        (
+            "since".to_owned(),
+            start_of_local_day_timestamp(now)?.to_string(),
+        ),
     ])
 }
 
@@ -228,6 +257,15 @@ fn unix_now_seconds() -> Result<i64, String> {
         .map_err(|error| format!("system clock is too large for list filtering: {error}"))
 }
 
+fn start_of_local_day_timestamp(now: OffsetDateTime) -> Result<i64, String> {
+    let start = now
+        .date()
+        .midnight()
+        .assume_offset(now.offset())
+        .unix_timestamp();
+    validate_since_timestamp(start)
+}
+
 fn classify_response_status(status: StatusCode) -> Result<(), CliExitCode> {
     if status.is_server_error() {
         return Err(CliExitCode::Server);
@@ -299,10 +337,12 @@ struct FileRecordResponse {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_last_query, build_list_query, classify_response_status, parse_list_body,
-        parse_since_filter_at, print_list, FileRecordResponse, ListResponse,
+        build_last_query, build_list_query, build_today_query_at, classify_response_status,
+        parse_list_body, parse_since_filter_at, print_list, FileRecordResponse, ListResponse,
     };
     use reqwest::StatusCode;
+    use time::format_description::well_known::Rfc3339;
+    use time::OffsetDateTime;
     use tssp::ListArgs;
     use tssp_cli_core::CliExitCode;
 
@@ -369,6 +409,27 @@ mod tests {
             vec![
                 ("limit".to_owned(), "7".to_owned()),
                 ("sort".to_owned(), "-uploaded".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_today_query_uses_local_start_of_day() {
+        let now = OffsetDateTime::parse("2026-05-23T13:45:00+04:00", &Rfc3339)
+            .unwrap_or_else(|error| panic!("parse failed: {error}"));
+        let expected_since = OffsetDateTime::parse("2026-05-23T00:00:00+04:00", &Rfc3339)
+            .unwrap_or_else(|error| panic!("parse failed: {error}"))
+            .unix_timestamp()
+            .to_string();
+
+        let query =
+            build_today_query_at(now).unwrap_or_else(|error| panic!("build failed: {error}"));
+
+        assert_eq!(
+            query,
+            vec![
+                ("limit".to_owned(), "50".to_owned()),
+                ("since".to_owned(), expected_since),
             ]
         );
     }
