@@ -145,51 +145,88 @@ impl HttpState {
     }
 }
 
+async fn options_response() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NO_CONTENT,
+        [
+            (
+                axum::http::header::ALLOW,
+                "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+            ),
+        ],
+    )
+}
+
 /// Builds the daemon router.
 pub fn build_router(state: HttpState) -> Router {
     Router::new()
         .route(
             "/api/v1/files",
-            post(upload::upload_file).layer(DefaultBodyLimit::disable()),
+            post(upload::upload_file)
+                .get(list::list_files)
+                .options(options_response)
+                .layer(DefaultBodyLimit::disable()),
         )
         .route(
             "/api/v1/files/batch",
-            post(upload::upload_files_batch).layer(DefaultBodyLimit::disable()),
+            post(upload::upload_files_batch)
+                .options(options_response)
+                .layer(DefaultBodyLimit::disable()),
         )
-        .route("/api/v1/files", get(list::list_files))
-        .route("/api/v1/pins", get(pins::list_pins))
-        .route("/api/v1/pins/reorder", post(pins::reorder))
-        .route("/api/v1/tags", get(tags::list_tags))
-        .route("/api/v1/files/{id}/tags", post(tags::add_tags))
+        .route("/api/v1/pins", get(pins::list_pins).options(options_response))
+        .route(
+            "/api/v1/pins/reorder",
+            post(pins::reorder).options(options_response),
+        )
+        .route("/api/v1/tags", get(tags::list_tags).options(options_response))
+        .route(
+            "/api/v1/files/{id}/tags",
+            post(tags::add_tags).options(options_response),
+        )
         .route(
             "/api/v1/files/{id}/tags/{tag}",
-            axum::routing::delete(tags::remove_tag),
+            axum::routing::delete(tags::remove_tag).options(options_response),
         )
         .route(
             "/api/v1/files/{id}/pin",
-            axum::routing::put(pins::pin).delete(pins::unpin),
+            axum::routing::put(pins::pin)
+                .delete(pins::unpin)
+                .options(options_response),
         )
-        .route("/api/v1/files/{id}/content", get(content::get_file_content))
+        .route(
+            "/api/v1/files/{id}/content",
+            get(content::get_file_content).options(options_response),
+        )
         .route(
             "/api/v1/files/{id}",
             get(file::get_file)
                 .delete(delete::delete_file)
-                .patch(rename::rename_file),
+                .patch(rename::rename_file)
+                .options(options_response),
         )
-        .route("/api/v1/search", get(search::search_files))
-        .route("/api/v1/sessions/send", post(sessions::create_send_session))
+        .route(
+            "/api/v1/search",
+            get(search::search_files).options(options_response),
+        )
+        .route(
+            "/api/v1/sessions/send",
+            post(sessions::create_send_session).options(options_response),
+        )
         .route(
             "/api/v1/sessions/receive",
-            post(sessions::create_receive_session),
+            post(sessions::create_receive_session).options(options_response),
         )
-        .route("/api/v1/sessions/{token}", get(sessions::get_session))
+        .route(
+            "/api/v1/sessions/{token}",
+            get(sessions::get_session).options(options_response),
+        )
         .route(
             "/api/v1/sessions/{token}/use",
-            post(sessions::use_session_endpoint),
+            post(sessions::use_session_endpoint).options(options_response),
         )
         .route("/healthz", get(status::healthz))
         .route("/readyz", get(status::readyz))
-        .route("/api/v1/status", get(status::status))
+        .route("/api/v1/status", get(status::status).options(options_response))
         .fallback(web::web_fallback)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::very_permissive())

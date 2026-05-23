@@ -35,23 +35,84 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
         }
     };
     let client = build_client()?;
+
+    if plan.items.len() > 1 {
+        upload_batch(&client, &address, &plan.items, cli)
+    } else {
+        upload_single(&client, &address, &plan.items, cli)
+    }
+}
+
+fn upload_single(
+    client: &reqwest::blocking::Client,
+    address: &BackendAddress,
+    items: &[UploadItem],
+    cli: &Cli,
+) -> Result<CliExitCode, String> {
     let mut successes = 0_usize;
     let mut last_error = CliExitCode::Success;
 
-    for item in &plan.items {
-        match upload_one(&client, &address, item, cli) {
+    for item in items {
+        match upload_one(client, address, item, cli) {
             Ok(()) => successes = successes.saturating_add(1),
             Err(code) => last_error = code,
         }
     }
 
-    if successes == plan.items.len() {
+    if successes == items.len() {
         return Ok(CliExitCode::Success);
     }
     if successes > 0 {
         return Ok(CliExitCode::PartialSuccess);
     }
     Ok(last_error)
+}
+
+fn upload_batch(
+    client: &reqwest::blocking::Client,
+    address: &BackendAddress,
+    items: &[UploadItem],
+    cli: &Cli,
+) -> Result<CliExitCode, String> {
+    let started_at = Instant::now();
+    let boundary = multipart_boundary();
+
+    let mut form_data = Vec::new();
+    for item in items {
+        for tag in &item.tags {
+            form_data.extend(text_field(&boundary, "tag", tag));
+        }
+        if item.pinned {
+            form_data.extend(text_field(&boundary, "pin", "true"));
+        }
+        form_data.extend(file_header(&boundary, &item.filename));
+
+        let mut file = File::open(&item.path).map_err(|error| {
+            format!("could not open {}: {error}", item.path.display())
+        })?;
+        file.read_to_end(&mut form_data).map_err(|error| {
+            format!("could not read {}: {error}", item.path.display())
+        })?;
+        form_data.extend(b"\r\n");
+    }
+    form_data.extend(format!("--{boundary}--\r\n").as_bytes());
+
+    let response = client
+        .post(address.url("/api/v1/files/batch"))
+        .header(
+            CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(form_data))
+        .send()
+        .map_err(|error| {
+            format!(
+                "could not upload batch to {}: {error}",
+                address.base_url()
+            )
+        })?;
+
+    handle_batch_response(response, items, cli, started_at)
 }
 
 struct UploadPlan {
@@ -164,6 +225,7 @@ impl UploadPlan {
     }
 }
 
+#[derive(Clone)]
 struct UploadItem {
     path: PathBuf,
     filename: String,
@@ -443,6 +505,151 @@ fn map_io_error(error: &std::io::Error) -> CliExitCode {
         return CliExitCode::PermissionDenied;
     }
     CliExitCode::Generic
+}
+
+fn handle_batch_response(
+    response: reqwest::blocking::Response,
+    items: &[UploadItem],
+    cli: &Cli,
+    started_at: Instant,
+) -> Result<CliExitCode, String> {
+    let status = response.status();
+    if status.is_server_error() {
+        return Err(format!(
+            "daemon returned {status} during batch upload",
+        ));
+    }
+    if !status.is_success() {
+        return Err(format!(
+            "daemon returned {status} during batch upload",
+        ));
+    }
+
+    let body = response.text().map_err(|error| {
+        format!("daemon returned unreadable batch response: {error}")
+    })?;
+    let batch_result: BatchUploadResponse = serde_json::from_str(&body).map_err(|error| {
+        format!("daemon returned invalid batch response: {error}")
+    })?;
+
+    print_batch_results(&batch_result, items, cli, started_at)
+}
+
+fn print_batch_results(
+    result: &BatchUploadResponse,
+    items: &[UploadItem],
+    cli: &Cli,
+    started_at: Instant,
+) -> Result<CliExitCode, String> {
+    if cli.output.quiet {
+        return Ok(if result.failed_count == 0 {
+            CliExitCode::Success
+        } else if result.created_count > 0 || result.deduplicated_count > 0 {
+            CliExitCode::PartialSuccess
+        } else {
+            CliExitCode::Generic
+        });
+    }
+
+    let duration = started_at.elapsed();
+    if cli.output.json {
+        for (idx, item_result) in result.results.iter().enumerate() {
+            if let Some(file) = &item_result.file {
+                let record = FileRecordResponse {
+                    schema_version: 1,
+                    id: file.id.clone(),
+                    name: file.name.clone(),
+                    size_bytes: file.size_bytes,
+                    content_hash: file.content_hash.clone(),
+                    mime_type: file.mime_type.clone(),
+                    uploaded_at: file.uploaded_at,
+                    tags: file.tags.clone(),
+                    pinned: file.pinned,
+                };
+                let output = UploadOutput::new(
+                    &record,
+                    item_result.outcome == "deduplicated",
+                    duration.as_millis() / items.len() as u128,
+                    0,
+                );
+                let encoded = serde_json::to_string(&output)
+                    .map_err(|e| format!("could not encode JSON: {e}"))?;
+                println!("{encoded}");
+            } else {
+                eprintln!(
+                    "error: batch item {} failed: {}",
+                    idx,
+                    item_result
+                        .error
+                        .as_ref()
+                        .map(|e| &e.message)
+                        .unwrap_or(&"unknown error".to_string())
+                );
+            }
+        }
+    } else {
+        println!(
+            "batch upload completed: {} created, {} deduplicated, {} failed",
+            result.created_count, result.deduplicated_count, result.failed_count
+        );
+        for (idx, item_result) in result.results.iter().enumerate() {
+            if item_result.outcome == "failed" {
+                eprintln!(
+                    "  [{}] {}: {}",
+                    idx,
+                    items.get(idx).map(|i| &i.filename).unwrap_or(&"?".to_string()),
+                    item_result
+                        .error
+                        .as_ref()
+                        .map(|e| &e.message)
+                        .unwrap_or(&"unknown error".to_string())
+                );
+            } else {
+                println!(
+                    "  [{}] {} ({})",
+                    idx,
+                    items.get(idx).map(|i| &i.filename).unwrap_or(&"?".to_string()),
+                    item_result.outcome
+                );
+            }
+        }
+    }
+
+    Ok(if result.failed_count == 0 {
+        CliExitCode::Success
+    } else if result.created_count > 0 || result.deduplicated_count > 0 {
+        CliExitCode::PartialSuccess
+    } else {
+        CliExitCode::Generic
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct BatchUploadResponse {
+    #[allow(dead_code)]
+    schema_version: u8,
+    created_count: u64,
+    deduplicated_count: u64,
+    failed_count: u64,
+    results: Vec<BatchUploadResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BatchUploadResult {
+    #[allow(dead_code)]
+    name: String,
+    outcome: String,
+    #[allow(dead_code)]
+    http_status: u16,
+    file: Option<FileRecordResponse>,
+    error: Option<ErrorMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorMessage {
+    #[allow(dead_code)]
+    code: String,
+    message: String,
 }
 
 fn map_client_status(status: reqwest::StatusCode) -> CliExitCode {
