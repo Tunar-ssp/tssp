@@ -288,6 +288,13 @@ mod tests {
             .list_files_by_tag(&tag, 10)
             .unwrap_or_else(|error| panic!("list by tag failed: {error}"))
             .is_empty());
+
+        let name = tssp_domain::FileName::new("newname.txt")
+            .unwrap_or_else(|error| panic!("filename parse failed: {error}"));
+        assert!(provider
+            .rename_file(&id, &name)
+            .unwrap_or_else(|error| panic!("rename failed: {error}"))
+            .is_none());
     }
 
     #[tokio::test]
@@ -350,5 +357,27 @@ mod tests {
         let response = status(State(state)).await;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[test]
+    fn static_provider_list_files_returns_empty() {
+        use tssp_ports::ListQuery as RepositoryListQuery;
+        let provider = StaticMetadataStatsProvider;
+        let query = RepositoryListQuery {
+            limit: 10,
+            tags: vec![],
+            mime_prefix: None,
+            name_substring: None,
+            since: None,
+            until: None,
+            pinned_only: false,
+            sort: Default::default(),
+            after_cursor: None,
+        };
+        let result = provider
+            .list_files(&query)
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+        assert!(result.files.is_empty());
+        assert!(result.next_cursor.is_none());
     }
 }
