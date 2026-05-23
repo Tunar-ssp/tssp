@@ -92,6 +92,7 @@ impl From<PinOutcome> for HttpPinMutation {
 
 /// Pin failure mapped to HTTP error responses.
 #[derive(Debug)]
+#[derive(Clone)]
 pub enum HttpPinError {
     /// Client supplied invalid data.
     InvalidRequest {
@@ -329,6 +330,7 @@ mod tests {
     use axum::body::to_bytes;
     use axum::http::StatusCode;
     use tssp_app::PinError;
+    use tssp_domain::FileRecord;
     use tssp_ports::{PinOutcome, RepositoryError};
 
     use super::{
@@ -479,5 +481,93 @@ mod tests {
         let response = PinListResponse::from_records(&[record]);
         assert_eq!(response.schema_version, 1);
         assert_eq!(response.files.len(), 1);
+    }
+
+    struct ErrorPinProvider;
+
+    impl FilePinProvider for ErrorPinProvider {
+        fn list_pins(&self) -> Result<Vec<FileRecord>, HttpPinError> {
+            Err(HttpPinError::Internal {
+                message: "test error".to_owned(),
+            })
+        }
+
+        fn pin(&self, _id: String, _position: Option<u32>) -> Result<HttpPinMutation, HttpPinError> {
+            Err(HttpPinError::NotFound {
+                message: "not found".to_owned(),
+            })
+        }
+
+        fn unpin(&self, _id: String) -> Result<HttpPinMutation, HttpPinError> {
+            Err(HttpPinError::NotFound {
+                message: "not found".to_owned(),
+            })
+        }
+
+        fn reorder(&self, _ids: Vec<String>) -> Result<(), HttpPinError> {
+            Err(HttpPinError::InvalidRequest {
+                message: "invalid".to_owned(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn list_pins_endpoint_returns_error_from_provider() {
+        use axum::extract::State;
+        use std::sync::Arc;
+        use crate::HttpState;
+
+        let provider = Arc::new(ErrorPinProvider);
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_pin_provider(provider);
+
+        let response = super::list_pins(State(state)).await;
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn pin_endpoint_returns_not_found_error() {
+        use axum::extract::State;
+        use std::sync::Arc;
+        use crate::HttpState;
+
+        let provider = Arc::new(ErrorPinProvider);
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_pin_provider(provider);
+
+        let response = super::pin(State(state), axum::extract::Path("file-1".to_string()), None).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn unpin_endpoint_returns_error_from_provider() {
+        use axum::extract::State;
+        use std::sync::Arc;
+        use crate::HttpState;
+
+        let provider = Arc::new(ErrorPinProvider);
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_pin_provider(provider);
+
+        let response = super::unpin(State(state), axum::extract::Path("file-1".to_string())).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn reorder_endpoint_handles_empty_ids() {
+        use axum::extract::State;
+        use axum::Json;
+        use std::sync::Arc;
+        use crate::HttpState;
+
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_pin_provider(Arc::new(StaticFilePinProvider));
+
+        let response = super::reorder(
+            State(state),
+            Json(super::ReorderRequest { ids: vec![] }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }
