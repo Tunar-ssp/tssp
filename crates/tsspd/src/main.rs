@@ -389,6 +389,22 @@ async fn shutdown_signal() {
     }
 }
 
+fn warn_if_insecure_bind(settings: &DaemonSettings) {
+    use std::net::IpAddr;
+    let is_unspecified = match settings.bind {
+        IpAddr::V4(v4) => v4.is_unspecified(),
+        IpAddr::V6(v6) => v6.is_unspecified(),
+    };
+    if is_unspecified && settings.public_url.is_none() && !settings.trust_forwarded {
+        tracing::warn!(
+            "server is bound to {} without public_url set — \
+             remote clients will bypass authentication (local-mode). \
+             Set public_url to enable global authentication mode.",
+            settings.bind
+        );
+    }
+}
+
 async fn run(cli: Cli) -> Result<(), String> {
     let settings = load_settings(&cli)?;
 
@@ -398,6 +414,7 @@ async fn run(cli: Cli) -> Result<(), String> {
     }
 
     settings.log_effective();
+    warn_if_insecure_bind(&settings);
     let paths = prepare_runtime_paths(&settings)?;
     let repository = open_repository(&paths.metadata_path)?;
     run_integrity_check(&paths.metadata_path)

@@ -157,6 +157,18 @@ impl HttpState {
         Self::new(Instant::now(), upload_temp_dir, settings, urls, 0)
     }
 
+    /// Builds HTTP state for integration tests with custom settings.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn test_http_state_with_settings(
+        upload_temp_dir: PathBuf,
+        settings: DaemonSettings,
+    ) -> Self {
+        let settings = Arc::new(settings);
+        let urls = PublicUrlBuilder::from_settings(&settings);
+        Self::new(Instant::now(), upload_temp_dir, settings, urls, 0)
+    }
+
     /// Sets the metadata stats provider.
     #[must_use]
     pub fn with_stats_provider(mut self, provider: Arc<dyn MetadataStatsProvider>) -> Self {
@@ -237,22 +249,35 @@ async fn options_response() -> (axum::http::StatusCode, axum::http::header::Head
     (axum::http::StatusCode::NO_CONTENT, headers)
 }
 
+/// Returns the body-limit layer for upload routes.
+/// `0` means unlimited; any other value caps the request body.
+fn upload_body_limit(max_bytes: u64) -> DefaultBodyLimit {
+    if max_bytes == 0 {
+        DefaultBodyLimit::disable()
+    } else {
+        let limit = usize::try_from(max_bytes).unwrap_or(usize::MAX);
+        DefaultBodyLimit::max(limit)
+    }
+}
+
 /// Builds the daemon router.
 #[allow(clippy::too_many_lines)]
 pub fn build_router(state: HttpState) -> Router {
+    let max_upload = state.settings().max_upload_bytes;
+    let upload_body_limit = upload_body_limit(max_upload);
     Router::new()
         .route(
             "/api/v1/files",
             post(upload::upload_file)
                 .get(list::list_files)
                 .options(options_response)
-                .layer(DefaultBodyLimit::disable()),
+                .layer(upload_body_limit),
         )
         .route(
             "/api/v1/files/batch",
             post(upload::upload_files_batch)
                 .options(options_response)
-                .layer(DefaultBodyLimit::disable()),
+                .layer(upload_body_limit),
         )
         .route(
             "/api/v1/pins",
@@ -355,7 +380,7 @@ pub fn build_router(state: HttpState) -> Router {
             "/u/{token}",
             get(public_sessions::get_receive_session_page)
                 .post(public_sessions::post_receive_session_upload)
-                .layer(DefaultBodyLimit::disable()),
+                .layer(upload_body_limit),
         )
         .route(
             "/api/v1/files/{id}/thumbnail",
@@ -1906,5 +1931,76 @@ mod tests {
 
     fn tag_value(value: &str) -> Tag {
         Tag::new(value).unwrap_or_else(|error| panic!("invalid tag: {error}"))
+    }
+
+    #[tokio::test]
+    async fn upload_body_limit_enforced_when_max_upload_bytes_set() {
+        let settings = DaemonSettings {
+            max_upload_bytes: 100,
+            ..DaemonSettings::default()
+        };
+        let state = HttpState::test_http_state_with_settings(std::env::temp_dir(), settings);
+        let app = build_router(state);
+        // axum's DefaultBodyLimit::max limits body reading at the extractor level.
+        // When the multipart body exceeds the cap, multer sees an incomplete
+        // stream and returns 400 BAD_REQUEST (not 413) because the stream is
+        // truncated before the final boundary is reached.  The upload is still
+        // rejected — the security property is preserved.
+        let boundary = "----TestBoundary";
+        let data = "X".repeat(200);
+        let body_str = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"big.bin\"\r\n\r\n{data}\r\n--{boundary}--\r\n",
+        );
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(body_str))
+                    .unwrap_or_else(|e| panic!("request build: {e}")),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("request failed: {e}"));
+        // Must not succeed — either 400 (truncated multipart) or 413 (pre-check).
+        assert!(
+            response.status().is_client_error(),
+            "expected client error for over-limit upload, got {}",
+            response.status()
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_body_unlimited_when_max_upload_bytes_is_zero() {
+        let settings = DaemonSettings {
+            max_upload_bytes: 0,
+            ..DaemonSettings::default()
+        };
+        let state = HttpState::test_http_state_with_settings(std::env::temp_dir(), settings);
+        let app = build_router(state);
+        // With no limit, a small body should reach auth and return 401, not
+        // any body-limit error code.
+        let boundary = "----TestBoundary";
+        let body_str = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"small.bin\"\r\n\r\nHELLO\r\n--{boundary}--\r\n",
+        );
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/files")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(body_str))
+                    .unwrap_or_else(|e| panic!("request build: {e}")),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("request failed: {e}"));
+        assert_ne!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 }

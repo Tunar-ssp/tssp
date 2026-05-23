@@ -954,7 +954,8 @@ fn run_migrations(connection: &Connection) -> Result<(), SqliteRepositoryError> 
     notes::migrate_notes_schema(connection)?;
     migrate_folders_schema(connection)?;
     migrate_cloud_schema(connection)?;
-    migrate_search_indexes(connection)
+    migrate_search_indexes(connection)?;
+    migrate_content_hash_index(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -1046,6 +1047,24 @@ pub(crate) fn migrate_folders_schema(connection: &Connection) -> Result<(), Sqli
         .map_err(SqliteRepositoryError::Migration)?;
 
     record_migration(connection, 4)?;
+    Ok(())
+}
+
+/// Adds an index on `content_hash` for fast deduplication lookups (schema v10).
+///
+/// # Errors
+///
+/// Returns [`SqliteRepositoryError`] when migration SQL fails.
+pub(crate) fn migrate_content_hash_index(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 10)? {
+        return Ok(());
+    }
+    connection
+        .execute_batch("CREATE INDEX IF NOT EXISTS idx_files_content_hash ON files(content_hash);")
+        .map_err(SqliteRepositoryError::Migration)?;
+    record_migration(connection, 10)?;
     Ok(())
 }
 
