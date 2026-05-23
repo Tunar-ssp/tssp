@@ -1706,6 +1706,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

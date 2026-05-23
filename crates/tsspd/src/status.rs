@@ -1,5 +1,7 @@
 //! Health and metadata status delivery.
 
+use std::path::Path;
+
 use axum::extract::State;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::StatusCode;
@@ -196,6 +198,8 @@ pub struct StatusResponse {
     pub pinned_count: u64,
     /// Uploads in the last 24 hours.
     pub recent_upload_count_24h: u64,
+    /// Storage used in bytes.
+    pub storage_bytes_used: u64,
 }
 
 pub(crate) async fn healthz() -> impl IntoResponse {
@@ -208,17 +212,25 @@ pub(crate) async fn readyz() -> impl IntoResponse {
 
 pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     match state.stats_provider.stats() {
-        Ok(repository_stats) => Json(StatusResponse {
-            schema_version: 1,
-            version: env!("CARGO_PKG_VERSION"),
-            status: "ok",
-            uptime_seconds: state.started_at.elapsed().as_secs(),
-            file_count: repository_stats.file_count,
-            tag_count: repository_stats.tag_count,
-            pinned_count: repository_stats.pinned_count,
-            recent_upload_count_24h: repository_stats.recent_upload_count,
-        })
-        .into_response(),
+        Ok(repository_stats) => {
+            let storage_bytes_used =
+                tokio::task::spawn_blocking(move || calculate_directory_size(&state.upload_temp_dir.parent().unwrap_or_else(|| state.upload_temp_dir.as_path())))
+                    .await
+                    .unwrap_or(0);
+
+            Json(StatusResponse {
+                schema_version: 1,
+                version: env!("CARGO_PKG_VERSION"),
+                status: "ok",
+                uptime_seconds: state.started_at.elapsed().as_secs(),
+                file_count: repository_stats.file_count,
+                tag_count: repository_stats.tag_count,
+                pinned_count: repository_stats.pinned_count,
+                recent_upload_count_24h: repository_stats.recent_upload_count,
+                storage_bytes_used,
+            })
+            .into_response()
+        }
         Err(message) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorResponse {
@@ -230,6 +242,22 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
         )
             .into_response(),
     }
+}
+
+fn calculate_directory_size(path: &Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_file() {
+                    total = total.saturating_add(metadata.len());
+                } else if metadata.is_dir() {
+                    total = total.saturating_add(calculate_directory_size(&entry.path()));
+                }
+            }
+        }
+    }
+    total
 }
 
 #[cfg(test)]

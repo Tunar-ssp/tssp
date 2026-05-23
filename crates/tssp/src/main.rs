@@ -2,12 +2,17 @@
 
 mod backend;
 mod config;
+mod copy;
 mod info;
+mod init;
 mod list;
+mod paste;
 mod pins;
 mod pull;
+mod receive;
 mod remove;
 mod search;
+mod send;
 mod status;
 mod tags;
 mod upload;
@@ -37,6 +42,18 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
 
     if matches!(cli.command, Some(Command::Status)) {
         return status::run(cli);
+    }
+    if let Some(Command::Send(args)) = cli.command.as_ref() {
+        return send::run(cli, args);
+    }
+    if let Some(Command::Receive(args)) = cli.command.as_ref() {
+        return receive::run(cli, args);
+    }
+    if let Some(Command::Paste(args)) = cli.command.as_ref() {
+        return paste::run(cli, args);
+    }
+    if let Some(Command::Copy(args)) = cli.command.as_ref() {
+        return copy::run(cli, args);
     }
     if let Some(Command::List(args)) = cli.command.as_ref() {
         return list::run_list(cli, args);
@@ -76,6 +93,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::Config(args)) = cli.command.as_ref() {
         return config::run_config(cli, args);
+    }
+    if matches!(cli.command, Some(Command::Init)) {
+        return init::run(cli);
     }
 
     if cli.command.is_none() {
@@ -156,12 +176,12 @@ mod tests {
     }
 
     #[test]
-    fn run_returns_generic_for_unwired_commands() {
+    fn run_init_command_succeeds() {
         let cli = cli(Some(Command::Init));
 
         let result = run(&cli);
 
-        assert_eq!(result, Ok(CliExitCode::Generic));
+        assert_eq!(result, Ok(CliExitCode::Success));
     }
 
     #[test]

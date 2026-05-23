@@ -85,8 +85,7 @@ pub struct SqliteSessionRepository {
 
 impl SqliteSessionRepository {
     /// Creates a new session repository with a shared database connection.
-    #[allow(dead_code)]
-    pub(crate) fn new(connection: std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>) -> Self {
+    pub fn new(connection: std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>) -> Self {
         Self { connection }
     }
 }

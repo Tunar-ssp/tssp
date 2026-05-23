@@ -6,6 +6,8 @@
 
 mod sessions;
 
+pub use sessions::SqliteSessionRepository;
+
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 

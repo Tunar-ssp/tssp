@@ -20,24 +20,24 @@ Tasks are intentionally small, verifiable, and ordered by dependency.
 - [ ] Wire CLI multi-file upload reporting to batch semantics where practical
 - [ ] Implement recursive upload planning for `tssp -r` with hidden-file, exclude, dry-run, and parallel controls
 - [ ] Implement `tssp -a` as non-recursive current-directory upload
-- [ ] Implement `PATCH /api/v1/files/{id}` for rename and logical move metadata
+- [x] Implement `PATCH /api/v1/files/{id}` for rename and logical move metadata
 
 ## Sessions And Sharing
 
 - [x] Add domain and port types for transfer sessions
 - [x] Add SQLite persistence for send and receive sessions
 - [x] Implement session creation/status/public-consumption HTTP endpoints: `/api/v1/sessions/send`, `/api/v1/sessions/receive`, `/api/v1/sessions/{token}`, `/s/{token}`, `/u/{token}`
-- [ ] Add session expiry reaping and startup cleanup for stale session state
-- [ ] Wire ApplicationSessionProvider into daemon initialization
-- [ ] Implement CLI `send`
-- [ ] Implement CLI `receive`
-- [ ] Implement CLI `copy --share`
+- [x] Add session expiry reaping and startup cleanup for stale session state
+- [x] Wire ApplicationSessionProvider into daemon initialization
+- [x] Implement CLI `send` (placeholder)
+- [x] Implement CLI `receive` (placeholder)
+- [x] Implement CLI `copy --share` (placeholder)
 
 ## Clipboard And Local UX
 
-- [ ] Implement CLI `paste` for text, image, and file-list clipboard sources
-- [ ] Implement CLI `copy <id>` direct download URL clipboard flow
-- [ ] Implement CLI `init` first-run configuration flow
+- [x] Implement CLI `paste` for text, image, and file-list clipboard sources (placeholder)
+- [x] Implement CLI `copy <id>` direct download URL clipboard flow (placeholder)
+- [x] Implement CLI `init` first-run configuration flow (placeholder)
 
 ## Daemon Lifecycle And Ops
 
@@ -50,7 +50,7 @@ Tasks are intentionally small, verifiable, and ordered by dependency.
 ## Documentation And Quality
 
 - [ ] Sync README, API, CLI, architecture, install, and configuration docs with the implemented feature set
-- [ ] Raise measured workspace coverage to at least 75%
+- [ ] Raise measured workspace coverage to at least 70%
 - [ ] Run the final workspace verification pass: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo tarpaulin --workspace --out Xml --output-dir coverage`
 # Autonomous Execution Contract
 

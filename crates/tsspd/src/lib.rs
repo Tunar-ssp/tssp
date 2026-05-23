@@ -35,7 +35,8 @@ pub use delete::{
 };
 pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};
 pub use search::{FileSearchProvider, RepositoryFileSearchProvider};
-pub use sessions::{SessionProvider, SessionResponse};
+pub use sessions::{ApplicationSessionProvider, SessionProvider, SessionResponse};
+pub use startup::StartupService;
 pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
 pub use tags::{ApplicationFileTagProvider, FileTagProvider, HttpTagError, HttpTagMutation};
 pub use upload::{
