@@ -1,4 +1,4 @@
-//! SQLite implementation of SessionRepository.
+//! `SQLite` implementation of `SessionRepository`.
 
 use rusqlite::{params, Row};
 use tssp_domain::{FileId, FileName, SessionKind, SessionToken, TransferSession, UnixTimestamp};
@@ -6,7 +6,7 @@ use tssp_ports::{RepositoryError, SessionRepository};
 
 use crate::map_rusqlite_repository_error;
 
-/// Maps a session row to a TransferSession domain object.
+/// Maps a session row to a `TransferSession` domain object.
 #[allow(dead_code)]
 fn map_session_row(row: &Row<'_>) -> Result<TransferSession, RepositoryError> {
     let token_str: String = row.get(0).map_err(|e| RepositoryError::OperationFailed {
@@ -113,9 +113,9 @@ impl SessionRepository for SqliteSessionRepository {
                     kind_str,
                     session.created_at.seconds(),
                     session.expires_at.seconds(),
-                    session.source_file.as_ref().map(|f| f.as_str()),
-                    session.received_file.as_ref().map(|f| f.as_str()),
-                    session.expected_name.as_ref().map(|n| n.original()),
+                    session.source_file.as_ref().map(FileId::as_str),
+                    session.received_file.as_ref().map(FileId::as_str),
+                    session.expected_name.as_ref().map(FileName::original),
                     None::<i64>,
                 ],
             )
