@@ -208,3 +208,49 @@
   flex-wrap: wrap;
   justify-content: center;
 }
+
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.search-filters .filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.search-filters .filter-field input,
+.search-filters .filter-field select {
+  min-width: 120px;
+}
+
+.note-editor-header {
+  align-items: flex-start;
+}
+
+.note-form-page {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: var(--bg-elevated);
+}
+
+.note-form-page .editor-grid {
+  min-height: min(70vh, 640px);
+}
+
+.form-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}

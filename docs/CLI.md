@@ -54,6 +54,11 @@ remove
 info
 status
 init
+login
+logout
+whoami
+note
+admin
 config
 completions
 ```
@@ -257,6 +262,59 @@ tssp --json status
 Calls `/api/v1/status` with a 5 second connect timeout and 60 second total
 timeout. Network failures return exit code `4`; daemon `5xx` responses return
 exit code `5`.
+
+## `tssp login`, `tssp logout`, `tssp whoami`
+
+```sh
+tssp login
+tssp logout
+tssp whoami
+tssp --json whoami
+```
+
+`login` stores a session cookie or device token for remote daemons with
+`public_url` set. `logout` clears saved credentials. `whoami` calls
+`/api/v1/auth/me` and prints the current user id, name, and role.
+
+## `tssp admin`
+
+Admin commands require an authenticated admin session (or local-mode when the
+daemon has no `public_url`).
+
+```sh
+tssp admin overview
+tssp admin system
+tssp admin files --limit 50
+tssp admin files --folder photos --type image
+tssp admin folders
+tssp admin delete <file-id>
+tssp admin corrupt
+tssp admin cleanup-temp
+tssp admin cleanup-sessions
+```
+
+### `tssp admin users`
+
+```sh
+tssp admin users list
+tssp admin users create Alice 'secret-code' --role user
+tssp admin users delete user-abc
+tssp admin users set-role user-abc admin
+tssp admin users reset-code user-abc 'new-code'
+```
+
+Maps to `/api/v1/admin/users` and related routes. The daemon rejects deleting or
+demoting the last admin.
+
+### `tssp admin devices`
+
+```sh
+tssp admin devices list
+tssp admin devices revoke <device-token>
+tssp admin devices revoke-user user-abc
+```
+
+Maps to `/api/v1/admin/devices` and `/api/v1/admin/users/{id}/devices`.
 
 ## Completions
 

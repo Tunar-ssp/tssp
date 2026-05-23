@@ -525,6 +525,20 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.searchQueryString = function searchQueryString(q) {
+    const params = new URLSearchParams({ q, limit: "50" });
+    const kind = T.$("#search-kind")?.value;
+    if (kind && kind !== "all") params.set("kind", kind);
+    const tag = T.$("#search-tag")?.value.trim();
+    if (tag) params.set("tag", tag);
+    const mime = T.$("#search-type")?.value.trim();
+    if (mime) params.set("type", mime);
+    const visibility = T.$("#search-visibility")?.value;
+    if (visibility) params.set("visibility", visibility);
+    if (T.$("#search-pinned")?.checked) params.set("pinned", "true");
+    return params.toString();
+  };
+
   T.runSearch = async function runSearch(q) {
     const body = T.$("#search-body");
     const sub = T.$("#search-subtitle");
@@ -533,11 +547,21 @@ window.Tssp = window.Tssp || {};
       body.innerHTML = tableMessage(4, "Enter a query to search");
       return;
     }
-    sub.textContent = `Results for "${q}"`;
+    const filterParts = [];
+    const kind = T.$("#search-kind")?.value;
+    if (kind && kind !== "all") filterParts.push(kind);
+    if (T.$("#search-tag")?.value.trim()) filterParts.push("tag");
+    if (T.$("#search-type")?.value.trim()) filterParts.push("type");
+    if (T.$("#search-visibility")?.value) filterParts.push(T.$("#search-visibility").value);
+    if (T.$("#search-pinned")?.checked) filterParts.push("pinned");
+    sub.textContent =
+      filterParts.length > 0
+        ? `Results for "${q}" (${filterParts.join(", ")})`
+        : `Results for "${q}"`;
     body.innerHTML = tableMessage(4, "Searching…");
     T.setView("search");
     try {
-      const searchData = await T.api("/search?q=" + encodeURIComponent(q) + "&limit=50");
+      const searchData = await T.api("/search?" + T.searchQueryString(q));
       const results = searchData.results || [];
       if (!results.length) {
         body.innerHTML = tableMessage(4, "No matches");
@@ -548,10 +572,15 @@ window.Tssp = window.Tssp || {};
           const type = T.escapeHtml(result.type || "item");
           const name = T.escapeHtml(result.title || result.name || result.id);
           const id = T.escapeHtml(result.id);
+          const vis =
+            result.visibility != null
+              ? stateBadge(result.visibility)
+              : "";
+          const tags = tagsHtml(result.tags);
           let actions = "";
           let detail = "";
           if (result.type === "file") {
-            detail = `${T.formatBytes(result.size_bytes)} · ${result.folder_path || "Bucket root"}`;
+            detail = `${T.formatBytes(result.size_bytes)} · ${T.escapeHtml(result.folder_path || "Bucket root")} ${vis} ${tags}`;
             actions = `<button type="button" class="btn btn-text btn-sm" data-preview-file="${id}">Preview</button><a class="btn btn-text btn-sm" href="${T.fileDownloadUrl(result.id)}" download>Download</a>`;
           } else if (result.type === "note") {
             detail = (result.body || "").slice(0, 100);
@@ -621,8 +650,12 @@ window.Tssp = window.Tssp || {};
     T.$("#note-body-input").value = note ? note.body || "" : "";
     T.$("#note-save-status").textContent = "";
     T.refreshNotePreview();
-    T.$("#note-dialog").showModal();
+    T.setView("note-editor");
     T.$("#note-title-input").focus();
+  };
+
+  T.closeNoteEditor = function closeNoteEditor() {
+    T.setView("notes");
   };
 
   async function syncNoteTags(id, desiredTags) {
@@ -675,8 +708,8 @@ window.Tssp = window.Tssp || {};
         });
       }
       T.$("#note-save-status").textContent = "Saved";
-      T.$("#note-dialog").close();
       T.showBanner("Note saved", "success");
+      T.closeNoteEditor();
       T.loadNotes();
       return saved;
     } catch (error) {

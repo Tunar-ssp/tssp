@@ -514,42 +514,4 @@ window.Tssp = window.Tssp || {};
     }
   };
 
-  T.openNoteDialog = function openNoteDialog(note) {
-    T.editingNoteId = note ? note.id : null;
-    T.$("#note-dialog-title").textContent = note ? "Edit note" : "New note";
-    T.$("#note-title-input").value = note ? note.title || "" : "";
-    T.$("#note-body-input").value = note ? note.body || "" : "";
-    T.$("#note-dialog").showModal();
-  };
-
-  T.saveNote = async function saveNote() {
-    const title = T.$("#note-title-input").value.trim();
-    const body = T.$("#note-body-input").value;
-    const payload = { body };
-    if (title) payload.title = title;
-    try {
-      if (T.editingNoteId) {
-        await T.api("/notes/" + encodeURIComponent(T.editingNoteId), {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await T.api("/notes", { method: "POST", body: JSON.stringify(payload) });
-      }
-      T.$("#note-dialog").close();
-      T.showBanner("Note saved", "success");
-      T.loadNotes();
-    } catch (e) {
-      T.showBanner(e.message, "error");
-    }
-  };
-
-  T.openNote = async function openNote(id) {
-    try {
-      const note = await T.api("/notes/" + encodeURIComponent(id));
-      T.openNoteDialog(note);
-    } catch (e) {
-      T.showBanner(e.message, "error");
-    }
-  };
 })(window.Tssp);

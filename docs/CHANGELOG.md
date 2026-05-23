@@ -8,6 +8,16 @@ The format follows Keep a Changelog, and this project uses Semantic Versioning.
 
 ### Added
 
+- Structural split of `tsspd` HTTP layer (`router`, `state`, `http_tests`,
+  `web/assets`, `runner`) and `tssp-app` upload tests module for maintainability.
+- Full-page note editor, search filter bar (kind, tag, MIME, visibility, pinned),
+  and workspace execution disclaimer in the web dashboard.
+- CLI `tssp admin users` and `tssp admin devices` subcommands aligned with admin APIs.
+
+### Changed
+
+- Web notes use a dedicated editor view instead of a modal dialog.
+
 - Initial Rust workspace with pinned toolchain and strict lint configuration.
 - Domain validation for hashes, filenames, tags, pagination, timestamps, and QR
   transfer sessions.

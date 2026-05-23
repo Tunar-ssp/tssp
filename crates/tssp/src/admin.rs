@@ -1,11 +1,15 @@
 //! `tssp admin` — storage and host management commands.
 
-use reqwest::header::ACCEPT;
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde::Deserialize;
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{api_delete, api_get, api_post, build_client, BackendAddress};
-use tssp::{AdminAction, AdminCommand, AdminFilesArgs, Cli};
+use crate::backend::{api_delete, api_get, api_post, api_put, build_client, BackendAddress};
+use tssp::{
+    AdminAction, AdminCommand, AdminDevicesAction, AdminDevicesCommand, AdminFilesArgs,
+    AdminUserCreateArgs, AdminUserResetCodeArgs, AdminUserRoleArgs, AdminUsersAction,
+    AdminUsersCommand, Cli,
+};
 
 pub(crate) fn run(cli: &Cli, command: &AdminCommand) -> Result<CliExitCode, String> {
     match &command.action {
@@ -17,7 +21,175 @@ pub(crate) fn run(cli: &Cli, command: &AdminCommand) -> Result<CliExitCode, Stri
         AdminAction::Corrupt => get_json(cli, "/api/v1/admin/corrupt", "corrupt"),
         AdminAction::CleanupTemp => post_json(cli, "/api/v1/admin/cleanup/temp", "cleanup"),
         AdminAction::CleanupSessions => post_json(cli, "/api/v1/admin/cleanup/sessions", "cleanup"),
+        AdminAction::Users(cmd) => admin_users(cli, cmd),
+        AdminAction::Devices(cmd) => admin_devices(cli, cmd),
     }
+}
+
+fn admin_users(cli: &Cli, command: &AdminUsersCommand) -> Result<CliExitCode, String> {
+    match &command.action {
+        AdminUsersAction::List => admin_users_list(cli),
+        AdminUsersAction::Create(args) => admin_user_create(cli, args),
+        AdminUsersAction::Delete(args) => admin_user_delete(cli, &args.id),
+        AdminUsersAction::SetRole(args) => admin_user_set_role(cli, args),
+        AdminUsersAction::ResetCode(args) => admin_user_reset_code(cli, args),
+    }
+}
+
+fn admin_devices(cli: &Cli, command: &AdminDevicesCommand) -> Result<CliExitCode, String> {
+    match &command.action {
+        AdminDevicesAction::List => admin_devices_list(cli),
+        AdminDevicesAction::Revoke(args) => admin_device_revoke(cli, &args.token),
+        AdminDevicesAction::RevokeUser(args) => admin_user_devices_revoke(cli, &args.id),
+    }
+}
+
+fn admin_users_list(cli: &Cli) -> Result<CliExitCode, String> {
+    let body = fetch(
+        cli,
+        |client, url| api_get(client, url).header(ACCEPT, "application/json"),
+        "/api/v1/admin/users",
+    )?;
+    if cli.output.json {
+        println!("{body}");
+        return Ok(CliExitCode::Success);
+    }
+    let parsed: UserListResponse =
+        serde_json::from_str(&body).map_err(|e| format!("invalid users response: {e}"))?;
+    if parsed.users.is_empty() {
+        if !cli.output.quiet {
+            println!("No users.");
+        }
+        return Ok(CliExitCode::Success);
+    }
+    for user in &parsed.users {
+        let disabled = if user.disabled { " disabled" } else { "" };
+        println!("{}  {}  {}{}", user.id, user.name, user.role, disabled);
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn admin_user_create(cli: &Cli, args: &AdminUserCreateArgs) -> Result<CliExitCode, String> {
+    let payload = serde_json::json!({
+        "name": args.name,
+        "code": args.code,
+        "role": args.role,
+    });
+    let body = fetch_with_body(
+        cli,
+        |client, url| {
+            api_post(client, url)
+                .header(ACCEPT, "application/json")
+                .header(CONTENT_TYPE, "application/json")
+                .body(payload.to_string())
+        },
+        "/api/v1/admin/users",
+    )?;
+    Ok(print_body(cli, &body))
+}
+
+fn admin_user_delete(cli: &Cli, id: &str) -> Result<CliExitCode, String> {
+    let path = format!("/api/v1/admin/users/{id}");
+    fetch(
+        cli,
+        |client, url| api_delete(client, url).header(ACCEPT, "application/json"),
+        &path,
+    )?;
+    if !cli.output.quiet && !cli.output.json {
+        println!("User {id} deleted.");
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn admin_user_set_role(cli: &Cli, args: &AdminUserRoleArgs) -> Result<CliExitCode, String> {
+    let path = format!("/api/v1/admin/users/{}/role", args.id);
+    let payload = serde_json::json!({ "role": args.role });
+    fetch_with_body(
+        cli,
+        |client, url| {
+            api_put(client, url)
+                .header(ACCEPT, "application/json")
+                .header(CONTENT_TYPE, "application/json")
+                .body(payload.to_string())
+        },
+        &path,
+    )?;
+    if !cli.output.quiet && !cli.output.json {
+        println!("Role for {} set to {}.", args.id, args.role);
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn admin_user_reset_code(cli: &Cli, args: &AdminUserResetCodeArgs) -> Result<CliExitCode, String> {
+    let path = format!("/api/v1/admin/users/{}/reset-code", args.id);
+    let payload = serde_json::json!({ "code": args.code });
+    fetch_with_body(
+        cli,
+        |client, url| {
+            api_post(client, url)
+                .header(ACCEPT, "application/json")
+                .header(CONTENT_TYPE, "application/json")
+                .body(payload.to_string())
+        },
+        &path,
+    )?;
+    if !cli.output.quiet && !cli.output.json {
+        println!("Access code reset for {}.", args.id);
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn admin_devices_list(cli: &Cli) -> Result<CliExitCode, String> {
+    let body = fetch(
+        cli,
+        |client, url| api_get(client, url).header(ACCEPT, "application/json"),
+        "/api/v1/admin/devices",
+    )?;
+    if cli.output.json {
+        println!("{body}");
+        return Ok(CliExitCode::Success);
+    }
+    let parsed: DeviceListResponse =
+        serde_json::from_str(&body).map_err(|e| format!("invalid devices response: {e}"))?;
+    if parsed.devices.is_empty() {
+        if !cli.output.quiet {
+            println!("No trusted devices.");
+        }
+        return Ok(CliExitCode::Success);
+    }
+    for device in &parsed.devices {
+        println!(
+            "{}  {}  {}  expires {}",
+            device.device_token, device.user_id, device.device_name, device.expires_at
+        );
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn admin_device_revoke(cli: &Cli, token: &str) -> Result<CliExitCode, String> {
+    let path = format!("/api/v1/admin/devices/{token}");
+    fetch(
+        cli,
+        |client, url| api_delete(client, url).header(ACCEPT, "application/json"),
+        &path,
+    )?;
+    if !cli.output.quiet && !cli.output.json {
+        println!("Device revoked.");
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn admin_user_devices_revoke(cli: &Cli, user_id: &str) -> Result<CliExitCode, String> {
+    let path = format!("/api/v1/admin/users/{user_id}/devices");
+    fetch(
+        cli,
+        |client, url| api_delete(client, url).header(ACCEPT, "application/json"),
+        &path,
+    )?;
+    if !cli.output.quiet && !cli.output.json {
+        println!("All devices revoked for {user_id}.");
+    }
+    Ok(CliExitCode::Success)
 }
 
 fn get_json(cli: &Cli, path: &str, _label: &str) -> Result<CliExitCode, String> {
@@ -97,6 +269,13 @@ fn fetch<F>(cli: &Cli, build: F, path: &str) -> Result<String, String>
 where
     F: FnOnce(&reqwest::blocking::Client, &str) -> reqwest::blocking::RequestBuilder,
 {
+    fetch_with_body(cli, build, path)
+}
+
+fn fetch_with_body<F>(cli: &Cli, build: F, path: &str) -> Result<String, String>
+where
+    F: FnOnce(&reqwest::blocking::Client, &str) -> reqwest::blocking::RequestBuilder,
+{
     let address = BackendAddress::from_connection_args(&cli.connection)?;
     let client = build_client()?;
     let url = address.url(path);
@@ -104,11 +283,12 @@ where
         .send()
         .map_err(|e| format!("could not reach daemon at {}: {e}", address.base_url()))?;
     if !response.status().is_success() {
-        return Err(format!(
-            "daemon returned {} for {}",
-            response.status(),
-            path
-        ));
+        let status = response.status();
+        let detail = response.text().unwrap_or_default();
+        if detail.is_empty() {
+            return Err(format!("daemon returned {status} for {path}"));
+        }
+        return Err(format!("daemon returned {status} for {path}: {detail}"));
     }
     response
         .text()
@@ -127,6 +307,33 @@ fn print_body(cli: &Cli, body: &str) -> CliExitCode {
         );
     }
     CliExitCode::Success
+}
+
+#[derive(Debug, Deserialize)]
+struct UserListResponse {
+    users: Vec<UserRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserRow {
+    id: String,
+    name: String,
+    role: String,
+    #[serde(default)]
+    disabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceListResponse {
+    devices: Vec<DeviceRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceRow {
+    device_token: String,
+    user_id: String,
+    device_name: String,
+    expires_at: i64,
 }
 
 #[derive(Debug, Deserialize)]

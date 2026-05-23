@@ -294,10 +294,80 @@
           </div>
         </section>
 
+        <section id="view-note-editor" class="view hidden">
+          <div class="page-header note-editor-header">
+            <div>
+              <button type="button" class="btn btn-text" id="note-back">← Back to notes</button>
+              <h2 id="note-dialog-title">New note</h2>
+              <p class="page-subtitle">Markdown with live preview. Changes save to your bucket.</p>
+            </div>
+            <div class="page-actions">
+              <span id="note-save-status" class="save-status"></span>
+              <button type="button" class="btn btn-text" id="note-cancel">Cancel</button>
+              <button type="submit" form="note-form" class="btn btn-primary" id="note-save">Save</button>
+            </div>
+          </div>
+          <form id="note-form" class="note-form note-form-page">
+            <div class="editor-grid">
+              <section>
+                <label for="note-title-input">Title</label>
+                <input id="note-title-input" type="text" placeholder="Optional">
+                <label for="note-tags-input">Tags</label>
+                <input id="note-tags-input" type="text" placeholder="ops, ideas, todo">
+                <label class="chip-toggle editor-pin">
+                  <input type="checkbox" id="note-pin-input">
+                  Pin note
+                </label>
+                <label for="note-body-input">Markdown body</label>
+                <textarea id="note-body-input" rows="22" required></textarea>
+              </section>
+              <section class="markdown-preview-wrap">
+                <div class="preview-header">
+                  <span>Preview</span>
+                  <button type="button" class="btn btn-text btn-sm" id="note-preview-refresh">Refresh</button>
+                </div>
+                <article id="note-preview" class="markdown-preview"></article>
+              </section>
+            </div>
+          </form>
+        </section>
+
         <section id="view-search" class="view hidden">
           <div class="page-header">
             <h2>Search</h2>
             <p class="page-subtitle" id="search-subtitle">Type in the search bar above</p>
+          </div>
+          <div class="search-filters" id="search-filters" role="search">
+            <label class="filter-field">
+              <span>Kind</span>
+              <select id="search-kind" aria-label="Result kind">
+                <option value="all">All</option>
+                <option value="file">Files</option>
+                <option value="note">Notes</option>
+                <option value="workspace">Workspaces</option>
+              </select>
+            </label>
+            <label class="filter-field">
+              <span>Tag</span>
+              <input id="search-tag" type="text" placeholder="optional" autocomplete="off">
+            </label>
+            <label class="filter-field">
+              <span>MIME</span>
+              <input id="search-type" type="text" placeholder="image, video…" autocomplete="off">
+            </label>
+            <label class="filter-field">
+              <span>Visibility</span>
+              <select id="search-visibility" aria-label="Visibility">
+                <option value="">Any</option>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </select>
+            </label>
+            <label class="chip-toggle filter-field">
+              <input type="checkbox" id="search-pinned">
+              Pinned only
+            </label>
+            <button type="button" class="btn btn-text btn-sm" id="search-clear-filters">Clear filters</button>
           </div>
           <div class="table-card">
             <table class="data-table" id="search-table">
@@ -369,41 +439,6 @@
     </div>
   </div>
 
-  <dialog id="note-dialog" class="note-dialog">
-    <form method="dialog" id="note-form" class="note-form">
-      <header>
-        <h3 id="note-dialog-title">New note</h3>
-        <button type="button" class="icon-btn" id="note-close" aria-label="Close">×</button>
-      </header>
-      <div class="editor-grid">
-        <section>
-          <label for="note-title-input">Title</label>
-          <input id="note-title-input" type="text" placeholder="Optional">
-          <label for="note-tags-input">Tags</label>
-          <input id="note-tags-input" type="text" placeholder="ops, ideas, todo">
-          <label class="chip-toggle editor-pin">
-            <input type="checkbox" id="note-pin-input">
-            Pin note
-          </label>
-          <label for="note-body-input">Markdown body</label>
-          <textarea id="note-body-input" rows="18" required></textarea>
-        </section>
-        <section class="markdown-preview-wrap">
-          <div class="preview-header">
-            <span>Preview</span>
-            <button type="button" class="btn btn-text btn-sm" id="note-preview-refresh">Refresh</button>
-          </div>
-          <article id="note-preview" class="markdown-preview"></article>
-        </section>
-      </div>
-      <footer>
-        <span id="note-save-status" class="save-status"></span>
-        <button type="button" class="btn btn-text" id="note-cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="note-save">Save</button>
-      </footer>
-    </form>
-  </dialog>
-
   <dialog id="workspace-dialog" class="note-dialog workspace-dialog">
     <form method="dialog" id="workspace-form" class="note-form">
       <header>
@@ -414,6 +449,7 @@
       <input id="workspace-name-input" type="text" maxlength="120" required>
       <label for="workspace-language-input">Language</label>
       <input id="workspace-language-input" type="text" maxlength="40" value="text" required>
+      <p class="form-hint">Script execution is not available yet — workspaces store metadata and source only.</p>
       <label for="workspace-body-input">Body</label>
       <textarea id="workspace-body-input" rows="14"></textarea>
       <footer>

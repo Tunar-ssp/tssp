@@ -74,8 +74,39 @@
       ev.preventDefault();
       T.saveNote();
     });
-    T.$("#note-cancel").addEventListener("click", () => T.$("#note-dialog").close());
-    T.$("#note-close").addEventListener("click", () => T.$("#note-dialog").close());
+    T.$("#note-cancel")?.addEventListener("click", () => T.closeNoteEditor());
+    T.$("#note-back")?.addEventListener("click", () => T.closeNoteEditor());
+    T.$("#search-clear-filters")?.addEventListener("click", () => {
+      T.$("#search-kind").value = "all";
+      T.$("#search-tag").value = "";
+      T.$("#search-type").value = "";
+      T.$("#search-visibility").value = "";
+      T.$("#search-pinned").checked = false;
+      const q = T.$("#global-search").value.trim();
+      if (q) T.runSearch(q);
+    });
+    ["search-kind", "search-tag", "search-type", "search-visibility", "search-pinned"].forEach(
+      (id) => {
+        const el = T.$(`#${id}`);
+        if (!el) return;
+        el.addEventListener("change", () => {
+          const q = T.$("#global-search").value.trim();
+          if (q) T.runSearch(q);
+        });
+        if (el.tagName === "INPUT" && el.type === "text") {
+          el.addEventListener(
+            "input",
+            () => {
+              clearTimeout(T.searchFilterTimer);
+              T.searchFilterTimer = setTimeout(() => {
+                const query = T.$("#global-search").value.trim();
+                if (query) T.runSearch(query);
+              }, T.SEARCH_DEBOUNCE_MS);
+            }
+          );
+        }
+      }
+    );
     T.$("#note-preview-refresh")?.addEventListener("click", () => T.refreshNotePreview());
     T.$("#note-body-input")?.addEventListener("input", () => T.refreshNotePreview());
 

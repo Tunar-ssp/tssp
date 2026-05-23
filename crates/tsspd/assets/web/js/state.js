@@ -5,6 +5,7 @@ window.Tssp = window.Tssp || {};
 
   T.authRequired = false;
   T.searchTimer = null;
+  T.searchFilterTimer = null;
   T.editingNoteId = null;
   T.editingNoteTags = [];
   T.editingNotePinned = false;
@@ -55,7 +56,7 @@ window.Tssp = window.Tssp || {};
     T.$$(".view").forEach((v) => v.classList.add("hidden"));
     const section = T.$(`#view-${name}`);
     if (section) section.classList.remove("hidden");
-    if (name === "search") return;
+    if (name === "search" || name === "note-editor") return;
     T.refreshView(name);
   };
 

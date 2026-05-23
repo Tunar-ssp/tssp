@@ -453,6 +453,96 @@ pub enum AdminAction {
     CleanupTemp,
     /// Show session cleanup status.
     CleanupSessions,
+    /// User account management.
+    Users(AdminUsersCommand),
+    /// Trusted device management.
+    Devices(AdminDevicesCommand),
+}
+
+/// `tssp admin users` subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum AdminUsersAction {
+    /// List all users.
+    List,
+    /// Create a user.
+    Create(AdminUserCreateArgs),
+    /// Delete a user by id.
+    Delete(AdminUserIdArgs),
+    /// Set user role (`admin` or `user`).
+    SetRole(AdminUserRoleArgs),
+    /// Reset a user's access code.
+    ResetCode(AdminUserResetCodeArgs),
+}
+
+/// Wrapper for `tssp admin users`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminUsersCommand {
+    /// User management action.
+    #[command(subcommand)]
+    pub action: AdminUsersAction,
+}
+
+/// Wrapper for `tssp admin devices`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminDevicesCommand {
+    /// Device management action.
+    #[command(subcommand)]
+    pub action: AdminDevicesAction,
+}
+
+/// `tssp admin devices` subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum AdminDevicesAction {
+    /// List trusted devices.
+    List,
+    /// Revoke a device by token.
+    Revoke(AdminDeviceRevokeArgs),
+    /// Revoke all devices for a user.
+    RevokeUser(AdminUserIdArgs),
+}
+
+/// Arguments for `tssp admin users create`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminUserCreateArgs {
+    /// Display name.
+    pub name: String,
+    /// Access code.
+    pub code: String,
+    /// Role (`admin` or `user`, default `user`).
+    #[arg(long, default_value = "user")]
+    pub role: String,
+}
+
+/// Arguments for `tssp admin users delete` / devices revoke-user.
+#[derive(Debug, Clone, Args)]
+pub struct AdminUserIdArgs {
+    /// User id.
+    pub id: String,
+}
+
+/// Arguments for `tssp admin users set-role`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminUserRoleArgs {
+    /// User id.
+    pub id: String,
+    /// New role (`admin` or `user`).
+    pub role: String,
+}
+
+/// Arguments for `tssp admin users reset-code`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminUserResetCodeArgs {
+    /// User id.
+    pub id: String,
+    /// New access code.
+    pub code: String,
+}
+
+/// Arguments for `tssp admin devices revoke`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminDeviceRevokeArgs {
+    /// Device token.
+    pub token: String,
 }
 
 /// Arguments for `tssp admin files`.
