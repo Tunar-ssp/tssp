@@ -266,6 +266,13 @@ pub trait FileRepository {
     ///
     /// Returns [`RepositoryError`] when the operation fails.
     fn reorder_pins(&self, ordered_ids: &[FileId]) -> Result<(), RepositoryError>;
+
+    /// Searches files using full-text search.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the search query fails.
+    fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, RepositoryError>;
 }
 
 impl<T> BlobStore for Arc<T>
@@ -355,6 +362,10 @@ where
 
     fn reorder_pins(&self, ordered_ids: &[FileId]) -> Result<(), RepositoryError> {
         self.as_ref().reorder_pins(ordered_ids)
+    }
+
+    fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, RepositoryError> {
+        self.as_ref().search_files(query)
     }
 }
 

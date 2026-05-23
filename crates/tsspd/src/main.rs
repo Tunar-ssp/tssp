@@ -15,7 +15,7 @@ use tssp_app::{DeleteFileService, PinService, TagService, UploadService};
 use tsspd::{
     bind_error_message, build_router, ApplicationFileDeleteProvider, ApplicationFilePinProvider,
     ApplicationFileTagProvider, ApplicationFileUploadProvider, DaemonConfig, HttpState,
-    RepositoryMetadataStatsProvider,
+    RepositoryFileSearchProvider, RepositoryMetadataStatsProvider,
 };
 
 /// Backend daemon for TSSP.
@@ -99,6 +99,7 @@ async fn run(cli: Cli) -> Result<(), String> {
     let delete_provider = ApplicationFileDeleteProvider::new(delete_service);
     let tag_provider = ApplicationFileTagProvider::new(tag_service);
     let pin_provider = ApplicationFilePinProvider::new(pin_service);
+    let search_provider = RepositoryFileSearchProvider::new(repository.clone());
 
     let address = config.socket_addr();
     let listener = TcpListener::bind(address)
@@ -110,6 +111,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         .with_delete_provider(Arc::new(delete_provider))
         .with_tag_provider(Arc::new(tag_provider))
         .with_pin_provider(Arc::new(pin_provider))
+        .with_search_provider(Arc::new(search_provider))
         .with_blob_reader(storage);
     let router = build_router(state);
 

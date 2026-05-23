@@ -7,6 +7,7 @@ mod list;
 mod pins;
 mod pull;
 mod remove;
+mod search;
 mod status;
 mod tags;
 mod upload;
@@ -39,6 +40,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::List(args)) = cli.command.as_ref() {
         return list::run_list(cli, args);
+    }
+    if let Some(Command::Search(args)) = cli.command.as_ref() {
+        return search::run_search(cli, args);
     }
     if let Some(Command::Last(args)) = cli.command.as_ref() {
         return list::run_last(cli, args);

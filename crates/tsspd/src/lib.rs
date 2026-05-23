@@ -10,6 +10,7 @@ mod delete;
 mod file;
 mod list;
 mod pins;
+mod search;
 mod status;
 mod tags;
 mod upload;
@@ -30,6 +31,7 @@ pub use delete::{
     ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
 };
 pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};
+pub use search::{FileSearchProvider, RepositoryFileSearchProvider};
 pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
 pub use tags::{ApplicationFileTagProvider, FileTagProvider, HttpTagError, HttpTagMutation};
 pub use upload::{
@@ -40,6 +42,7 @@ pub use upload::{
 use content::StaticBlobReader;
 use delete::StaticFileDeleteProvider;
 use pins::StaticFilePinProvider;
+use search::StaticFileSearchProvider;
 use status::StaticMetadataStatsProvider;
 use tags::StaticFileTagProvider;
 use upload::StaticFileUploadProvider;
@@ -53,6 +56,7 @@ pub struct HttpState {
     delete_provider: Arc<dyn FileDeleteProvider>,
     tag_provider: Arc<dyn FileTagProvider>,
     pin_provider: Arc<dyn FilePinProvider>,
+    search_provider: Arc<dyn search::FileSearchProvider>,
     blob_reader: Arc<dyn BlobReader + Send + Sync>,
     upload_temp_dir: PathBuf,
     storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
@@ -69,6 +73,7 @@ impl HttpState {
             delete_provider: Arc::new(StaticFileDeleteProvider),
             tag_provider: Arc::new(StaticFileTagProvider),
             pin_provider: Arc::new(StaticFilePinProvider),
+            search_provider: Arc::new(StaticFileSearchProvider),
             blob_reader: Arc::new(StaticBlobReader),
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -116,6 +121,13 @@ impl HttpState {
         self.blob_reader = reader;
         self
     }
+
+    /// Sets the search provider.
+    #[must_use]
+    pub fn with_search_provider(mut self, provider: Arc<dyn search::FileSearchProvider>) -> Self {
+        self.search_provider = provider;
+        self
+    }
 }
 
 /// Builds the daemon router.
@@ -143,6 +155,7 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/files/{id}",
             get(file::get_file).delete(delete::delete_file),
         )
+        .route("/api/v1/search", get(search::search_files))
         .route("/healthz", get(status::healthz))
         .route("/readyz", get(status::readyz))
         .route("/api/v1/status", get(status::status))

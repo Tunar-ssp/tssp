@@ -435,6 +435,33 @@ impl FileRepository for SqliteFileRepository {
             .map_err(map_rusqlite_repository_error)?;
         Ok(())
     }
+
+    fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at
+                 FROM file_search s
+                 JOIN files f ON f.id = s.file_id
+                 WHERE file_search MATCH ?1
+                 ORDER BY rank
+                 LIMIT 100",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut rows = statement
+            .query(params![query])
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let mut record = map_file_row(row)?;
+            let id = record.id.clone();
+            record.tags = load_tags(&connection, &id)?;
+            records.push(record);
+        }
+        Ok(records)
+    }
 }
 
 /// Errors raised while opening or migrating the `SQLite` adapter.
@@ -520,6 +547,31 @@ fn run_migrations(connection: &Connection) -> Result<(), SqliteRepositoryError> 
 
             CREATE VIRTUAL TABLE IF NOT EXISTS file_search
                 USING fts5(file_id UNINDEXED, name, tags);
+
+            CREATE TRIGGER IF NOT EXISTS files_ai AFTER INSERT ON files BEGIN
+                INSERT INTO file_search (rowid, file_id, name, tags) 
+                VALUES (new.rowid, new.id, new.name, '');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS files_ad AFTER DELETE ON files BEGIN
+                DELETE FROM file_search WHERE file_id = old.id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS files_au AFTER UPDATE OF name ON files BEGIN
+                UPDATE file_search SET name = new.name WHERE file_id = new.id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS file_tags_ai AFTER INSERT ON file_tags BEGIN
+                UPDATE file_search 
+                SET tags = tags || ' ' || new.tag_key 
+                WHERE file_id = new.file_id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS file_tags_ad AFTER DELETE ON file_tags BEGIN
+                UPDATE file_search 
+                SET tags = (SELECT group_concat(tag_key, ' ') FROM file_tags WHERE file_id = old.file_id)
+                WHERE file_id = old.file_id;
+            END;
 
             INSERT OR IGNORE INTO schema_migrations (version) VALUES (1);
             ",
@@ -1115,6 +1167,41 @@ mod tests {
         assert_eq!(list[0].pinned_at, Some(1));
         assert_eq!(list[1].id.as_str(), "file-1");
         assert_eq!(list[1].pinned_at, Some(2));
+    }
+
+    #[test]
+    fn search_files_returns_matching_records() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+
+        let mut file1 = new_file("file-1", &["Docs", "Work"], 1_000);
+        file1.name = filename("annual_report_2023.pdf");
+        repository.insert_file(file1).unwrap();
+
+        let mut file2 = new_file("file-2", &["Images"], 1_000);
+        file2.name = filename("vacation_photo.jpg");
+        repository.insert_file(file2).unwrap();
+
+        let mut file3 = new_file("file-3", &["Docs", "Personal"], 1_000);
+        file3.name = filename("personal_budget_2023.xlsx");
+        repository.insert_file(file3).unwrap();
+
+        // Search by name
+        let results = repository.search_files("report").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id.as_str(), "file-1");
+
+        // Search by tag
+        let results = repository.search_files("Docs").unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Search matching across different files
+        let results = repository.search_files("2023").unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Search with no matches
+        let results = repository.search_files("nonexistent").unwrap();
+        assert!(results.is_empty());
     }
 
     fn new_file(id: &str, tags: &[&str], uploaded_at: i64) -> NewFileRecord {
