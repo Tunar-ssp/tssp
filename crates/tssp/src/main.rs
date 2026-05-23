@@ -1,6 +1,7 @@
 //! `tssp` binary entry point.
 
 mod backend;
+mod config;
 mod info;
 mod list;
 mod pins;
@@ -65,6 +66,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::Pins(args)) = cli.command.as_ref() {
         return pins::run_pins(cli, args);
+    }
+    if let Some(Command::Config(args)) = cli.command.as_ref() {
+        return config::run_config(cli, args);
     }
 
     if cli.command.is_none() {

@@ -20,17 +20,27 @@ pub(crate) struct BackendAddress {
 impl BackendAddress {
     /// Builds an address from global connection flags.
     pub(crate) fn from_connection_args(args: &ConnectionArgs) -> Result<Self, String> {
-        let host = args.host.as_deref().unwrap_or(DEFAULT_HOST).trim();
-        if host.is_empty() {
+        let config = crate::config::load_config().unwrap_or_default();
+
+        let host_override = args
+            .host
+            .as_deref()
+            .or(config.host.as_deref())
+            .unwrap_or(DEFAULT_HOST)
+            .trim();
+
+        if host_override.is_empty() {
             return Err("host must not be empty".to_owned());
         }
-        if host.contains('/') {
+        if host_override.contains('/') {
             return Err("host must not contain a URL path".to_owned());
         }
 
+        let port_override = args.port.or(config.port).unwrap_or(DEFAULT_PORT);
+
         Ok(Self {
-            host: host.to_owned(),
-            port: args.port.unwrap_or(DEFAULT_PORT),
+            host: host_override.to_owned(),
+            port: port_override,
         })
     }
 
