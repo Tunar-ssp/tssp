@@ -37,7 +37,7 @@ impl ListSort {
     ///
     /// A leading `-` negates the direction. Unknown fields return `None`.
     #[must_use]
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse(value: &str) -> Option<Self> {
         match value.trim() {
             "uploaded" => Some(Self::UploadedAsc),
             "-uploaded" => Some(Self::UploadedDesc),

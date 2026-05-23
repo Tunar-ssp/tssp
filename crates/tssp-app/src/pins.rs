@@ -64,7 +64,7 @@ where
     pub fn reorder(&self, ids: &[&str]) -> Result<(), PinError> {
         let file_ids: Vec<FileId> = ids
             .iter()
-            .map(|id| FileId::new(id))
+            .map(FileId::new)
             .collect::<Result<Vec<_>, _>>()?;
         self.repository
             .reorder_pins(&file_ids)
