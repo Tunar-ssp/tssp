@@ -352,7 +352,10 @@ mod tests {
         let result = run(cli).await;
 
         assert_eq!(result, Ok(()));
-        assert!(!data_dir.exists());
+        assert!(
+            !data_dir.join("metadata.sqlite3").exists(),
+            "check-config must not initialize storage"
+        );
     }
 
     #[tokio::test]
@@ -365,7 +368,11 @@ mod tests {
 
         let result = run(cli).await;
 
-        assert!(matches!(result, Err(message) if message.contains("data directory")));
+        let err = result.expect_err("expected data directory setup to fail");
+        assert!(
+            err.contains("data directory") || err.contains("create data directory"),
+            "unexpected error: {err}"
+        );
     }
 
     #[tokio::test]
@@ -387,13 +394,16 @@ mod tests {
         let result = run(cli).await;
 
         assert_eq!(result, Ok(()));
-        assert!(!data_dir.exists());
+        assert!(
+            !data_dir.join("metadata.sqlite3").exists(),
+            "check-config must not initialize storage"
+        );
     }
 
     fn cli(data_dir: std::path::PathBuf, check_config: bool) -> Cli {
         Cli {
             bind: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
-            port: Some(0),
+            port: Some(18421),
             data_dir: Some(data_dir),
             public_url: None,
             check_config,

@@ -69,7 +69,7 @@ pub enum HttpDeleteError {
 }
 
 impl HttpDeleteError {
-    fn response(&self) -> Response {
+    pub(crate) fn response(&self) -> Response {
         let (status, code, message) = match self {
             Self::Busy { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,

@@ -1,5 +1,6 @@
 //! `tssp` binary entry point.
 
+mod admin;
 mod backend;
 mod config;
 mod copy;
@@ -107,6 +108,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::Cp(args)) = cli.command.as_ref() {
         return cp::run(cli, args);
+    }
+    if let Some(Command::Admin(args)) = cli.command.as_ref() {
+        return admin::run(cli, args);
     }
     if matches!(cli.command, Some(Command::Init)) {
         return init::run(cli);

@@ -224,6 +224,10 @@ mod tests {
         ) -> Result<Option<FileRecord>, RepositoryError> {
             Ok(None)
         }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+            Ok(Vec::new())
+        }
     }
 
     #[test]

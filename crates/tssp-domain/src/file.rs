@@ -210,6 +210,14 @@ pub struct FileRecord {
     pub tags: Vec<Tag>,
     /// Pin order when the file is pinned.
     pub pinned_at: Option<u32>,
+    /// Virtual folder path (e.g. `photos/vacation`), empty for bucket root.
+    pub folder_path: String,
+    /// Owning user when multi-user auth is enabled.
+    pub owner_id: Option<crate::UserId>,
+    /// Public or private visibility.
+    pub visibility: crate::Visibility,
+    /// Unguessable token for public download when visibility is public.
+    pub public_token: Option<String>,
 }
 
 impl FileRecord {
@@ -503,6 +511,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("timestamp failed: {error}")),
             tags: Vec::new(),
             pinned_at: None,
+        folder_path: String::new(),
         };
 
         assert!(!record.is_pinned());

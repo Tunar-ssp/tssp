@@ -148,6 +148,8 @@ pub enum Command {
     Note(NoteCommand),
     /// Quick-save text or clipboard to the cloud as a note.
     Cp(CpArgs),
+    /// Admin: storage, folders, system, and maintenance.
+    Admin(AdminCommand),
     /// Generate a shell completion script.
     #[command(hide = true)]
     Completions(CompletionArgs),
@@ -417,6 +419,56 @@ pub struct RemoveArgs {
 #[derive(Debug, Clone, Args)]
 pub struct IdArgs {
     /// File id.
+    pub id: String,
+}
+
+/// Wrapper for `tssp admin`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminCommand {
+    /// Admin action.
+    #[command(subcommand)]
+    pub action: AdminAction,
+}
+
+/// `tssp admin` subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum AdminAction {
+    /// Dashboard summary (files, notes, storage).
+    Overview,
+    /// Host CPU, memory, and disk metrics.
+    System,
+    /// List objects (optionally by folder or MIME prefix).
+    Files(AdminFilesArgs),
+    /// List virtual folders and file counts.
+    Folders,
+    /// Delete a file by id (admin endpoint).
+    Delete(AdminDeleteArgs),
+    /// Show corrupt blob count from last integrity scan.
+    Corrupt,
+    /// Remove staged temp upload files.
+    CleanupTemp,
+    /// Show session cleanup status.
+    CleanupSessions,
+}
+
+/// Arguments for `tssp admin files`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminFilesArgs {
+    /// Max results (default 100).
+    #[arg(long, default_value_t = 100)]
+    pub limit: u64,
+    /// Folder prefix filter.
+    #[arg(long)]
+    pub folder: Option<String>,
+    /// MIME prefix (e.g. `image` → `image/`).
+    #[arg(long, name = "type")]
+    pub mime_type: Option<String>,
+}
+
+/// Arguments for `tssp admin delete`.
+#[derive(Debug, Clone, Args)]
+pub struct AdminDeleteArgs {
+    /// File id to delete.
     pub id: String,
 }
 

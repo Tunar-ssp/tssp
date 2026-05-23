@@ -325,8 +325,12 @@ impl NoteRepository for SqliteFileRepository {
     }
 
     fn search_all(&self, query: &str) -> Result<Vec<SearchHit>, RepositoryError> {
-        let files = FileRepository::search_files(self, query)?;
-        let notes = self.search_notes(query)?;
+        let fts_query = tssp_domain::build_fts_query(query);
+        if fts_query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let files = FileRepository::search_files(self, &fts_query)?;
+        let notes = self.search_notes(&fts_query)?;
         let mut hits = Vec::with_capacity(files.len() + notes.len());
         for file in files {
             hits.push(SearchHit::File(file));

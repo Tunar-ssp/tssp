@@ -159,6 +159,10 @@ mod tests {
         ) -> Result<Option<FileRecord>, String> {
             Ok(Some(self.record.clone()))
         }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+            Ok(vec![(self.record.folder_path.clone(), 1)])
+        }
     }
 
     struct NotFoundStatsProvider;
@@ -204,6 +208,10 @@ mod tests {
             _new_name: &FileName,
         ) -> Result<Option<FileRecord>, String> {
             Ok(None)
+        }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+            Ok(Vec::new())
         }
     }
 
@@ -251,6 +259,10 @@ mod tests {
         ) -> Result<Option<FileRecord>, String> {
             Err("database locked".to_owned())
         }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+            Ok(Vec::new())
+        }
     }
 
     fn test_record() -> FileRecord {
@@ -266,6 +278,7 @@ mod tests {
             tags: vec![],
             uploaded_at: UnixTimestamp::new(1_000_000_000).expect("valid timestamp"),
             pinned_at: None,
+            folder_path: String::new(),
             storage_handle: StorageHandle::new(
                 "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
             )

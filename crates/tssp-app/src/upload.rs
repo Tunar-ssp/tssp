@@ -78,6 +78,10 @@ where
             uploaded_at: self.clock.now(),
             tags,
             pinned_at: request.pinned_at,
+            folder_path: request.folder_path.to_owned(),
+            owner_id: request.owner_id.clone(),
+            visibility: request.visibility,
+            public_token: request.public_token.clone(),
         };
 
         match self.repository.insert_file(new_file) {
@@ -107,6 +111,14 @@ pub struct UploadRequest<'a> {
     pub tags: &'a [&'a str],
     /// Optional initial pin order.
     pub pinned_at: Option<u32>,
+    /// Virtual folder path within the bucket.
+    pub folder_path: &'a str,
+    /// Owning user for the new file.
+    pub owner_id: Option<tssp_domain::UserId>,
+    /// Initial visibility.
+    pub visibility: tssp_domain::Visibility,
+    /// Public link token when visibility is public.
+    pub public_token: Option<String>,
     /// Streaming content source.
     pub source: &'a mut dyn Read,
 }
@@ -301,6 +313,7 @@ mod tests {
                 uploaded_at: new_file.uploaded_at,
                 tags: new_file.tags,
                 pinned_at: new_file.pinned_at,
+            folder_path: String::new(),
             })
         }
 
@@ -416,6 +429,10 @@ mod tests {
         ) -> Result<Option<FileRecord>, RepositoryError> {
             Ok(None)
         }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+            Ok(Vec::new())
+        }
     }
 
     fn clone_repository_error(error: &RepositoryError) -> RepositoryError {
@@ -493,6 +510,7 @@ mod tests {
             mime_type: Some("IMAGE/JPEG"),
             tags: &["Family", " family "],
             pinned_at: Some(1),
+            folder_path: "",
             source: &mut source,
         };
 
@@ -524,6 +542,7 @@ mod tests {
             mime_type: Some("image/jpeg"),
             tags: &["ignored"],
             pinned_at: Some(1),
+            folder_path: "",
             source: &mut source,
         };
 
@@ -552,6 +571,7 @@ mod tests {
             mime_type: None,
             tags: &[],
             pinned_at: None,
+            folder_path: "",
             source: &mut source,
         };
 
@@ -584,6 +604,7 @@ mod tests {
             mime_type: Some("text/plain"),
             tags: &[],
             pinned_at: None,
+            folder_path: "",
             source: &mut source,
         };
 
@@ -607,6 +628,7 @@ mod tests {
             mime_type: None,
             tags: &[],
             pinned_at: None,
+            folder_path: "",
             source: &mut source,
         };
 
@@ -629,6 +651,7 @@ mod tests {
             mime_type: None,
             tags: &[],
             pinned_at: None,
+            folder_path: "",
             source: &mut source,
         };
 
@@ -656,6 +679,7 @@ mod tests {
             mime_type: Some("image/jpeg"),
             tags: &[],
             pinned_at: None,
+            folder_path: "",
             source: &mut source,
         };
 
@@ -680,6 +704,7 @@ mod tests {
             uploaded_at: FixedClock.now(),
             tags: Vec::new(),
             pinned_at: None,
+        folder_path: String::new(),
         }
     }
 

@@ -242,6 +242,10 @@ mod tests {
         ) -> Result<Option<FileRecord>, RepositoryError> {
             Ok(None)
         }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+            Ok(Vec::new())
+        }
     }
 
     #[test]
@@ -369,6 +373,7 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: Vec::new(),
             pinned_at: None,
+        folder_path: String::new(),
         }
     }
 

@@ -72,6 +72,8 @@ pub struct ListQuery {
     pub sort: ListSort,
     /// Opaque cursor from a previous response for the next page.
     pub after_cursor: Option<Cursor>,
+    /// When set, only files under this folder prefix (e.g. `photos/`).
+    pub folder_prefix: Option<String>,
 }
 
 impl Default for ListQuery {
@@ -86,6 +88,7 @@ impl Default for ListQuery {
             pinned_only: false,
             sort: ListSort::UploadedDesc,
             after_cursor: None,
+            folder_prefix: None,
         }
     }
 }
@@ -366,6 +369,13 @@ pub trait FileRepository {
         id: &FileId,
         new_name: &FileName,
     ) -> Result<Option<FileRecord>, RepositoryError>;
+
+    /// Returns file counts grouped by `folder_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the aggregation query fails.
+    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError>;
 }
 
 /// Persists and queries Markdown notes.
@@ -592,6 +602,10 @@ where
         new_name: &FileName,
     ) -> Result<Option<FileRecord>, RepositoryError> {
         self.as_ref().rename_file(id, new_name)
+    }
+
+    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+        self.as_ref().list_folder_counts()
     }
 }
 
@@ -856,6 +870,14 @@ pub struct NewFileRecord {
     pub tags: Vec<Tag>,
     /// Initial pin position.
     pub pinned_at: Option<u32>,
+    /// Virtual folder path within the bucket.
+    pub folder_path: String,
+    /// Owning user id.
+    pub owner_id: Option<tssp_domain::UserId>,
+    /// Visibility at creation time.
+    pub visibility: tssp_domain::Visibility,
+    /// Optional public link token when visibility is public.
+    pub public_token: Option<String>,
 }
 
 /// Result of a metadata delete transaction.
@@ -1081,6 +1103,7 @@ mod tests {
                 uploaded_at: ts,
                 tags: vec![],
                 pinned_at: None,
+            folder_path: String::new(),
             },
             remaining_content_references: 0,
         };

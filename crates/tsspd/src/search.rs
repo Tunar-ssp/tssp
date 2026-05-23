@@ -316,6 +316,12 @@ mod tests {
         ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
             unimplemented!()
         }
+
+        fn list_folder_counts(
+            &self,
+        ) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+            Ok(Vec::new())
+        }
     }
 
     impl NoteRepository for MockRepo {
@@ -507,6 +513,12 @@ mod tests {
             _new_name: &tssp_domain::FileName,
         ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
             unimplemented!()
+        }
+
+        fn list_folder_counts(
+            &self,
+        ) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+            Ok(Vec::new())
         }
     }
 

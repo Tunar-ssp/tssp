@@ -475,6 +475,7 @@ mod tests {
             uploaded_at: UnixTimestamp::new(1_700_000_000).unwrap_or_else(|e| panic!("{e}")),
             tags: vec![],
             pinned_at: Some(1),
+        folder_path: String::new(),
         };
 
         let response = PinListResponse::from_records(&[record]);

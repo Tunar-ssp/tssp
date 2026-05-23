@@ -208,6 +208,7 @@ pub async fn post_receive_session_upload(
         mime_type: staged.mime_type,
         tags: staged.tags,
         pinned: false,
+        folder_path: staged.folder_path,
         source: Box::new(source),
     };
 

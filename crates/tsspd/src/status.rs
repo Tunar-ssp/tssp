@@ -64,6 +64,13 @@ pub trait MetadataStatsProvider: Send + Sync {
         id: &FileId,
         new_name: &tssp_domain::FileName,
     ) -> Result<Option<FileRecord>, String>;
+
+    /// Returns file counts grouped by folder path prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when the query fails.
+    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String>;
 }
 
 #[derive(Debug)]
@@ -110,6 +117,10 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
         _new_name: &tssp_domain::FileName,
     ) -> Result<Option<FileRecord>, String> {
         Ok(None)
+    }
+
+    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+        Ok(Vec::new())
     }
 }
 
@@ -177,6 +188,12 @@ where
     ) -> Result<Option<FileRecord>, String> {
         self.repository
             .rename_file(id, new_name)
+            .map_err(|error| error.to_string())
+    }
+
+    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+        self.repository
+            .list_folder_counts()
             .map_err(|error| error.to_string())
     }
 }
@@ -264,7 +281,7 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     }
 }
 
-fn calculate_directory_size(path: &Path) -> u64 {
+pub(crate) fn calculate_directory_size(path: &Path) -> u64 {
     let mut total = 0u64;
     if let Ok(entries) = std::fs::read_dir(path) {
         for entry in entries.flatten() {
@@ -395,6 +412,10 @@ mod tests {
             ) -> Result<Option<FileRecord>, String> {
                 Ok(None)
             }
+
+            fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+                Ok(Vec::new())
+            }
         }
 
         let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
@@ -419,6 +440,7 @@ mod tests {
             pinned_only: false,
             sort: tssp_ports::ListSort::default(),
             after_cursor: None,
+        folder_prefix: None,
         };
         let result = provider
             .list_files(&query)

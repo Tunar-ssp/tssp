@@ -49,6 +49,8 @@ pub struct HttpUploadRequest {
     pub tags: Vec<String>,
     /// Whether the file should be pinned at upload time.
     pub pinned: bool,
+    /// Virtual folder path within the bucket.
+    pub folder_path: String,
     /// Streaming file content.
     pub source: Box<dyn Read + Send>,
 }
@@ -164,6 +166,7 @@ where
             mime_type: request.mime_type.as_deref(),
             tags: &tag_refs,
             pinned_at: request.pinned.then_some(1),
+            folder_path: &request.folder_path,
             source: request.source.as_mut(),
         };
         self.service
@@ -292,6 +295,7 @@ async fn upload_staged_file(
         mime_type: staged.mime_type,
         tags: staged.tags,
         pinned: staged.pinned,
+        folder_path: staged.folder_path,
         source: Box::new(source),
     };
 
@@ -308,6 +312,7 @@ pub(crate) struct StagedMultipartUpload {
     pub(crate) mime_type: Option<String>,
     pub(crate) tags: Vec<String>,
     pub(crate) pinned: bool,
+    pub(crate) folder_path: String,
     pub(crate) temp_file: NamedTempFile,
 }
 
@@ -332,6 +337,7 @@ pub(crate) async fn stage_multipart_upload(
     let mut mime_type = None;
     let mut tags = Vec::new();
     let mut pinned = false;
+    let mut folder_path = String::new();
 
     while let Some(field) = next_field(&mut multipart).await? {
         let Some(name) = field.name().map(str::to_owned) else {
@@ -352,6 +358,10 @@ pub(crate) async fn stage_multipart_upload(
             }
             "tag" | "tags" => tags.push(field_text(field).await?),
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
+            "folder" | "folder_path" => {
+                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?)
+                    .map_err(|message| HttpUploadError::InvalidRequest { message })?;
+            }
             "destination" | "destination_hint" => {
                 let _ignored = field_text(field).await?;
             }
@@ -359,7 +369,7 @@ pub(crate) async fn stage_multipart_upload(
         }
     }
 
-    finish_staged_upload(filename, mime_type, tags, pinned, temp_file)
+    finish_staged_upload(filename, mime_type, tags, pinned, folder_path, temp_file)
 }
 
 async fn stage_batch_multipart_upload(
@@ -373,6 +383,7 @@ async fn stage_batch_multipart_upload(
     let mut files = Vec::new();
     let mut tags = Vec::new();
     let mut pinned = false;
+    let mut folder_path = String::new();
 
     while let Some(field) = next_field(&mut multipart).await? {
         let Some(name) = field.name().map(str::to_owned) else {
@@ -385,6 +396,10 @@ async fn stage_batch_multipart_upload(
             "file" => files.push(stage_batch_file(field, upload_temp_dir).await?),
             "tag" | "tags" => tags.push(field_text(field).await?),
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
+            "folder" | "folder_path" => {
+                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?)
+                    .map_err(|message| HttpUploadError::InvalidRequest { message })?;
+            }
             "destination" | "destination_hint" => {
                 let _ignored = field_text(field).await?;
             }
@@ -405,6 +420,7 @@ async fn stage_batch_multipart_upload(
             mime_type: file.mime_type,
             tags: tags.clone(),
             pinned,
+            folder_path: folder_path.clone(),
             temp_file: file.temp_file,
         })
         .collect())
@@ -463,6 +479,7 @@ fn finish_staged_upload(
     mime_type: Option<String>,
     tags: Vec<String>,
     pinned: bool,
+    folder_path: String,
     mut temp_file: NamedTempFile,
 ) -> Result<StagedMultipartUpload, HttpUploadError> {
     let Some(filename) = filename else {
@@ -478,6 +495,7 @@ fn finish_staged_upload(
         mime_type,
         tags,
         pinned,
+        folder_path,
         temp_file,
     })
 }
@@ -676,6 +694,9 @@ pub struct FileRecordResponse {
     pub tags: Vec<String>,
     /// Whether the file is pinned.
     pub pinned: bool,
+    /// Virtual folder path, empty at bucket root.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub folder_path: String,
 }
 
 impl FileRecordResponse {
@@ -694,6 +715,7 @@ impl FileRecordResponse {
                 .map(|tag| tag.display().to_owned())
                 .collect(),
             pinned: record.is_pinned(),
+            folder_path: record.folder_path.clone(),
         }
     }
 }
@@ -809,7 +831,7 @@ mod tests {
         let temp = tempfile::NamedTempFile::new()
             .unwrap_or_else(|error| panic!("temp file failed: {error}"));
 
-        let result = finish_staged_upload(None, None, Vec::new(), false, temp);
+        let result = finish_staged_upload(None, None, Vec::new(), false, String::new(), temp);
 
         assert!(
             matches!(result, Err(HttpUploadError::InvalidRequest { message }) if message.contains("file field"))
@@ -828,6 +850,7 @@ mod tests {
             Some("text/plain".to_owned()),
             vec!["Docs".to_owned()],
             true,
+            "photos".to_owned(),
             temp,
         )
         .unwrap_or_else(|error| panic!("finish failed: {error:?}"));
@@ -836,6 +859,7 @@ mod tests {
         assert_eq!(staged.mime_type.as_deref(), Some("text/plain"));
         assert_eq!(staged.tags, vec!["Docs"]);
         assert!(staged.pinned);
+        assert_eq!(staged.folder_path, "photos");
     }
 
     #[test]
@@ -846,6 +870,7 @@ mod tests {
             mime_type: None,
             tags: Vec::new(),
             pinned: false,
+            folder_path: String::new(),
             source: Box::new(Cursor::new(Vec::<u8>::new())),
         };
 
@@ -1038,6 +1063,7 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: vec![tag_value("Docs")],
             pinned_at: Some(1),
+        folder_path: String::new(),
         }
     }
 

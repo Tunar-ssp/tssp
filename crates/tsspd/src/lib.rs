@@ -27,6 +27,8 @@ mod status;
 mod tags;
 mod upload;
 mod web;
+mod folders;
+mod admin;
 pub mod auth;
 
 use std::path::PathBuf;
@@ -361,6 +363,38 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/auth/logout",
             post(auth::auth_logout).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/overview",
+            get(admin::admin_overview).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/system",
+            get(admin::admin_system).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/files",
+            get(admin::admin_list_files).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/files/{id}",
+            axum::routing::delete(admin::admin_delete_file).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/folders",
+            get(admin::admin_folders).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/corrupt",
+            get(admin::admin_corrupt_files).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/cleanup/temp",
+            post(admin::admin_cleanup_temp).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/cleanup/sessions",
+            post(admin::admin_cleanup_sessions).options(options_response),
         )
         .route("/assets/{*path}", get(web::serve_asset))
         .fallback(web::web_fallback)
@@ -1318,6 +1352,10 @@ mod tests {
         ) -> Result<Option<tssp_domain::FileRecord>, String> {
             Ok(None)
         }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+            Ok(Vec::new())
+        }
     }
 
     struct FailingStatsProvider;
@@ -1358,6 +1396,10 @@ mod tests {
             _id: &tssp_domain::FileId,
             _new_name: &tssp_domain::FileName,
         ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
             Err("metadata database is unavailable".to_owned())
         }
     }
@@ -1411,6 +1453,10 @@ mod tests {
             _new_name: &tssp_domain::FileName,
         ) -> Result<Option<tssp_domain::FileRecord>, String> {
             Ok(Some(single_record()))
+        }
+
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+            Ok(vec![(String::new(), 1)])
         }
     }
 
@@ -1651,6 +1697,7 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: request.tags.iter().map(|tag| tag_value(tag)).collect(),
             pinned_at: request.pinned.then_some(1),
+        folder_path: String::new(),
         }
     }
 
@@ -1665,6 +1712,7 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: Vec::new(),
             pinned_at: None,
+        folder_path: String::new(),
         }
     }
 

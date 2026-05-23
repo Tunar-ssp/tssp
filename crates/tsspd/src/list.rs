@@ -41,6 +41,9 @@ pub(crate) struct ListQueryParams {
     /// Cursor for the next page.
     #[serde(default, rename = "page")]
     page: Option<String>,
+    /// Filter by virtual folder prefix (e.g. `photos` or `photos/vacation`).
+    #[serde(default)]
+    folder: Option<String>,
 }
 
 fn default_limit() -> u64 {
@@ -106,6 +109,11 @@ impl ListQueryParams {
             .transpose()
             .map_err(|error| error.to_string())?;
 
+        let folder_prefix = self
+            .folder
+            .map(|value| crate::folders::normalize_folder_path(&value))
+            .transpose()?;
+
         Ok(RepositoryListQuery {
             limit: self.limit,
             tags,
@@ -116,6 +124,7 @@ impl ListQueryParams {
             pinned_only: self.pinned_only,
             sort,
             after_cursor,
+            folder_prefix,
         })
     }
 }
@@ -252,6 +261,7 @@ mod tests {
             pinned_only: false,
             sort: None,
             page: None,
+            folder: None,
         };
         let result = query.into_repository_query();
         assert!(matches!(result, Err(message) if message.contains("greater than 0")));
@@ -269,6 +279,7 @@ mod tests {
             pinned_only: false,
             sort: None,
             page: None,
+            folder: None,
         };
         let result = query.into_repository_query();
         assert!(matches!(result, Err(message) if message.contains("500")));
@@ -287,6 +298,7 @@ mod tests {
                 pinned_only: false,
                 sort: None,
                 page: None,
+            folder: None,
             };
             assert!(
                 query.into_repository_query().is_ok(),
@@ -307,6 +319,7 @@ mod tests {
             pinned_only: true,
             sort: Some("-name".to_owned()),
             page: Some("cursor-1".to_owned()),
+            folder: None,
         };
         let result = query
             .into_repository_query()
@@ -335,6 +348,7 @@ mod tests {
             pinned_only: false,
             sort: Some("bad".to_owned()),
             page: None,
+            folder: None,
         };
 
         let result = query.into_repository_query();
@@ -353,6 +367,7 @@ mod tests {
             pinned_only: false,
             sort: None,
             page: None,
+            folder: None,
         };
 
         let result = query.into_repository_query();
@@ -383,6 +398,7 @@ mod tests {
             pinned_only: false,
             sort: None,
             page: None,
+            folder: None,
         };
 
         let result = query.into_repository_query();

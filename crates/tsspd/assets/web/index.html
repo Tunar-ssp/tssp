@@ -3,10 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#7c3aed">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0d0d0f">
   <title>TSSP Storage</title>
-  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/views.css">
+  <link rel="stylesheet" href="/assets/css/mobile.css">
   <link rel="manifest" href="/assets/manifest.webmanifest">
 </head>
 <body>
@@ -16,14 +21,14 @@
         <span class="brand-mark" aria-hidden="true"></span>
         <div>
           <h1>TSSP</h1>
-          <p>Sign in to continue</p>
+          <p>Sign in to your storage bucket</p>
         </div>
       </div>
       <form id="login-form">
         <label for="login-password">Password</label>
         <input id="login-password" type="password" autocomplete="current-password" required>
         <p id="login-error" class="form-error hidden" role="alert"></p>
-        <button type="submit" class="btn btn-primary">Sign in</button>
+        <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
       </form>
     </div>
   </div>
@@ -43,7 +48,7 @@
       </div>
       <div class="top-bar-search">
         <span class="search-icon" aria-hidden="true"></span>
-        <input id="global-search" type="search" placeholder="Search files and notes" autocomplete="off">
+        <input id="global-search" type="search" placeholder="Search files and notes (prefix match)" autocomplete="off">
       </div>
       <div class="top-bar-actions">
         <button type="button" class="btn btn-text" id="refresh-btn">Refresh</button>
@@ -55,21 +60,23 @@
     <div class="shell">
       <nav class="side-nav" id="side-nav" aria-label="Primary">
         <a href="#objects" class="nav-item active" data-view="objects">
-          <span class="nav-icon nav-icon-bucket"></span>
           <span>Objects</span>
         </a>
+        <a href="#images" class="nav-item" data-view="images">
+          <span>Images</span>
+        </a>
         <a href="#notes" class="nav-item" data-view="notes">
-          <span class="nav-icon nav-icon-doc"></span>
           <span>Notes</span>
         </a>
         <a href="#search" class="nav-item" data-view="search">
-          <span class="nav-icon nav-icon-search"></span>
-          <span>Search results</span>
+          <span>Search</span>
         </a>
         <div class="nav-section">Monitoring</div>
         <a href="#overview" class="nav-item" data-view="overview">
-          <span class="nav-icon nav-icon-chart"></span>
           <span>Overview</span>
+        </a>
+        <a href="#admin" class="nav-item" data-view="admin">
+          <span>Admin</span>
         </a>
       </nav>
 
@@ -79,7 +86,7 @@
         <section id="view-overview" class="view hidden">
           <div class="page-header">
             <h2>Overview</h2>
-            <p class="page-subtitle">Local object storage on this device</p>
+            <p class="page-subtitle">Bucket health and usage</p>
           </div>
           <div class="metric-grid" id="metric-grid"></div>
         </section>
@@ -90,7 +97,7 @@
               <nav class="breadcrumb" aria-label="Breadcrumb">
                 <span>tssp</span>
                 <span class="breadcrumb-sep">/</span>
-                <span class="breadcrumb-current">default</span>
+                <span class="breadcrumb-current" id="breadcrumb-folder">default</span>
               </nav>
               <h2>Objects</h2>
             </div>
@@ -101,35 +108,57 @@
               </label>
             </div>
           </div>
-          <div class="drop-zone" id="drop-zone">
-            <p>Drop files to upload</p>
+
+          <div class="upload-bar">
+            <input type="text" id="upload-folder" placeholder="Folder path (e.g. photos/vacation)" aria-label="Upload folder">
+            <input type="text" id="upload-tags" placeholder="Tags (comma-separated)" aria-label="Upload tags">
+            <label class="chip-toggle">
+              <input type="checkbox" id="upload-pin">
+              Pin on upload
+            </label>
           </div>
-          <div class="table-card">
-            <table class="data-table" id="files-table">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Size</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Updated</th>
-                  <th scope="col" class="col-actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="files-body">
-                <tr><td colspan="5" class="table-empty">Loading…</td></tr>
-              </tbody>
-            </table>
+
+          <div class="objects-layout">
+            <aside class="folder-panel">
+              <h3>Folders</h3>
+              <div class="folder-tree" id="folder-tree"></div>
+            </aside>
+            <div class="objects-main">
+              <div class="drop-zone" id="drop-zone">
+                <strong>Drop files here</strong>
+                <span>or click to browse — uploads go to the selected folder</span>
+              </div>
+              <div class="table-card">
+                <table class="data-table" id="files-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Name</th>
+                      <th scope="col">Size</th>
+                      <th scope="col">Type</th>
+                      <th scope="col">Updated</th>
+                      <th scope="col" class="col-actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="files-body">
+                    <tr><td colspan="5" class="table-empty">Loading…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
+        </section>
+
+        <section id="view-images" class="view hidden">
+          <div class="page-header">
+            <h2>Images</h2>
+            <p class="page-subtitle">Gallery of image objects in your bucket</p>
+          </div>
+          <div class="image-grid" id="image-grid"></div>
         </section>
 
         <section id="view-notes" class="view hidden">
           <div class="page-header">
             <div>
-              <nav class="breadcrumb" aria-label="Breadcrumb">
-                <span>tssp</span>
-                <span class="breadcrumb-sep">/</span>
-                <span class="breadcrumb-current">notes</span>
-              </nav>
               <h2>Notes</h2>
             </div>
             <div class="page-actions">
@@ -174,6 +203,30 @@
             </table>
           </div>
         </section>
+
+        <section id="view-admin" class="view hidden">
+          <div class="page-header">
+            <h2>Admin</h2>
+            <p class="page-subtitle">System and maintenance (Orange Pi host)</p>
+          </div>
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>Storage overview</h3>
+              <div id="admin-overview">Loading…</div>
+            </div>
+            <div class="admin-card">
+              <h3>System</h3>
+              <div id="admin-system">Loading…</div>
+            </div>
+            <div class="admin-card">
+              <h3>Maintenance</h3>
+              <div class="admin-actions">
+                <button type="button" class="btn btn-secondary" id="admin-cleanup-temp">Clean temp uploads</button>
+                <button type="button" class="btn btn-secondary" id="admin-cleanup-sessions">Session cleanup info</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -195,7 +248,11 @@
     </form>
   </dialog>
 
-  <script src="/assets/app.js" defer></script>
+  <script src="/assets/js/api.js" defer></script>
+  <script src="/assets/js/state.js" defer></script>
+  <script src="/assets/js/upload.js" defer></script>
+  <script src="/assets/js/views.js" defer></script>
+  <script src="/assets/js/app.js" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/assets/sw.js").catch(() => {});

@@ -1,8 +1,10 @@
 {
   "name": "TSSP Storage",
   "short_name": "TSSP",
+  "description": "Self-hosted object storage",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8f9fa",
-  "theme_color": "#7c3aed",
-  "start_url": "/"
+  "background_color": "#0d0d0f",
+  "theme_color": "#0d0d0f",
+  "icons": []
 }

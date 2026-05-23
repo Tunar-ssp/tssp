@@ -18,7 +18,7 @@ use rusqlite::{params, params_from_iter, types::Value, Connection, ErrorCode, Ro
 use thiserror::Error;
 use tssp_domain::{
     ContentHash, Cursor, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
-    TagKey, UnixTimestamp,
+    TagKey, UnixTimestamp, UserId, Visibility,
 };
 use tssp_ports::{
     DeletedFileRecord, FileRepository, ListQuery, ListSort, NewFileRecord, PagedFiles,
@@ -97,7 +97,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
                  WHERE id = ?1",
             )
@@ -121,7 +121,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
                  WHERE content_hash = ?1
                  ORDER BY uploaded_at ASC, id ASC
@@ -188,7 +188,7 @@ impl FileRepository for SqliteFileRepository {
 
         let connection = self.lock()?;
         let mut sql = String::from(
-            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at
+            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
              FROM files f",
         );
         let mut where_clauses = Vec::new();
@@ -228,6 +228,19 @@ impl FileRepository for SqliteFileRepository {
 
         if query.pinned_only {
             where_clauses.push("f.pinned_at IS NOT NULL".to_owned());
+        }
+
+        if let Some(folder_prefix) = &query.folder_prefix {
+            let prefix = folder_prefix.trim().trim_matches('/');
+            if prefix.is_empty() {
+                where_clauses.push("f.folder_path = ''".to_owned());
+            } else {
+                where_clauses.push(
+                    "(f.folder_path = ? OR f.folder_path LIKE ? ESCAPE '\\')".to_owned(),
+                );
+                parameters.push(Value::from(prefix.to_owned()));
+                parameters.push(Value::from(format!("{prefix}/%")));
+            }
         }
 
         if let Some(cursor_filter) = cursor_filter(query.sort, query.after_cursor.as_ref())? {
@@ -573,7 +586,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
                  WHERE pinned_at IS NOT NULL
                  ORDER BY pinned_at ASC, id ASC",
@@ -621,7 +634,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare(
-                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at
+                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
                  FROM file_search s
                  JOIN files f ON f.id = s.file_id
                  WHERE file_search MATCH ?1
@@ -670,6 +683,31 @@ impl FileRepository for SqliteFileRepository {
                 message: "renamed file could not be read back".to_owned(),
             })
             .map(Some)
+    }
+
+    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT folder_path, COUNT(*)
+                 FROM files
+                 GROUP BY folder_path
+                 ORDER BY folder_path",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        let mut rows = statement
+            .query([])
+            .map_err(map_rusqlite_repository_error)?;
+        let mut counts = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let path: String = row.get(0).map_err(map_rusqlite_repository_error)?;
+            let count: i64 = row.get(1).map_err(map_rusqlite_repository_error)?;
+            let count = u64::try_from(count).map_err(|error| RepositoryError::OperationFailed {
+                message: format!("folder count is invalid: {error}"),
+            })?;
+            counts.push((path, count));
+        }
+        Ok(counts)
     }
 }
 
@@ -800,7 +838,87 @@ fn run_migrations(connection: &Connection) -> Result<(), SqliteRepositoryError> 
             ",
         )
         .map_err(SqliteRepositoryError::Migration)?;
-    notes::migrate_notes_schema(connection)
+    notes::migrate_notes_schema(connection)?;
+    migrate_folders_schema(connection)?;
+    migrate_cloud_schema(connection)
+}
+
+/// Adds ownership, visibility, and public link columns (schema v7/v8).
+pub(crate) fn migrate_cloud_schema(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 7)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE files ADD COLUMN owner_id TEXT;
+            ALTER TABLE files ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
+            ALTER TABLE files ADD COLUMN public_token TEXT;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public_token ON files(public_token)
+                WHERE public_token IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_files_visibility ON files(visibility);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 7)?;
+
+    if migration_applied(connection, 8)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE notes ADD COLUMN owner_id TEXT;
+            ALTER TABLE notes ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
+            CREATE INDEX IF NOT EXISTS idx_notes_owner ON notes(owner_id);
+
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'text',
+                body TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 8)?;
+    Ok(())
+}
+
+/// Adds `folder_path` to files (schema v4).
+///
+/// # Errors
+///
+/// Returns [`SqliteRepositoryError`] when migration SQL fails.
+pub(crate) fn migrate_folders_schema(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 4)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE files ADD COLUMN folder_path TEXT NOT NULL DEFAULT '';
+            CREATE INDEX IF NOT EXISTS idx_files_folder_path ON files(folder_path);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 4)?;
+    Ok(())
 }
 
 pub(crate) fn migration_applied(
@@ -841,8 +959,8 @@ fn insert_file_row(
     transaction
         .execute(
             "INSERT INTO files
-             (id, name, storage_component, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             (id, name, storage_component, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 new_file.id.as_str(),
                 new_file.name.original(),
@@ -853,6 +971,13 @@ fn insert_file_row(
                 new_file.storage_handle.as_str(),
                 new_file.uploaded_at.seconds(),
                 new_file.pinned_at,
+                new_file.folder_path,
+                new_file
+                    .owner_id
+                    .as_ref()
+                    .map(tssp_domain::UserId::as_str),
+                new_file.visibility.as_str(),
+                new_file.public_token,
             ],
         )
         .map(|_rows| ())
@@ -882,7 +1007,7 @@ fn find_file_in_transaction(
 ) -> Result<Option<FileRecord>, RepositoryError> {
     let mut statement = transaction
         .prepare(
-            "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+            "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path
              FROM files
              WHERE id = ?1",
         )
@@ -1158,6 +1283,15 @@ fn map_file_row(row: &Row<'_>) -> Result<FileRecord, RepositoryError> {
         .map_err(|error| RepositoryError::OperationFailed {
             message: format!("stored pin position is invalid: {error}"),
         })?;
+    let folder_path: String = row.get(8).map_err(map_rusqlite_repository_error)?;
+    let owner_id_raw: Option<String> = row.get(9).map_err(map_rusqlite_repository_error)?;
+    let visibility_raw: String = row.get(10).map_err(map_rusqlite_repository_error)?;
+    let public_token: Option<String> = row.get(11).map_err(map_rusqlite_repository_error)?;
+    let owner_id = owner_id_raw
+        .map(|value| UserId::new(value).map_err(|error| map_domain_repository_error(&error)))
+        .transpose()?;
+    let visibility = Visibility::parse(&visibility_raw)
+        .map_err(|error| map_domain_repository_error(&error))?;
 
     Ok(FileRecord {
         id: FileId::new(id).map_err(|error| map_domain_repository_error(&error))?,
@@ -1172,6 +1306,10 @@ fn map_file_row(row: &Row<'_>) -> Result<FileRecord, RepositoryError> {
             .map_err(|error| map_domain_repository_error(&error))?,
         tags: Vec::new(),
         pinned_at,
+        folder_path,
+        owner_id,
+        visibility,
+        public_token,
     })
 }
 
@@ -1416,6 +1554,7 @@ mod tests {
             pinned_only: true,
             sort: ListSort::UploadedAsc,
             after_cursor: None,
+        folder_prefix: None,
         };
 
         let first_page = repository
@@ -1684,6 +1823,7 @@ mod tests {
                 uploaded_at: timestamp(1_000),
                 tags: vec![],
                 pinned_at: None,
+            folder_path: String::new(),
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -1887,6 +2027,7 @@ mod tests {
             uploaded_at: timestamp(uploaded_at),
             tags: tags.iter().map(|tag| tag_value(tag)).collect(),
             pinned_at: Some(2),
+        folder_path: String::new(),
         }
     }
 
