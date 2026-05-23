@@ -234,10 +234,15 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{healthz, readyz, MetadataStatsProvider, StaticMetadataStatsProvider};
+    use super::{healthz, readyz, status, MetadataStatsProvider, StaticMetadataStatsProvider};
     use axum::body::to_bytes;
+    use axum::extract::State;
+    use axum::http::StatusCode;
     use axum::response::IntoResponse;
-    use tssp_domain::FileId;
+    use tssp_domain::{FileId, FileRecord};
+    use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};
+    use crate::HttpState;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn healthz_returns_ok() {
@@ -283,5 +288,67 @@ mod tests {
             .list_files_by_tag(&tag, 10)
             .unwrap_or_else(|error| panic!("list by tag failed: {error}"))
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_returns_ok_with_stats() {
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_stats_provider(Arc::new(StaticMetadataStatsProvider));
+
+        let response = status(State(state)).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_returns_unavailable_on_stats_error() {
+        struct ErrorStatsProvider;
+
+        impl MetadataStatsProvider for ErrorStatsProvider {
+            fn stats(&self) -> Result<RepositoryStats, String> {
+                Err("database error".to_owned())
+            }
+
+            fn list_files_recent(&self, _limit: u64) -> Result<Vec<FileRecord>, String> {
+                Ok(vec![])
+            }
+
+            fn list_files(
+                &self,
+                _query: &ListQuery,
+            ) -> Result<PagedFiles, String> {
+                Ok(PagedFiles {
+                    files: vec![],
+                    next_cursor: None,
+                })
+            }
+
+            fn find_file(&self, _id: &FileId) -> Result<Option<FileRecord>, String> {
+                Ok(None)
+            }
+
+            fn list_files_by_tag(
+                &self,
+                _tag: &tssp_domain::TagKey,
+                _limit: u64,
+            ) -> Result<Vec<FileRecord>, String> {
+                Ok(vec![])
+            }
+
+            fn rename_file(
+                &self,
+                _id: &FileId,
+                _new_name: &tssp_domain::FileName,
+            ) -> Result<Option<FileRecord>, String> {
+                Ok(None)
+            }
+        }
+
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_stats_provider(Arc::new(ErrorStatsProvider));
+
+        let response = status(State(state)).await;
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

@@ -195,6 +195,37 @@ mod tests {
         assert!(matches!(result, Err(message) if message.contains("could not bind")));
     }
 
+    #[tokio::test]
+    async fn run_check_config_does_not_create_data_directory() {
+        let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let data_dir = temp.path().join("new-data-dir");
+        assert!(!data_dir.exists());
+
+        let cli_args = cli(data_dir.clone(), true);
+        let result = run(cli_args).await;
+
+        assert!(result.is_ok());
+        assert!(!data_dir.exists());
+    }
+
+    #[tokio::test]
+    async fn run_reports_upload_temp_directory_creation_failure() {
+        let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let data_dir = temp.path().join("data");
+        std::fs::create_dir(&data_dir)
+            .unwrap_or_else(|error| panic!("mkdir failed: {error}"));
+
+        // Create a file where the upload temp dir would be created
+        let upload_temp = data_dir.join("http-upload-tmp");
+        std::fs::write(&upload_temp, b"not a directory")
+            .unwrap_or_else(|error| panic!("write failed: {error}"));
+
+        let cli_args = cli(data_dir, false);
+        let result = run(cli_args).await;
+
+        assert!(matches!(result, Err(message) if message.contains("upload temp directory")));
+    }
+
     fn cli(data_dir: std::path::PathBuf, check_config: bool) -> Cli {
         Cli {
             bind: IpAddr::V4(Ipv4Addr::LOCALHOST),
