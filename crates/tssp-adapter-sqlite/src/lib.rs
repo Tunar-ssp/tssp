@@ -4,6 +4,8 @@
 //! kept behind the `FileRepository` port so application services stay storage
 //! agnostic.
 
+mod sessions;
+
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
@@ -766,10 +768,24 @@ fn run_migrations(connection: &Connection) -> Result<(), SqliteRepositoryError> 
             END;
 
             CREATE TRIGGER IF NOT EXISTS file_tags_ad AFTER DELETE ON file_tags BEGIN
-                UPDATE file_search 
+                UPDATE file_search
                 SET tags = (SELECT group_concat(tag_key, ' ') FROM file_tags WHERE file_id = old.file_id)
                 WHERE file_id = old.file_id;
             END;
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                source_file TEXT REFERENCES files(id) ON DELETE SET NULL,
+                received_file TEXT REFERENCES files(id) ON DELETE SET NULL,
+                expected_name TEXT,
+                used_at INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
+            CREATE INDEX IF NOT EXISTS sessions_kind ON sessions(kind);
 
             INSERT OR IGNORE INTO schema_migrations (version) VALUES (1);
             ",
