@@ -9,6 +9,7 @@ mod content;
 mod delete;
 mod file;
 mod list;
+mod metrics;
 mod pins;
 mod public_sessions;
 mod rename;
@@ -236,6 +237,7 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/status",
             get(status::status).options(options_response),
         )
+        .route("/metrics", get(metrics::get_metrics))
         .fallback(web::web_fallback)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::very_permissive())
