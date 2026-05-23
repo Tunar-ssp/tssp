@@ -218,10 +218,10 @@ pub(crate) struct PinRequest {
 pub(crate) async fn pin(
     State(state): State<HttpState>,
     Path(id): Path<String>,
-    Json(payload): Json<Option<PinRequest>>,
+    payload: Option<Json<PinRequest>>,
 ) -> Response {
     let provider = state.pin_provider.clone();
-    let position = payload.and_then(|p| p.position);
+    let position = payload.and_then(|Json(p)| p.position);
     match tokio::task::spawn_blocking(move || provider.pin(id, position)).await {
         Ok(Ok(outcome)) => pin_mutation_response(outcome),
         Ok(Err(error)) => error.response(),
@@ -329,7 +329,7 @@ mod tests {
     use axum::body::to_bytes;
     use axum::http::StatusCode;
     use tssp_app::PinError;
-    use tssp_ports::RepositoryError;
+    use tssp_ports::{PinOutcome, RepositoryError};
 
     use super::{
         map_pin_error, pin_mutation_response, FilePinProvider, HttpPinError, HttpPinMutation,
@@ -384,5 +384,100 @@ mod tests {
             })),
             HttpPinError::Internal { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn http_pin_error_response_maps_status_codes() {
+        use super::HttpPinError;
+        use axum::body::to_bytes;
+
+        let cases = vec![
+            (
+                HttpPinError::InvalidRequest {
+                    message: "bad id".to_owned(),
+                },
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+            ),
+            (
+                HttpPinError::NotFound {
+                    message: "missing".to_owned(),
+                },
+                StatusCode::NOT_FOUND,
+                "file_not_found",
+            ),
+            (
+                HttpPinError::Busy {
+                    message: "busy".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metadata_busy",
+            ),
+            (
+                HttpPinError::Unavailable {
+                    message: "off".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "pin_unavailable",
+            ),
+            (
+                HttpPinError::Internal {
+                    message: "crashed".to_owned(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+        ];
+
+        for (error, expected_status, expected_code) in cases {
+            let response = error.response();
+            assert_eq!(response.status(), expected_status);
+            let body = to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap_or_else(|e| panic!("body read: {e}"));
+            let parsed: serde_json::Value =
+                serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse: {e}"));
+            assert_eq!(parsed["error"]["code"], expected_code);
+        }
+    }
+
+    #[test]
+    fn http_pin_mutation_from_pin_outcome() {
+        let outcome = PinOutcome {
+            existed: true,
+            changed: false,
+        };
+        let mutation: HttpPinMutation = outcome.into();
+        assert!(mutation.existed);
+        assert!(!mutation.changed);
+    }
+
+    #[test]
+    fn pin_list_response_builds_from_records() {
+        use super::PinListResponse;
+        use tssp_domain::{
+            ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle,
+            UnixTimestamp,
+        };
+
+        let record = FileRecord {
+            id: FileId::new("pin-1").unwrap_or_else(|e| panic!("{e}")),
+            name: FileName::new("file.txt").unwrap_or_else(|e| panic!("{e}")),
+            size: FileSize::new(10),
+            content_hash: ContentHash::new(
+                "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
+            )
+            .unwrap_or_else(|e| panic!("{e}")),
+            mime_type: MimeType::new("text/plain").unwrap_or_else(|e| panic!("{e}")),
+            storage_handle: StorageHandle::new("blobs/ab/cd/test")
+                .unwrap_or_else(|e| panic!("{e}")),
+            uploaded_at: UnixTimestamp::new(1_700_000_000).unwrap_or_else(|e| panic!("{e}")),
+            tags: vec![],
+            pinned_at: Some(1),
+        };
+
+        let response = PinListResponse::from_records(&[record]);
+        assert_eq!(response.schema_version, 1);
+        assert_eq!(response.files.len(), 1);
     }
 }

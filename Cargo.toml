@@ -41,6 +41,9 @@ tokio = { version = "1.45", features = ["macros", "net", "rt-multi-thread", "sig
 tower = "0.5"
 unicode-normalization = "0.1"
 uuid = { version = "1.11", features = ["v7"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tower-http = { version = "0.6", features = ["trace", "set-header"] }
 
 [workspace.lints.rust]
 missing_docs = "warn"

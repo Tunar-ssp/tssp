@@ -33,6 +33,17 @@ pub trait MetadataStatsProvider: Send + Sync {
     ///
     /// Returns a short diagnostic when metadata lookup fails.
     fn find_file(&self, id: &FileId) -> Result<Option<FileRecord>, String>;
+
+    /// Returns recent files filtered by a tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when files cannot be listed.
+    fn list_files_by_tag(
+        &self,
+        tag: &tssp_domain::TagKey,
+        limit: u64,
+    ) -> Result<Vec<FileRecord>, String>;
 }
 
 #[derive(Debug)]
@@ -54,6 +65,14 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
 
     fn find_file(&self, _id: &FileId) -> Result<Option<FileRecord>, String> {
         Ok(None)
+    }
+
+    fn list_files_by_tag(
+        &self,
+        _tag: &tssp_domain::TagKey,
+        _limit: u64,
+    ) -> Result<Vec<FileRecord>, String> {
+        Ok(Vec::new())
     }
 }
 
@@ -95,6 +114,16 @@ where
     fn find_file(&self, id: &FileId) -> Result<Option<FileRecord>, String> {
         self.repository
             .find_file(id)
+            .map_err(|error| error.to_string())
+    }
+
+    fn list_files_by_tag(
+        &self,
+        tag: &tssp_domain::TagKey,
+        limit: u64,
+    ) -> Result<Vec<FileRecord>, String> {
+        self.repository
+            .list_files_by_tag(tag, limit)
             .map_err(|error| error.to_string())
     }
 }
@@ -151,5 +180,59 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
             }),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{healthz, readyz, MetadataStatsProvider, StaticMetadataStatsProvider};
+    use axum::body::to_bytes;
+    use axum::response::IntoResponse;
+    use tssp_domain::FileId;
+
+    #[tokio::test]
+    async fn healthz_returns_ok() {
+        let response = healthz().await.into_response();
+        let body = to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        assert_eq!(&body[..], b"ok");
+    }
+
+    #[tokio::test]
+    async fn readyz_returns_ready() {
+        let response = readyz().await.into_response();
+        let body = to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        assert_eq!(&body[..], b"ready");
+    }
+
+    #[test]
+    fn static_provider_returns_empty_stats() {
+        let provider = StaticMetadataStatsProvider;
+        let stats = provider
+            .stats()
+            .unwrap_or_else(|error| panic!("stats failed: {error}"));
+        assert_eq!(stats.file_count, 0);
+        assert_eq!(stats.pinned_count, 0);
+
+        let files = provider
+            .list_files_recent(10)
+            .unwrap_or_else(|error| panic!("list recent failed: {error}"));
+        assert!(files.is_empty());
+
+        let id = FileId::new("file-1").unwrap_or_else(|error| panic!("id parse failed: {error}"));
+        assert!(provider
+            .find_file(&id)
+            .unwrap_or_else(|error| panic!("find file failed: {error}"))
+            .is_none());
+
+        let tag = tssp_domain::TagKey::new("docs")
+            .unwrap_or_else(|error| panic!("tag parse failed: {error}"));
+        assert!(provider
+            .list_files_by_tag(&tag, 10)
+            .unwrap_or_else(|error| panic!("list by tag failed: {error}"))
+            .is_empty());
     }
 }

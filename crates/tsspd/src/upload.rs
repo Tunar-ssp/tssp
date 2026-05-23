@@ -8,7 +8,7 @@ use axum::http::header::LOCATION;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use tokio::task;
 use tssp_app::{UploadError, UploadRequest, UploadService};
@@ -392,7 +392,7 @@ fn upload_success_response(outcome: &HttpUploadOutcome) -> Response {
 }
 
 /// JSON representation of one file record.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileRecordResponse {
     /// Stable response schema version.
     pub schema_version: u8,

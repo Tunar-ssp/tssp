@@ -282,4 +282,90 @@ mod tests {
         StorageHandle::new("blobs/ab/cd/abcdef")
             .unwrap_or_else(|error| panic!("invalid storage handle: {error}"))
     }
+
+    #[tokio::test]
+    async fn http_delete_error_response_maps_status_codes() {
+        use axum::body::to_bytes;
+
+        let cases = vec![
+            (
+                HttpDeleteError::Busy {
+                    message: "busy".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metadata_busy",
+            ),
+            (
+                HttpDeleteError::Unavailable {
+                    message: "off".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "delete_unavailable",
+            ),
+            (
+                HttpDeleteError::BlobCleanup {
+                    message: "failed".to_owned(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "blob_cleanup_failed",
+            ),
+            (
+                HttpDeleteError::Internal {
+                    message: "crash".to_owned(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+        ];
+
+        for (error, expected_status, expected_code) in cases {
+            let response = error.response();
+            assert_eq!(response.status(), expected_status);
+            let body = to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap_or_else(|e| panic!("body read: {e}"));
+            let parsed: serde_json::Value =
+                serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse: {e}"));
+            assert_eq!(parsed["error"]["code"], expected_code);
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_file_id_response_returns_bad_request() {
+        use super::invalid_file_id_response;
+        use axum::body::to_bytes;
+
+        let response = invalid_file_id_response("bad-id".to_owned());
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap_or_else(|e| panic!("body read: {e}"));
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse: {e}"));
+        assert_eq!(parsed["error"]["code"], "invalid_file_id");
+    }
+
+    #[tokio::test]
+    async fn delete_success_response_sets_existing_headers() {
+        let response = delete_success_response(HttpDeleteOutcome {
+            existed: true,
+            blob_cleaned: true,
+        });
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get(ALREADY_GONE_HEADER)
+                .and_then(|v| v.to_str().ok()),
+            Some("false")
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(BLOB_CLEANED_HEADER)
+                .and_then(|v| v.to_str().ok()),
+            Some("true")
+        );
+    }
 }

@@ -18,15 +18,26 @@ pub(crate) fn run_list(cli: &Cli, args: &ListArgs) -> Result<CliExitCode, String
         return Ok(CliExitCode::Usage);
     }
     let limit = args.limit.unwrap_or(DEFAULT_LIMIT);
-    run_recent_list(cli, limit)
+
+    // Convert first tag to query parameter for now, as backend supports one tag
+    let tag = if args.tags.is_empty() {
+        None
+    } else {
+        if args.tags.len() > 1 {
+            return Err("list tag filter currently supports only one tag".to_owned());
+        }
+        Some(args.tags[0].clone())
+    };
+
+    run_recent_list(cli, limit, tag.as_deref())
 }
 
 /// Runs `tssp last`.
 pub(crate) fn run_last(cli: &Cli, args: &LastArgs) -> Result<CliExitCode, String> {
-    run_recent_list(cli, args.count)
+    run_recent_list(cli, args.count, None)
 }
 
-fn run_recent_list(cli: &Cli, limit: u16) -> Result<CliExitCode, String> {
+fn run_recent_list(cli: &Cli, limit: u16, tag: Option<&str>) -> Result<CliExitCode, String> {
     if !(1..=MAX_LIMIT).contains(&limit) {
         eprintln!("error: limit must be between 1 and {MAX_LIMIT}");
         return Ok(CliExitCode::Usage);
@@ -40,8 +51,14 @@ fn run_recent_list(cli: &Cli, limit: u16) -> Result<CliExitCode, String> {
         }
     };
     let client = build_client()?;
-    let response = client
-        .get(list_url(&address, limit))
+    let mut request = client
+        .get(address.url(LIST_ENDPOINT))
+        .query(&[("limit", limit)]);
+    if let Some(t) = tag {
+        request = request.query(&[("tag", t)]);
+    }
+
+    let response = request
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {
@@ -88,9 +105,6 @@ fn parse_list_body(body: &str, base_url: &str) -> Result<ListResponse, String> {
 }
 
 fn unsupported_filter(args: &ListArgs) -> Option<&'static str> {
-    if !args.tags.is_empty() {
-        return Some("list tag filters are not wired yet");
-    }
     if args.mime_prefix.is_some() {
         return Some("list MIME filters are not wired yet");
     }
@@ -107,10 +121,6 @@ fn unsupported_filter(args: &ListArgs) -> Option<&'static str> {
         return Some("list cursor pagination is not wired yet");
     }
     None
-}
-
-fn list_url(address: &BackendAddress, limit: u16) -> String {
-    format!("{}?limit={limit}", address.url(LIST_ENDPOINT))
 }
 
 fn print_list(response: &ListResponse, json: bool, quiet: bool) -> Result<(), String> {
@@ -162,42 +172,12 @@ struct FileRecordResponse {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_response_status, list_url, parse_list_body, print_list, unsupported_filter,
+        classify_response_status, parse_list_body, print_list, unsupported_filter,
         FileRecordResponse, ListResponse,
     };
-    use crate::backend::BackendAddress;
     use reqwest::StatusCode;
-    use tssp::{ConnectionArgs, ListArgs};
+    use tssp::ListArgs;
     use tssp_cli_core::CliExitCode;
-
-    #[test]
-    fn list_url_uses_limit_query() {
-        let address = BackendAddress::from_connection_args(&ConnectionArgs {
-            host: Some("127.0.0.1".to_owned()),
-            port: Some(8421),
-        })
-        .unwrap_or_else(|error| panic!("address failed: {error}"));
-
-        assert_eq!(
-            list_url(&address, 25),
-            "http://127.0.0.1:8421/api/v1/files?limit=25"
-        );
-    }
-
-    #[test]
-    fn unsupported_filter_rejects_tag_filter() {
-        let args = ListArgs {
-            tags: vec!["Docs".to_owned()],
-            mime_prefix: None,
-            since: None,
-            limit: None,
-            sort: None,
-            pinned: false,
-            page: None,
-        };
-
-        assert!(matches!(unsupported_filter(&args), Some(message) if message.contains("tag")));
-    }
 
     #[test]
     fn unsupported_filter_rejects_each_unwired_filter() {

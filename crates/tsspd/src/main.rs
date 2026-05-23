@@ -47,6 +47,14 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing_subscriber::filter::LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
     match run(Cli::parse()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
@@ -115,10 +123,13 @@ async fn run(cli: Cli) -> Result<(), String> {
         .with_blob_reader(storage);
     let router = build_router(state);
 
-    println!("tsspd listening on http://{address}");
+    tracing::info!("tsspd listening on http://{address}");
     axum::serve(listener, router)
         .await
-        .map_err(|error| format!("server failed: {error}"))
+        .map_err(|error| format!("server failed: {error}"))?;
+
+    tracing::info!("tsspd stopped cleanly");
+    Ok(())
 }
 
 #[cfg(test)]
@@ -150,6 +161,16 @@ mod tests {
         let result = run(cli).await;
 
         assert!(matches!(result, Err(message) if message.contains("data directory")));
+    }
+
+    #[tokio::test]
+    async fn run_fails_on_bad_bind() {
+        let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let mut cli_args = cli(temp.path().to_path_buf(), false);
+        // Binding to a privileged port will fail immediately
+        cli_args.port = 80;
+        let result = run(cli_args).await;
+        assert!(matches!(result, Err(message) if message.contains("could not bind")));
     }
 
     fn cli(data_dir: std::path::PathBuf, check_config: bool) -> Cli {

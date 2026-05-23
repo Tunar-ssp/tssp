@@ -265,6 +265,110 @@ mod tests {
 
     #[test]
     fn json_escape_handles_control_characters() {
-        assert_eq!(json_escape("a\"\\\n"), "a\\\"\\\\\\n");
+        assert_eq!(json_escape("a\"\\\n\r\t"), "a\\\"\\\\\\n\\r\\t");
+    }
+
+    #[test]
+    fn print_status_error_handles_variants() {
+        use super::print_status_error;
+        print_status_error(StatusCode::NOT_FOUND, CliExitCode::NotFound, "file-1");
+        print_status_error(StatusCode::BAD_REQUEST, CliExitCode::Usage, "file-1");
+        print_status_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            CliExitCode::Server,
+            "file-1",
+        );
+    }
+
+    #[test]
+    fn classify_response_status_conflict_generic() {
+        assert_eq!(
+            classify_response_status(StatusCode::CONFLICT),
+            Err(CliExitCode::Conflict)
+        );
+        assert_eq!(
+            classify_response_status(StatusCode::FORBIDDEN),
+            Err(CliExitCode::Generic)
+        );
+    }
+
+    #[test]
+    fn map_io_error_generic() {
+        let code = map_io_error(&std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert_eq!(code, CliExitCode::Generic);
+    }
+
+    #[test]
+    fn filename_from_content_disposition_no_filename() {
+        let filename = filename_from_content_disposition("attachment; something=\"else\"");
+        assert_eq!(filename, None);
+    }
+
+    #[test]
+    fn run_rejects_all_flag_until_wired() {
+        use tssp::{Cli, ConnectionArgs, LoggingArgs, OutputArgs, UploadArgs};
+        let cli = Cli {
+            output: OutputArgs {
+                json: false,
+                quiet: false,
+                no_color: true,
+            },
+            logging: LoggingArgs { verbose: false },
+            connection: ConnectionArgs {
+                host: None,
+                port: None,
+            },
+            upload: UploadArgs {
+                tags: Vec::new(),
+                pin: false,
+                rename: None,
+                parallel: None,
+                recursive: None,
+                all: false,
+                files: Vec::new(),
+            },
+            command: None,
+        };
+        let args = tssp::PullArgs {
+            id_or_name: "test".to_owned(),
+            output: None,
+            overwrite: false,
+            all: true,
+        };
+        assert_eq!(super::run(&cli, &args), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_rejects_invalid_connection_string() {
+        use tssp::{Cli, ConnectionArgs, LoggingArgs, OutputArgs, UploadArgs};
+        let cli = Cli {
+            output: OutputArgs {
+                json: false,
+                quiet: false,
+                no_color: true,
+            },
+            logging: LoggingArgs { verbose: false },
+            connection: ConnectionArgs {
+                host: Some("bad/host".to_owned()),
+                port: None,
+            },
+            upload: UploadArgs {
+                tags: Vec::new(),
+                pin: false,
+                rename: None,
+                parallel: None,
+                recursive: None,
+                all: false,
+                files: Vec::new(),
+            },
+            command: None,
+        };
+        let args = tssp::PullArgs {
+            id_or_name: "test".to_owned(),
+            output: None,
+            overwrite: false,
+            all: false,
+        };
+        assert_eq!(super::run(&cli, &args), Ok(CliExitCode::Usage));
     }
 }

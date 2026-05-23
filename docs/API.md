@@ -103,11 +103,13 @@ Lists recent files in descending upload order.
 Query parameters:
 
 - `limit`: optional page size. Defaults to `50`; maximum is `500`.
+- `tag`: optional tag filter. Matches one normalized tag key.
 
 Example:
 
 ```sh
 curl 'http://127.0.0.1:8421/api/v1/files?limit=10'
+curl 'http://127.0.0.1:8421/api/v1/files?limit=10&tag=Docs'
 ```
 
 Response:
@@ -136,6 +138,7 @@ Status: `200 OK`
 Errors:
 
 - `400 Bad Request` when `limit` is `0` or greater than `500`.
+- `400 Bad Request` when `tag` is malformed.
 - `500 Internal Server Error` when metadata listing fails.
 
 ## `GET /api/v1/files/{id}`
@@ -342,6 +345,183 @@ Errors:
 - `503 Service Unavailable` when the metadata store is busy or the tag service
   is unavailable.
 - `500 Internal Server Error` when metadata mutation fails.
+
+## `GET /api/v1/pins`
+
+Lists pinned files in pin order.
+
+Example:
+
+```sh
+curl http://127.0.0.1:8421/api/v1/pins
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "schema_version": 1,
+      "id": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f",
+      "name": "note.txt",
+      "size_bytes": 12,
+      "content_hash": "6caeccdad8d0e6ff73e98a68b77cc62a0e1871f4fb18c6c8e1c12e4f3da10827",
+      "mime_type": "text/plain",
+      "uploaded_at": 1779494400,
+      "tags": ["Docs"],
+      "pinned": true
+    }
+  ]
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `503 Service Unavailable` when the metadata store is busy or the pin service
+  is unavailable.
+- `500 Internal Server Error` when pin listing fails.
+
+## `PUT /api/v1/files/{id}/pin`
+
+Pins a file. The request body is optional. When present it may include a JSON
+object with `position`.
+
+Example:
+
+```sh
+curl -X PUT http://127.0.0.1:8421/api/v1/files/019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f/pin
+curl -X PUT \
+  -H 'Content-Type: application/json' \
+  -d '{"position":1}' \
+  http://127.0.0.1:8421/api/v1/files/019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f/pin
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "changed": true
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `400 Bad Request` when the id or JSON body is malformed.
+- `404 Not Found` when the file id is not present in metadata.
+- `503 Service Unavailable` when the metadata store is busy or the pin service
+  is unavailable.
+- `500 Internal Server Error` when the pin mutation fails.
+
+## `DELETE /api/v1/files/{id}/pin`
+
+Unpins one file.
+
+Example:
+
+```sh
+curl -X DELETE \
+  http://127.0.0.1:8421/api/v1/files/019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f/pin
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "changed": true
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `400 Bad Request` when the id is malformed.
+- `404 Not Found` when the file id is not present in metadata.
+- `503 Service Unavailable` when the metadata store is busy or the pin service
+  is unavailable.
+- `500 Internal Server Error` when the unpin mutation fails.
+
+## `POST /api/v1/pins/reorder`
+
+Reorders currently pinned files.
+
+Example:
+
+```sh
+curl -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"ids":["019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f"]}' \
+  http://127.0.0.1:8421/api/v1/pins/reorder
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `400 Bad Request` when the body is malformed.
+- `404 Not Found` when any supplied file id is not present in the current pin
+  set.
+- `503 Service Unavailable` when the metadata store is busy or the pin service
+  is unavailable.
+- `500 Internal Server Error` when the reorder fails.
+
+## `GET /api/v1/search`
+
+Runs full-text search against filenames and indexed tags.
+
+Query parameters:
+
+- `q`: required search string.
+
+Example:
+
+```sh
+curl 'http://127.0.0.1:8421/api/v1/search?q=report'
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "schema_version": 1,
+      "id": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f",
+      "name": "report.pdf",
+      "size_bytes": 12,
+      "content_hash": "6caeccdad8d0e6ff73e98a68b77cc62a0e1871f4fb18c6c8e1c12e4f3da10827",
+      "mime_type": "application/pdf",
+      "uploaded_at": 1779494400,
+      "tags": ["Docs"],
+      "pinned": false
+    }
+  ]
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `400 Bad Request` when `q` is empty.
+- `500 Internal Server Error` when search fails.
 
 ## `GET /api/v1/status`
 

@@ -160,6 +160,19 @@ pub fn build_router(state: HttpState) -> Router {
         .route("/readyz", get(status::readyz))
         .route("/api/v1/status", get(status::status))
         .fallback(web::web_fallback)
+        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+            axum::http::header::CONTENT_SECURITY_POLICY,
+            axum::http::HeaderValue::from_static("default-src 'self'"),
+        ))
+        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+            axum::http::header::X_CONTENT_TYPE_OPTIONS,
+            axum::http::HeaderValue::from_static("nosniff"),
+        ))
+        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+            axum::http::header::X_FRAME_OPTIONS,
+            axum::http::HeaderValue::from_static("DENY"),
+        ))
         .with_state(state)
 }
 
@@ -190,7 +203,7 @@ mod tests {
     use tssp_adapter_fs::FilesystemBlobStore;
     use tssp_adapter_sqlite::SqliteFileRepository;
     use tssp_adapter_system::{SystemClock, UuidV7FileIdGenerator};
-    use tssp_app::{DeleteFileService, TagService, UploadService};
+    use tssp_app::{DeleteFileService, PinService, TagService, UploadService};
     use tssp_domain::{
         ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
         UnixTimestamp,
@@ -198,9 +211,9 @@ mod tests {
 
     use super::{
         bind_error_message, build_router, ApplicationFileDeleteProvider,
-        ApplicationFileTagProvider, ApplicationFileUploadProvider, DaemonConfig,
-        FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome, HttpUploadRequest,
-        MetadataStatsProvider, RepositoryMetadataStatsProvider,
+        ApplicationFilePinProvider, ApplicationFileTagProvider, ApplicationFileUploadProvider,
+        DaemonConfig, FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome,
+        HttpUploadRequest, MetadataStatsProvider, RepositoryMetadataStatsProvider,
     };
     use tssp_ports::RepositoryStats;
 
@@ -623,6 +636,108 @@ mod tests {
         assert_eq!(removed_body["changed_count"], 1);
     }
 
+    #[tokio::test]
+    async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let repository = Arc::new(
+            SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
+                .unwrap_or_else(|error| panic!("repository open failed: {error}")),
+        );
+        let storage = Arc::new(
+            FilesystemBlobStore::new(temp.path().join("storage"))
+                .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
+        );
+        let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
+        let upload_service = UploadService::new(
+            storage.clone(),
+            repository.clone(),
+            UuidV7FileIdGenerator,
+            SystemClock,
+        );
+        let pin_service = PinService::new(repository);
+        let app = build_router(
+            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+                .with_stats_provider(Arc::new(stats_provider))
+                .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+                .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
+                .with_blob_reader(storage),
+        );
+
+        let first_upload = app
+            .clone()
+            .oneshot(multipart_request(DUPLICATE_UPLOAD_BODY))
+            .await
+            .unwrap_or_else(|error| panic!("first upload request failed: {error}"));
+        let first_id = response_json(first_upload).await["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("first uploaded id is missing"))
+            .to_owned();
+
+        let second_upload = app
+            .clone()
+            .oneshot(multipart_request(SECOND_UPLOAD_BODY))
+            .await
+            .unwrap_or_else(|error| panic!("second upload request failed: {error}"));
+        let second_id = response_json(second_upload).await["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("second uploaded id is missing"))
+            .to_owned();
+
+        let first_pin = app
+            .clone()
+            .oneshot(pin_request(&first_id))
+            .await
+            .unwrap_or_else(|error| panic!("pin request failed: {error}"));
+        assert_eq!(first_pin.status(), StatusCode::OK);
+        let first_pin_body = response_json(first_pin).await;
+        assert_eq!(first_pin_body["changed"], true);
+
+        let second_pin = app
+            .clone()
+            .oneshot(pin_with_position_request(&second_id, r#"{"position":1}"#))
+            .await
+            .unwrap_or_else(|error| panic!("pin with position request failed: {error}"));
+        assert_eq!(second_pin.status(), StatusCode::OK);
+        let second_pin_body = response_json(second_pin).await;
+        assert_eq!(second_pin_body["changed"], true);
+
+        let listed = app
+            .clone()
+            .oneshot(pins_request())
+            .await
+            .unwrap_or_else(|error| panic!("pins list request failed: {error}"));
+        assert_eq!(listed.status(), StatusCode::OK);
+        let listed_body = response_json(listed).await;
+        assert_eq!(listed_body["files"][0]["id"], second_id);
+        assert_eq!(listed_body["files"][1]["id"], first_id);
+
+        let reordered = app
+            .clone()
+            .oneshot(reorder_pins_request(&format!(
+                r#"{{"ids":["{first_id}","{second_id}"]}}"#
+            )))
+            .await
+            .unwrap_or_else(|error| panic!("pins reorder request failed: {error}"));
+        assert_eq!(reordered.status(), StatusCode::OK);
+
+        let listed_after_reorder = app
+            .clone()
+            .oneshot(pins_request())
+            .await
+            .unwrap_or_else(|error| panic!("pins list after reorder request failed: {error}"));
+        let reordered_body = response_json(listed_after_reorder).await;
+        assert_eq!(reordered_body["files"][0]["id"], first_id);
+        assert_eq!(reordered_body["files"][1]["id"], second_id);
+
+        let unpinned = app
+            .oneshot(unpin_request(&first_id))
+            .await
+            .unwrap_or_else(|error| panic!("unpin request failed: {error}"));
+        assert_eq!(unpinned.status(), StatusCode::OK);
+        let unpinned_body = response_json(unpinned).await;
+        assert_eq!(unpinned_body["changed"], true);
+    }
+
     async fn assert_content_downloads(app: Router, first_id: &str) {
         let content = app
             .clone()
@@ -841,6 +956,14 @@ mod tests {
         ) -> Result<Option<tssp_domain::FileRecord>, String> {
             Ok(None)
         }
+
+        fn list_files_by_tag(
+            &self,
+            _tag: &tssp_domain::TagKey,
+            _limit: u64,
+        ) -> Result<Vec<tssp_domain::FileRecord>, String> {
+            Ok(Vec::new())
+        }
     }
 
     struct FailingStatsProvider;
@@ -858,6 +981,14 @@ mod tests {
             &self,
             _id: &tssp_domain::FileId,
         ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn list_files_by_tag(
+            &self,
+            _tag: &tssp_domain::TagKey,
+            _limit: u64,
+        ) -> Result<Vec<tssp_domain::FileRecord>, String> {
             Err("metadata database is unavailable".to_owned())
         }
     }
@@ -883,6 +1014,14 @@ mod tests {
             _id: &tssp_domain::FileId,
         ) -> Result<Option<tssp_domain::FileRecord>, String> {
             Ok(Some(single_record()))
+        }
+
+        fn list_files_by_tag(
+            &self,
+            _tag: &tssp_domain::TagKey,
+            _limit: u64,
+        ) -> Result<Vec<tssp_domain::FileRecord>, String> {
+            Ok(vec![single_record()])
         }
     }
 
@@ -993,6 +1132,48 @@ mod tests {
             .unwrap_or_else(|error| panic!("request build failed: {error}"))
     }
 
+    fn pin_request(id: &str) -> Request<Body> {
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/api/v1/files/{id}/pin"))
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn pin_with_position_request(id: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/api/v1/files/{id}/pin"))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn unpin_request(id: &str) -> Request<Body> {
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/api/v1/files/{id}/pin"))
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn pins_request() -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri("/api/v1/pins")
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn reorder_pins_request(body: &str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/pins/reorder")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
     async fn response_json(response: axum::response::Response) -> serde_json::Value {
         let body = to_bytes(response.into_body(), 4096)
             .await
@@ -1016,6 +1197,12 @@ mod tests {
         Content-Disposition: form-data; name=\"file\"; filename=\"other.txt\"\r\n\
         Content-Type: text/plain\r\n\r\n\
         hello upload\r\n\
+        --tssp--\r\n";
+
+    const SECOND_UPLOAD_BODY: &str = "--tssp\r\n\
+        Content-Disposition: form-data; name=\"file\"; filename=\"later.txt\"\r\n\
+        Content-Type: text/plain\r\n\r\n\
+        hello second\r\n\
         --tssp--\r\n";
 
     fn test_record(request: &HttpUploadRequest) -> FileRecord {

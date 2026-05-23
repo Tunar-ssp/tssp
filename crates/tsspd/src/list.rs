@@ -15,6 +15,8 @@ pub(crate) struct ListQuery {
     /// Maximum number of files to return (default 50, max 500).
     #[serde(default = "default_limit")]
     limit: u64,
+    /// Optional tag to filter by.
+    tag: Option<String>,
 }
 
 fn default_limit() -> u64 {
@@ -60,9 +62,33 @@ pub(crate) async fn list_files(
     }
 
     let stats_provider = state.stats_provider.clone();
+    let limit = params.limit;
 
-    match tokio::task::spawn_blocking(move || stats_provider.list_files_recent(params.limit)).await
-    {
+    let fetch_result = match params.tag {
+        Some(tag) => match tssp_domain::TagKey::new(&tag) {
+            Ok(tag_key) => {
+                tokio::task::spawn_blocking(move || {
+                    stats_provider.list_files_by_tag(&tag_key, limit)
+                })
+                .await
+            }
+            Err(error) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "invalid_tag",
+                            message: error.to_string(),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+        },
+        None => tokio::task::spawn_blocking(move || stats_provider.list_files_recent(limit)).await,
+    };
+
+    match fetch_result {
         Ok(Ok(files)) => {
             let response = ListResponse {
                 schema_version: 1,
@@ -93,5 +119,52 @@ pub(crate) async fn list_files(
             )
                 .into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{default_limit, ListQuery};
+
+    #[test]
+    fn default_limit_is_50() {
+        assert_eq!(default_limit(), 50);
+    }
+
+    #[test]
+    fn validate_rejects_zero_limit() {
+        let query = ListQuery {
+            limit: 0,
+            tag: None,
+        };
+        let result = query.validate();
+        assert!(matches!(result, Err(message) if message.contains("greater than 0")));
+    }
+
+    #[test]
+    fn validate_rejects_over_500() {
+        let query = ListQuery {
+            limit: 501,
+            tag: None,
+        };
+        let result = query.validate();
+        assert!(matches!(result, Err(message) if message.contains("500")));
+    }
+
+    #[test]
+    fn validate_accepts_valid_limits() {
+        for limit in [1, 50, 100, 500] {
+            let query = ListQuery { limit, tag: None };
+            assert!(query.validate().is_ok(), "limit {limit} should be valid");
+        }
+    }
+
+    #[test]
+    fn validate_accepts_with_tag() {
+        let query = ListQuery {
+            limit: 50,
+            tag: Some("Docs".to_owned()),
+        };
+        assert!(query.validate().is_ok());
     }
 }

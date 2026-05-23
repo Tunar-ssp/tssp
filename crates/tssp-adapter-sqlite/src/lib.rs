@@ -196,6 +196,41 @@ impl FileRepository for SqliteFileRepository {
         Ok(records)
     }
 
+    fn list_files_by_tag(
+        &self,
+        tag: &tssp_domain::TagKey,
+        limit: u64,
+    ) -> Result<Vec<FileRecord>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at
+                 FROM files f
+                 JOIN file_tags ft ON ft.file_id = f.id
+                 WHERE ft.tag_key = ?1
+                 ORDER BY f.uploaded_at DESC, f.id DESC
+                 LIMIT ?2",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        let limit_i64 = i64::try_from(limit).map_err(|error| RepositoryError::OperationFailed {
+            message: format!("list limit does not fit sqlite integer: {error}"),
+        })?;
+
+        let mut rows = statement
+            .query(params![tag.as_str(), limit_i64])
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let mut record = map_file_row(row)?;
+            let id = record.id.clone();
+            record.tags = load_tags(&connection, &id)?;
+            records.push(record);
+        }
+        Ok(records)
+    }
+
     fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError> {
         let connection = self.lock()?;
         let mut statement = connection
@@ -322,24 +357,68 @@ impl FileRepository for SqliteFileRepository {
             .map_err(map_rusqlite_repository_error)?;
         ensure_file_exists(&transaction, id)?;
 
-        let already_pinned: bool = transaction
+        let current_position: Option<i64> = transaction
             .query_row(
-                "SELECT pinned_at IS NOT NULL FROM files WHERE id = ?1",
+                "SELECT pinned_at FROM files WHERE id = ?1",
                 params![id.as_str()],
                 |row| row.get(0),
             )
             .map_err(map_rusqlite_repository_error)?;
+        let already_pinned = current_position.is_some();
 
-        let pin_position = position.unwrap_or_else(|| {
-            let max: Option<i64> = transaction
-                .query_row(
-                    "SELECT MAX(pinned_at) FROM files WHERE pinned_at IS NOT NULL",
-                    [],
-                    |row| row.get(0),
+        let pin_position = position.map_or_else(
+            || {
+                current_position.unwrap_or_else(|| {
+                    let max: Option<i64> = transaction
+                        .query_row(
+                            "SELECT MAX(pinned_at) FROM files WHERE pinned_at IS NOT NULL",
+                            [],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or(None);
+                    max.map_or(1_i64, |v| v.saturating_add(1))
+                })
+            },
+            i64::from,
+        );
+
+        if let Some(current) = current_position {
+            if pin_position < current {
+                transaction
+                    .execute(
+                        "UPDATE files
+                         SET pinned_at = pinned_at + 1
+                         WHERE pinned_at IS NOT NULL
+                           AND pinned_at >= ?1
+                           AND pinned_at < ?2
+                           AND id <> ?3",
+                        params![pin_position, current, id.as_str()],
+                    )
+                    .map_err(map_rusqlite_repository_error)?;
+            } else if pin_position > current {
+                transaction
+                    .execute(
+                        "UPDATE files
+                         SET pinned_at = pinned_at - 1
+                         WHERE pinned_at IS NOT NULL
+                           AND pinned_at > ?1
+                           AND pinned_at <= ?2
+                           AND id <> ?3",
+                        params![current, pin_position, id.as_str()],
+                    )
+                    .map_err(map_rusqlite_repository_error)?;
+            }
+        } else if position.is_some() {
+            transaction
+                .execute(
+                    "UPDATE files
+                     SET pinned_at = pinned_at + 1
+                     WHERE pinned_at IS NOT NULL
+                       AND pinned_at >= ?1",
+                    params![pin_position],
                 )
-                .unwrap_or(None);
-            max.map_or(1, |v| u32::try_from(v + 1).unwrap_or(u32::MAX))
-        });
+                .map_err(map_rusqlite_repository_error)?;
+        }
 
         transaction
             .execute(
@@ -364,13 +443,26 @@ impl FileRepository for SqliteFileRepository {
             .map_err(map_rusqlite_repository_error)?;
         ensure_file_exists(&transaction, id)?;
 
-        let already_pinned: bool = transaction
+        let current_position: Option<i64> = transaction
             .query_row(
-                "SELECT pinned_at IS NOT NULL FROM files WHERE id = ?1",
+                "SELECT pinned_at FROM files WHERE id = ?1",
                 params![id.as_str()],
                 |row| row.get(0),
             )
             .map_err(map_rusqlite_repository_error)?;
+        let already_pinned = current_position.is_some();
+
+        if let Some(position) = current_position {
+            transaction
+                .execute(
+                    "UPDATE files
+                     SET pinned_at = pinned_at - 1
+                     WHERE pinned_at IS NOT NULL
+                       AND pinned_at > ?1",
+                    params![position],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+        }
 
         transaction
             .execute(
@@ -1118,6 +1210,39 @@ mod tests {
     }
 
     #[test]
+    fn pin_file_inserts_before_existing_positions() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        let mut first = new_file("file-1", &[], 1_000);
+        first.pinned_at = None;
+        repository
+            .insert_file(first)
+            .unwrap_or_else(|error| panic!("first insert failed: {error}"));
+        let mut second = new_file("file-2", &[], 2_000);
+        second.pinned_at = None;
+        repository
+            .insert_file(second)
+            .unwrap_or_else(|error| panic!("second insert failed: {error}"));
+
+        repository
+            .pin_file(&file_id("file-1"), None)
+            .unwrap_or_else(|error| panic!("first pin failed: {error}"));
+        repository
+            .pin_file(&file_id("file-2"), Some(1))
+            .unwrap_or_else(|error| panic!("second pin failed: {error}"));
+
+        let list = repository
+            .list_pinned_files()
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].id.as_str(), "file-2");
+        assert_eq!(list[0].pinned_at, Some(1));
+        assert_eq!(list[1].id.as_str(), "file-1");
+        assert_eq!(list[1].pinned_at, Some(2));
+    }
+
+    #[test]
     fn unpin_file_clears_position_and_returns_changed() {
         let repository = SqliteFileRepository::open_in_memory()
             .unwrap_or_else(|error| panic!("repository open failed: {error}"));
@@ -1141,6 +1266,41 @@ mod tests {
         assert!(second.existed);
         assert!(!second.changed);
         assert!(list.is_empty());
+    }
+
+    #[test]
+    fn unpin_file_compacts_remaining_positions() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        let mut first = new_file("file-1", &[], 1_000);
+        first.pinned_at = None;
+        repository
+            .insert_file(first)
+            .unwrap_or_else(|error| panic!("first insert failed: {error}"));
+        let mut second = new_file("file-2", &[], 2_000);
+        second.pinned_at = None;
+        repository
+            .insert_file(second)
+            .unwrap_or_else(|error| panic!("second insert failed: {error}"));
+
+        repository
+            .pin_file(&file_id("file-1"), None)
+            .unwrap_or_else(|error| panic!("first pin failed: {error}"));
+        repository
+            .pin_file(&file_id("file-2"), None)
+            .unwrap_or_else(|error| panic!("second pin failed: {error}"));
+
+        repository
+            .unpin_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("unpin failed: {error}"));
+
+        let list = repository
+            .list_pinned_files()
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id.as_str(), "file-2");
+        assert_eq!(list[0].pinned_at, Some(1));
     }
 
     #[test]
@@ -1176,31 +1336,45 @@ mod tests {
 
         let mut file1 = new_file("file-1", &["Docs", "Work"], 1_000);
         file1.name = filename("annual_report_2023.pdf");
-        repository.insert_file(file1).unwrap();
+        repository
+            .insert_file(file1)
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
         let mut file2 = new_file("file-2", &["Images"], 1_000);
         file2.name = filename("vacation_photo.jpg");
-        repository.insert_file(file2).unwrap();
+        repository
+            .insert_file(file2)
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
         let mut file3 = new_file("file-3", &["Docs", "Personal"], 1_000);
         file3.name = filename("personal_budget_2023.xlsx");
-        repository.insert_file(file3).unwrap();
+        repository
+            .insert_file(file3)
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
         // Search by name
-        let results = repository.search_files("report").unwrap();
+        let results = repository
+            .search_files("report")
+            .unwrap_or_else(|error| panic!("search failed: {error}"));
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id.as_str(), "file-1");
 
         // Search by tag
-        let results = repository.search_files("Docs").unwrap();
+        let results = repository
+            .search_files("Docs")
+            .unwrap_or_else(|error| panic!("search failed: {error}"));
         assert_eq!(results.len(), 2);
 
         // Search matching across different files
-        let results = repository.search_files("2023").unwrap();
+        let results = repository
+            .search_files("2023")
+            .unwrap_or_else(|error| panic!("search failed: {error}"));
         assert_eq!(results.len(), 2);
 
         // Search with no matches
-        let results = repository.search_files("nonexistent").unwrap();
+        let results = repository
+            .search_files("nonexistent")
+            .unwrap_or_else(|error| panic!("search failed: {error}"));
         assert!(results.is_empty());
     }
 

@@ -208,6 +208,64 @@ mod tests {
         assert!(result_unpin.is_ok() || result_unpin.is_err());
     }
 
+    #[test]
+    fn run_search_branch() {
+        let mut c = cli(Some(Command::Search(tssp::SearchArgs {
+            query: "test".to_owned(),
+            limit: None,
+            tag: None,
+        })));
+        c.connection.host = Some("bad/host".to_owned());
+        assert_eq!(run(&c), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_last_branch() {
+        let mut c = cli(Some(Command::Last(tssp::LastArgs { count: 10 })));
+        c.connection.host = Some("bad/host".to_owned());
+        assert_eq!(run(&c), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_info_branch() {
+        let mut c = cli(Some(Command::Info(tssp::IdArgs {
+            id: "file-1".to_owned(),
+        })));
+        c.connection.host = Some("bad/host".to_owned());
+        assert_eq!(run(&c), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_pull_branch() {
+        let mut c = cli(Some(Command::Pull(tssp::PullArgs {
+            id_or_name: "file-1".to_owned(),
+            output: None,
+            overwrite: false,
+            all: false,
+        })));
+        c.connection.host = Some("bad/host".to_owned());
+        assert_eq!(run(&c), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_pins_branch() {
+        let mut c = cli(Some(Command::Pins(tssp::PinsCommand {
+            action: tssp::PinsAction::List,
+        })));
+        c.connection.host = Some("bad/host".to_owned());
+        assert_eq!(run(&c), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_config_branch() {
+        let mut c = cli(Some(Command::Config(tssp::ConfigCommand {
+            action: tssp::ConfigAction::Path,
+        })));
+        c.connection.host = Some("bad/host".to_owned());
+        // config command doesn't use BackendAddress, so it might return Success or something else, but we just cover the branch
+        let _ = run(&c);
+    }
+
     fn cli(command: Option<Command>) -> Cli {
         Cli {
             output: OutputArgs {

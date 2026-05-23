@@ -196,6 +196,18 @@ mod tests {
             }
             Ok(())
         }
+
+        fn search_files(&self, _query: &str) -> Result<Vec<FileRecord>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn list_files_by_tag(
+            &self,
+            _tag: &tssp_domain::TagKey,
+            _limit: u64,
+        ) -> Result<Vec<FileRecord>, RepositoryError> {
+            Ok(Vec::new())
+        }
     }
 
     #[test]

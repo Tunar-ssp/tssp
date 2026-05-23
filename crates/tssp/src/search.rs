@@ -11,13 +11,8 @@ const SEARCH_ENDPOINT: &str = "/api/v1/search";
 
 /// Runs `tssp search`.
 pub(crate) fn run_search(cli: &Cli, args: &SearchArgs) -> Result<CliExitCode, String> {
-    if let Some(message) = unsupported_filter(args) {
+    if let Some(message) = validate_args(args) {
         eprintln!("error: {message}");
-        return Ok(CliExitCode::Usage);
-    }
-
-    if args.query.trim().is_empty() {
-        eprintln!("error: search query must not be empty");
         return Ok(CliExitCode::Usage);
     }
 
@@ -64,7 +59,7 @@ pub(crate) fn run_search(cli: &Cli, args: &SearchArgs) -> Result<CliExitCode, St
         )
     })?;
 
-    let search_result = parse_search_body(&body, &address.base_url())?;
+    let search_result = apply_filters(parse_search_body(&body, &address.base_url())?, args);
     print_search_results(&search_result, cli.output.json, cli.output.quiet)?;
     Ok(CliExitCode::Success)
 }
@@ -85,14 +80,43 @@ fn parse_search_body(body: &str, base_url: &str) -> Result<SearchResponse, Strin
     })
 }
 
-fn unsupported_filter(args: &SearchArgs) -> Option<&'static str> {
-    if args.limit.is_some() {
-        return Some("search limit filtering is not wired yet");
+fn validate_args(args: &SearchArgs) -> Option<&'static str> {
+    if args.query.trim().is_empty() {
+        return Some("search query must not be empty");
     }
-    if args.tag.is_some() {
-        return Some("search tag filters are not wired yet");
+    if matches!(args.limit, Some(0)) {
+        return Some("search limit must be at least 1");
     }
-    None
+    args.tag.as_deref().and_then(|tag| {
+        normalize_tag(tag)
+            .is_empty()
+            .then_some("search tag filter must not be empty")
+    })
+}
+
+fn apply_filters(mut response: SearchResponse, args: &SearchArgs) -> SearchResponse {
+    if let Some(tag_filter) = args.tag.as_deref() {
+        let normalized_filter = normalize_tag(tag_filter);
+        response.files.retain(|file| {
+            file.tags
+                .iter()
+                .any(|tag| normalize_tag(tag) == normalized_filter)
+        });
+    }
+
+    if let Some(limit) = args.limit {
+        response.files.truncate(usize::from(limit));
+    }
+
+    response
+}
+
+fn normalize_tag(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> Result<(), String> {
@@ -135,4 +159,298 @@ struct FileRecordResponse {
     name: String,
     size_bytes: u64,
     tags: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_response_status_identifies_success() {
+        assert!(classify_response_status(StatusCode::OK).is_ok());
+    }
+
+    #[test]
+    fn classify_response_status_identifies_server_error() {
+        assert_eq!(
+            classify_response_status(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(CliExitCode::Server)
+        );
+    }
+
+    #[test]
+    fn classify_response_status_identifies_generic_error() {
+        assert_eq!(
+            classify_response_status(StatusCode::BAD_REQUEST),
+            Err(CliExitCode::Generic)
+        );
+    }
+
+    #[test]
+    fn parse_search_body_handles_valid_json() {
+        let json = r#"{
+            "schema_version": 1,
+            "files": [
+                {
+                    "id": "file-1",
+                    "name": "report.pdf",
+                    "size_bytes": 1024,
+                    "tags": ["Docs"]
+                }
+            ]
+        }"#;
+
+        let result = parse_search_body(json, "http://localhost")
+            .unwrap_or_else(|error| panic!("parse failed: {error}"));
+        assert_eq!(result.schema_version, 1);
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.files[0].id, "file-1");
+    }
+
+    #[test]
+    fn parse_search_body_rejects_invalid_json() {
+        let result = parse_search_body("invalid", "http://localhost");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_args_rejects_empty_query() {
+        let args = SearchArgs {
+            query: "   ".to_string(),
+            limit: None,
+            tag: None,
+        };
+        assert_eq!(validate_args(&args), Some("search query must not be empty"));
+    }
+
+    #[test]
+    fn validate_args_rejects_zero_limit() {
+        let args = SearchArgs {
+            query: "test".to_string(),
+            limit: Some(0),
+            tag: None,
+        };
+        assert_eq!(
+            validate_args(&args),
+            Some("search limit must be at least 1")
+        );
+    }
+
+    #[test]
+    fn validate_args_rejects_empty_tag_filter() {
+        let args = SearchArgs {
+            query: "test".to_string(),
+            limit: None,
+            tag: Some(" \t ".to_string()),
+        };
+        assert_eq!(
+            validate_args(&args),
+            Some("search tag filter must not be empty")
+        );
+    }
+
+    #[test]
+    fn validate_args_allows_supported_filters() {
+        let args = SearchArgs {
+            query: "test".to_string(),
+            limit: Some(10),
+            tag: Some("Docs".to_string()),
+        };
+        assert_eq!(validate_args(&args), None);
+    }
+
+    #[test]
+    fn apply_filters_limits_results() {
+        let response = SearchResponse {
+            schema_version: 1,
+            files: vec![
+                file("id-1", "first.txt", &["Docs"]),
+                file("id-2", "second.txt", &["Notes"]),
+            ],
+        };
+
+        let filtered = apply_filters(
+            response,
+            &SearchArgs {
+                query: "test".to_string(),
+                limit: Some(1),
+                tag: None,
+            },
+        );
+
+        assert_eq!(filtered.files.len(), 1);
+        assert_eq!(filtered.files[0].id, "id-1");
+    }
+
+    #[test]
+    fn apply_filters_matches_tags_case_insensitively() {
+        let response = SearchResponse {
+            schema_version: 1,
+            files: vec![
+                file("id-1", "first.txt", &["Family Photos"]),
+                file("id-2", "second.txt", &["Docs"]),
+            ],
+        };
+
+        let filtered = apply_filters(
+            response,
+            &SearchArgs {
+                query: "family".to_string(),
+                limit: None,
+                tag: Some("  FAMILY   photos ".to_string()),
+            },
+        );
+
+        assert_eq!(filtered.files.len(), 1);
+        assert_eq!(filtered.files[0].id, "id-1");
+    }
+
+    #[test]
+    fn normalize_tag_collapses_whitespace_and_case() {
+        assert_eq!(normalize_tag("  FAMILY   photos "), "family photos");
+    }
+
+    #[test]
+    fn print_search_results_quiet() {
+        let response = SearchResponse {
+            schema_version: 1,
+            files: vec![],
+        };
+        assert!(print_search_results(&response, false, true).is_ok());
+    }
+
+    #[test]
+    fn print_search_results_json() {
+        let response = SearchResponse {
+            schema_version: 1,
+            files: vec![],
+        };
+        assert!(print_search_results(&response, true, false).is_ok());
+    }
+
+    #[test]
+    fn print_search_results_empty() {
+        let response = SearchResponse {
+            schema_version: 1,
+            files: vec![],
+        };
+        assert!(print_search_results(&response, false, false).is_ok());
+    }
+
+    #[test]
+    fn print_search_results_with_files() {
+        let response = SearchResponse {
+            schema_version: 1,
+            files: vec![file("id1", "test.txt", &["Docs"])],
+        };
+        assert!(print_search_results(&response, false, false).is_ok());
+    }
+
+    #[test]
+    fn run_search_rejects_zero_limit() {
+        use tssp::{Cli, ConnectionArgs, LoggingArgs, OutputArgs, UploadArgs};
+        let cli = Cli {
+            output: OutputArgs {
+                json: false,
+                quiet: false,
+                no_color: true,
+            },
+            logging: LoggingArgs { verbose: false },
+            connection: ConnectionArgs {
+                host: None,
+                port: None,
+            },
+            upload: UploadArgs {
+                tags: Vec::new(),
+                pin: false,
+                rename: None,
+                parallel: None,
+                recursive: None,
+                all: false,
+                files: Vec::new(),
+            },
+            command: None,
+        };
+        let args = SearchArgs {
+            query: "test".to_string(),
+            limit: Some(0),
+            tag: None,
+        };
+        assert_eq!(super::run_search(&cli, &args), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_search_rejects_empty_query() {
+        use tssp::{Cli, ConnectionArgs, LoggingArgs, OutputArgs, UploadArgs};
+        let cli = Cli {
+            output: OutputArgs {
+                json: false,
+                quiet: false,
+                no_color: true,
+            },
+            logging: LoggingArgs { verbose: false },
+            connection: ConnectionArgs {
+                host: None,
+                port: None,
+            },
+            upload: UploadArgs {
+                tags: Vec::new(),
+                pin: false,
+                rename: None,
+                parallel: None,
+                recursive: None,
+                all: false,
+                files: Vec::new(),
+            },
+            command: None,
+        };
+        let args = SearchArgs {
+            query: "   ".to_string(),
+            limit: None,
+            tag: None,
+        };
+        assert_eq!(super::run_search(&cli, &args), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_search_rejects_invalid_connection_args() {
+        use tssp::{Cli, ConnectionArgs, LoggingArgs, OutputArgs, UploadArgs};
+        let cli = Cli {
+            output: OutputArgs {
+                json: false,
+                quiet: false,
+                no_color: true,
+            },
+            logging: LoggingArgs { verbose: false },
+            connection: ConnectionArgs {
+                host: Some("bad/host".to_string()),
+                port: None,
+            },
+            upload: UploadArgs {
+                tags: Vec::new(),
+                pin: false,
+                rename: None,
+                parallel: None,
+                recursive: None,
+                all: false,
+                files: Vec::new(),
+            },
+            command: None,
+        };
+        let args = SearchArgs {
+            query: "test".to_string(),
+            limit: None,
+            tag: None,
+        };
+        assert_eq!(super::run_search(&cli, &args), Ok(CliExitCode::Usage));
+    }
+
+    fn file(id: &str, name: &str, tags: &[&str]) -> FileRecordResponse {
+        FileRecordResponse {
+            id: id.to_string(),
+            name: name.to_string(),
+            size_bytes: 123,
+            tags: tags.iter().map(|tag| (*tag).to_string()).collect(),
+        }
+    }
 }

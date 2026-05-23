@@ -761,6 +761,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn run_rejects_invalid_connection_string() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let file_path = temp.path().join("test.txt");
+        std::fs::write(&file_path, "test").unwrap_or_else(|error| panic!("write failed: {error}"));
+
+        let mut cli_args = cli(false, false);
+        cli_args.connection.host = Some("bad/host".to_owned());
+        cli_args.upload.files.push(file_path);
+
+        assert_eq!(super::run(&cli_args), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_returns_usage_on_plan_error() {
+        let mut cli_args = cli(false, false);
+        cli_args.upload.all = true;
+
+        assert_eq!(super::run(&cli_args), Ok(CliExitCode::Usage));
+    }
+
     fn file_record() -> FileRecordResponse {
         serde_json::from_str(FILE_RECORD_JSON)
             .unwrap_or_else(|error| panic!("record parse failed: {error}"))

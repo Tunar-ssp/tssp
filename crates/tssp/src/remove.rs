@@ -236,4 +236,16 @@ mod tests {
         assert_eq!(print_remove_result("file-1", true, true, false), Ok(()));
         assert_eq!(print_remove_result("file-1", false, false, false), Ok(()));
     }
+
+    #[test]
+    fn print_status_error_handles_variants() {
+        use super::print_status_error;
+        print_status_error(StatusCode::NOT_FOUND, CliExitCode::NotFound, "file-1");
+        print_status_error(StatusCode::BAD_REQUEST, CliExitCode::Usage, "file-1");
+        print_status_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            CliExitCode::Server,
+            "file-1",
+        );
+    }
 }

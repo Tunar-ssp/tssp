@@ -23,14 +23,20 @@ The foundation currently includes:
 - An application delete service that removes metadata and cleans final-reference
   blobs.
 - An application tag service for tag listing and idempotent tag mutation.
+- An application pin service for pinning, unpinning, listing, and reordering
+  favorites.
 - A Clap-based CLI command surface with shell completion generation and wired
-  `status`, regular-file upload, `list`, `last`, `info`, `pull`, `tag`,
-  `untag`, and `remove` commands.
+  `status`, regular-file upload, `list`, `last`, `search`, `info`, `pull`,
+  `tag`, `untag`, `pin`, `unpin`, `pins`, and `remove` commands.
 - A minimal Axum daemon exposing `/healthz`, `/readyz`, `/api/v1/status`,
   `POST /api/v1/files`, `GET /api/v1/files`, `GET /api/v1/files/{id}`,
-  `GET /api/v1/files/{id}/content`, `DELETE /api/v1/files/{id}`, and an
-  embedded placeholder web shell, backed by real metadata status counts,
-  tag mutation, and upload/download/delete storage when started from the binary.
+  `GET /api/v1/files/{id}/content`, `DELETE /api/v1/files/{id}`,
+  `GET /api/v1/tags`, `POST /api/v1/files/{id}/tags`,
+  `DELETE /api/v1/files/{id}/tags/{tag}`, `GET /api/v1/pins`,
+  `PUT`/`DELETE /api/v1/files/{id}/pin`, `POST /api/v1/pins/reorder`,
+  `GET /api/v1/search`, and an embedded placeholder web shell, backed by real
+  metadata status counts, tag mutation, pin mutation, search, and
+  upload/download/delete storage when started from the binary.
 - A filesystem blob adapter that streams uploads into content-addressed BLAKE3
   storage with fanout directories and deduplication.
 - A SQLite metadata adapter with embedded migrations, WAL configuration,
@@ -81,16 +87,19 @@ cargo run -p tssp -- completions bash
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 status
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 --tag Docs README.md
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 list --limit 25
+cargo run -p tssp -- --host 127.0.0.1 --port 8421 search report --tag Docs --limit 10
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 info <file-id>
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 pull <file-id>
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 tag <file-id> Docs
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 untag <file-id> Docs
+cargo run -p tssp -- --host 127.0.0.1 --port 8421 pin <file-id>
+cargo run -p tssp -- --host 127.0.0.1 --port 8421 pins list
 cargo run -p tssp -- --host 127.0.0.1 --port 8421 remove <file-id> --yes
 ```
 
-The default regular-file upload action plus `status`, `list`, `last`, `info`,
-exact-id `pull`, `tag`, `untag`, and `remove` are connected to the daemon. Most
-other command handlers are not connected yet. The command surface is present so
+The default regular-file upload action plus `status`, `list`, `last`, `search`,
+`info`, exact-id `pull`, `tag`, `untag`, `pin`, `unpin`, `pins`, and `remove`
+are connected to the daemon. The remaining command surface is present so
 generated documentation, completions, and future handlers share one source of
 truth.
 

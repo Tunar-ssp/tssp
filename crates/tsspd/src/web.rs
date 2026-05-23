@@ -43,3 +43,43 @@ const WEB_PLACEHOLDER: &str = r#"<!doctype html>
   </main>
 </body>
 </html>"#;
+
+#[cfg(test)]
+mod tests {
+    use super::web_fallback;
+    use axum::http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
+
+    #[tokio::test]
+    async fn web_fallback_returns_html_with_security_headers() {
+        let response = web_fallback().await;
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let headers = response.headers();
+        let ct = headers
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(ct.contains("text/html"), "content-type should be html");
+        assert_eq!(
+            headers
+                .get(X_CONTENT_TYPE_OPTIONS)
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff")
+        );
+        assert!(
+            headers.get(CONTENT_SECURITY_POLICY).is_some(),
+            "CSP header should be present"
+        );
+    }
+
+    #[tokio::test]
+    async fn web_fallback_body_contains_tssp_title() {
+        let response = web_fallback().await;
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap_or_else(|e| panic!("body read: {e}"));
+        let text = String::from_utf8_lossy(&body);
+        assert!(text.contains("<title>TSSP</title>"));
+        assert!(text.contains("/api/v1/status"));
+    }
+}

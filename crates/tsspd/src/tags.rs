@@ -392,4 +392,100 @@ mod tests {
     fn tag_value(value: &str) -> Tag {
         Tag::new(value).unwrap_or_else(|error| panic!("invalid tag: {error}"))
     }
+
+    #[tokio::test]
+    async fn http_tag_error_response_maps_status_codes() {
+        use axum::body::to_bytes;
+
+        let cases = vec![
+            (
+                HttpTagError::InvalidRequest {
+                    message: "bad tag".to_owned(),
+                },
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+            ),
+            (
+                HttpTagError::NotFound {
+                    message: "gone".to_owned(),
+                },
+                StatusCode::NOT_FOUND,
+                "file_not_found",
+            ),
+            (
+                HttpTagError::Busy {
+                    message: "busy".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metadata_busy",
+            ),
+            (
+                HttpTagError::Unavailable {
+                    message: "off".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "tag_unavailable",
+            ),
+            (
+                HttpTagError::Internal {
+                    message: "crash".to_owned(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+        ];
+
+        for (error, expected_status, expected_code) in cases {
+            let response = error.response();
+            assert_eq!(response.status(), expected_status);
+            let body = to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap_or_else(|e| panic!("body read: {e}"));
+            let parsed: serde_json::Value =
+                serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse: {e}"));
+            assert_eq!(parsed["error"]["code"], expected_code);
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_file_id_response_returns_bad_request() {
+        use super::invalid_file_id_response;
+        use axum::body::to_bytes;
+
+        let response = invalid_file_id_response("bad id".to_owned());
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap_or_else(|e| panic!("body read: {e}"));
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse: {e}"));
+        assert_eq!(parsed["error"]["code"], "invalid_file_id");
+    }
+
+    #[tokio::test]
+    async fn invalid_request_response_returns_bad_request() {
+        use super::invalid_request_response;
+        use axum::body::to_bytes;
+
+        let response = invalid_request_response("empty tags".to_owned());
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap_or_else(|e| panic!("body read: {e}"));
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse: {e}"));
+        assert_eq!(parsed["error"]["code"], "invalid_request");
+    }
+
+    #[test]
+    fn map_tag_error_translates_invalid_request() {
+        let err = match tssp_domain::TagKey::new("") {
+            Ok(_) => panic!("empty tag key unexpectedly parsed"),
+            Err(error) => TagError::InvalidRequest(error),
+        };
+        assert!(matches!(
+            map_tag_error(err),
+            HttpTagError::InvalidRequest { .. }
+        ));
+    }
 }
