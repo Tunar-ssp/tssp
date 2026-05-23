@@ -2,12 +2,11 @@
 
 use std::time::Duration;
 
-use tssp_cli_core::CliExitCode;
 use tssp::{Cli, ReceiveArgs};
+use tssp_cli_core::CliExitCode;
 
 /// Runs the receive command.
 pub fn run(_cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
-
     let timeout = parse_timeout(&args.timeout)?;
 
     eprintln!(

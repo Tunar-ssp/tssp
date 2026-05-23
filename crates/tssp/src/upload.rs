@@ -87,12 +87,10 @@ fn upload_batch(
         }
         form_data.extend(file_header(&boundary, &item.filename));
 
-        let mut file = File::open(&item.path).map_err(|error| {
-            format!("could not open {}: {error}", item.path.display())
-        })?;
-        file.read_to_end(&mut form_data).map_err(|error| {
-            format!("could not read {}: {error}", item.path.display())
-        })?;
+        let mut file = File::open(&item.path)
+            .map_err(|error| format!("could not open {}: {error}", item.path.display()))?;
+        file.read_to_end(&mut form_data)
+            .map_err(|error| format!("could not read {}: {error}", item.path.display()))?;
         form_data.extend(b"\r\n");
     }
     form_data.extend(format!("--{boundary}--\r\n").as_bytes());
@@ -105,12 +103,7 @@ fn upload_batch(
         )
         .body(Body::from(form_data))
         .send()
-        .map_err(|error| {
-            format!(
-                "could not upload batch to {}: {error}",
-                address.base_url()
-            )
-        })?;
+        .map_err(|error| format!("could not upload batch to {}: {error}", address.base_url()))?;
 
     handle_batch_response(response, items, cli, started_at)
 }
@@ -515,22 +508,17 @@ fn handle_batch_response(
 ) -> Result<CliExitCode, String> {
     let status = response.status();
     if status.is_server_error() {
-        return Err(format!(
-            "daemon returned {status} during batch upload",
-        ));
+        return Err(format!("daemon returned {status} during batch upload",));
     }
     if !status.is_success() {
-        return Err(format!(
-            "daemon returned {status} during batch upload",
-        ));
+        return Err(format!("daemon returned {status} during batch upload",));
     }
 
-    let body = response.text().map_err(|error| {
-        format!("daemon returned unreadable batch response: {error}")
-    })?;
-    let batch_result: BatchUploadResponse = serde_json::from_str(&body).map_err(|error| {
-        format!("daemon returned invalid batch response: {error}")
-    })?;
+    let body = response
+        .text()
+        .map_err(|error| format!("daemon returned unreadable batch response: {error}"))?;
+    let batch_result: BatchUploadResponse = serde_json::from_str(&body)
+        .map_err(|error| format!("daemon returned invalid batch response: {error}"))?;
 
     print_batch_results(&batch_result, items, cli, started_at)
 }
@@ -597,7 +585,10 @@ fn print_batch_results(
                 eprintln!(
                     "  [{}] {}: {}",
                     idx,
-                    items.get(idx).map(|i| &i.filename).unwrap_or(&"?".to_string()),
+                    items
+                        .get(idx)
+                        .map(|i| &i.filename)
+                        .unwrap_or(&"?".to_string()),
                     item_result
                         .error
                         .as_ref()
@@ -608,7 +599,10 @@ fn print_batch_results(
                 println!(
                     "  [{}] {} ({})",
                     idx,
-                    items.get(idx).map(|i| &i.filename).unwrap_or(&"?".to_string()),
+                    items
+                        .get(idx)
+                        .map(|i| &i.filename)
+                        .unwrap_or(&"?".to_string()),
                     item_result.outcome
                 );
             }

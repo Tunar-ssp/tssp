@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use tssp_cli_core::CliExitCode;
 use tssp::{Cli, SendArgs};
+use tssp_cli_core::CliExitCode;
 
 /// Runs the send command.
 pub fn run(_cli: &Cli, args: &SendArgs) -> Result<CliExitCode, String> {
@@ -56,8 +56,7 @@ mod tests {
     fn validate_file_exists_accepts_regular_file() {
         let temp = tempfile::tempdir().unwrap_or_else(|e| panic!("tempdir failed: {e}"));
         let file_path = temp.path().join("test.txt");
-        std::fs::write(&file_path, b"test content")
-            .unwrap_or_else(|e| panic!("write failed: {e}"));
+        std::fs::write(&file_path, b"test content").unwrap_or_else(|e| panic!("write failed: {e}"));
 
         let result = validate_file_exists(&file_path);
         assert!(result.is_ok());

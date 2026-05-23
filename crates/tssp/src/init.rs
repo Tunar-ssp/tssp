@@ -2,8 +2,8 @@
 
 use std::io::{self, Write};
 
-use tssp_cli_core::CliExitCode;
 use tssp::Cli;
+use tssp_cli_core::CliExitCode;
 
 /// Runs the init command for first-time setup.
 pub fn run(_cli: &Cli) -> Result<CliExitCode, String> {
@@ -16,10 +16,7 @@ pub fn run(_cli: &Cli) -> Result<CliExitCode, String> {
     let port = prompt_for_port()?;
 
     eprintln!("");
-    eprintln!(
-        "Configuration would be saved for {}:{}",
-        hostname, port
-    );
+    eprintln!("Configuration would be saved for {}:{}", hostname, port);
     eprintln!("init setup; implementation pending");
     eprintln!("");
     eprintln!("Configuration saved. You can now use tssp commands.");
