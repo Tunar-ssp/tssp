@@ -39,11 +39,23 @@ pub fn run(cli: &Cli, args: &CopyArgs) -> Result<CliExitCode, String> {
         if let Some(token) = body.get("token").and_then(|v| v.as_str()) {
             let share_url = format!("{}/s/{}", address.base_url(), token);
 
-            copy_to_clipboard(&share_url)?;
-            println!("Share URL copied to clipboard: {}", share_url);
+            if cli.output.json {
+                let output = serde_json::json!({
+                    "success": true,
+                    "type": "share",
+                    "url": share_url,
+                    "file_id": args.id,
+                });
+                let json_str = serde_json::to_string_pretty(&output)
+                    .map_err(|e| format!("failed to serialize JSON: {e}"))?;
+                println!("{}", json_str);
+            } else {
+                copy_to_clipboard(&share_url)?;
+                println!("Share URL copied to clipboard: {}", share_url);
 
-            if !cli.output.quiet {
-                eprintln!("Share URL copied successfully!");
+                if !cli.output.quiet {
+                    eprintln!("Share URL copied successfully!");
+                }
             }
 
             Ok(CliExitCode::Success)
@@ -57,11 +69,23 @@ pub fn run(cli: &Cli, args: &CopyArgs) -> Result<CliExitCode, String> {
             args.id
         );
 
-        copy_to_clipboard(&download_url)?;
-        println!("Download URL copied to clipboard: {}", download_url);
+        if cli.output.json {
+            let output = serde_json::json!({
+                "success": true,
+                "type": "direct",
+                "url": download_url,
+                "file_id": args.id,
+            });
+            let json_str = serde_json::to_string_pretty(&output)
+                .map_err(|e| format!("failed to serialize JSON: {e}"))?;
+            println!("{}", json_str);
+        } else {
+            copy_to_clipboard(&download_url)?;
+            println!("Download URL copied to clipboard: {}", download_url);
 
-        if !cli.output.quiet {
-            eprintln!("Download URL copied successfully!");
+            if !cli.output.quiet {
+                eprintln!("Download URL copied successfully!");
+            }
         }
 
         Ok(CliExitCode::Success)

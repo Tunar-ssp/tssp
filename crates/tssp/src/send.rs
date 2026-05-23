@@ -44,16 +44,28 @@ pub fn run(cli: &Cli, args: &SendArgs) -> Result<CliExitCode, String> {
     if let Some(token) = body.get("token").and_then(|v| v.as_str()) {
         let share_url = format!("{}/s/{}", address.base_url(), token);
 
-        let qr = generate_qr_code(&share_url, 200)?;
-        println!("{}", qr);
+        if cli.output.json {
+            let output = json!({
+                "success": true,
+                "token": token,
+                "share_url": share_url,
+                "file": file_path.to_string_lossy(),
+            });
+            let json_str = serde_json::to_string_pretty(&output)
+                .map_err(|e| format!("failed to serialize JSON: {e}"))?;
+            println!("{}", json_str);
+        } else {
+            let qr = generate_qr_code(&share_url, 200)?;
+            println!("{}", qr);
 
-        println!("\nShare this URL with others:");
-        println!("{}\n", share_url);
-        println!("Session token: {}", token);
-        println!("Expires in: ~24 hours");
+            println!("\nShare this URL with others:");
+            println!("{}\n", share_url);
+            println!("Session token: {}", token);
+            println!("Expires in: ~24 hours");
 
-        if !cli.output.quiet {
-            eprintln!("Send session created successfully!");
+            if !cli.output.quiet {
+                eprintln!("Send session created successfully!");
+            }
         }
 
         Ok(CliExitCode::Success)

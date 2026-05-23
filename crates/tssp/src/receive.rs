@@ -46,16 +46,28 @@ pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
     if let Some(token) = body.get("token").and_then(|v| v.as_str()) {
         let receive_url = format!("{}/u/{}", address.base_url(), token);
 
-        let qr = generate_qr_code(&receive_url, 200)?;
-        println!("{}", qr);
+        if cli.output.json {
+            let output = serde_json::json!({
+                "success": true,
+                "token": token,
+                "receive_url": receive_url,
+                "timeout_seconds": ttl,
+            });
+            let json_str = serde_json::to_string_pretty(&output)
+                .map_err(|e| format!("failed to serialize JSON: {e}"))?;
+            println!("{}", json_str);
+        } else {
+            let qr = generate_qr_code(&receive_url, 200)?;
+            println!("{}", qr);
 
-        println!("\nReceive URL:");
-        println!("{}\n", receive_url);
-        println!("Session token: {}", token);
-        println!("Expires in: {} seconds", ttl);
+            println!("\nReceive URL:");
+            println!("{}\n", receive_url);
+            println!("Session token: {}", token);
+            println!("Expires in: {} seconds", ttl);
 
-        if !cli.output.quiet {
-            eprintln!("Receive session created successfully!");
+            if !cli.output.quiet {
+                eprintln!("Receive session created successfully!");
+            }
         }
 
         Ok(CliExitCode::Success)
