@@ -12,10 +12,12 @@ description = "TSSP backend daemon"
 axum.workspace = true
 clap.workspace = true
 serde.workspace = true
+tempfile.workspace = true
 tokio.workspace = true
 tssp-adapter-fs = { path = "../tssp-adapter-fs" }
 tssp-adapter-sqlite = { path = "../tssp-adapter-sqlite" }
 tssp-adapter-system = { path = "../tssp-adapter-system" }
+tssp-app = { path = "../tssp-app" }
 tssp-domain = { path = "../tssp-domain" }
 tssp-ports = { path = "../tssp-ports" }
 

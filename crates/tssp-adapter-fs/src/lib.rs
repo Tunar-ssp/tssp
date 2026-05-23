@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tssp_domain::{ContentHash, FileSize, StorageHandle};
-use tssp_ports::{BlobStore, BlobStoreError, BlobWriteOutcome};
+use tssp_ports::{BlobReadError, BlobReader, BlobStore, BlobStoreError, BlobWriteOutcome};
 
 const BUFFER_SIZE: usize = 64 * 1024;
 const TEMP_DIR: &str = "tmp";
@@ -162,6 +162,26 @@ impl BlobStore for FilesystemBlobStore {
     }
 }
 
+impl BlobReader for FilesystemBlobStore {
+    fn open_blob(&self, handle: &StorageHandle) -> Result<File, BlobReadError> {
+        let path = self
+            .path_for_handle(handle)
+            .map_err(|error| BlobReadError::ReadFailed {
+                message: error.to_string(),
+            })?;
+        File::open(path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                return BlobReadError::Missing {
+                    handle: handle.clone(),
+                };
+            }
+            BlobReadError::ReadFailed {
+                message: error.to_string(),
+            }
+        })
+    }
+}
+
 fn stream_to_temp(
     source: &mut dyn Read,
     temp_file: &mut File,
@@ -252,10 +272,11 @@ fn temp_name(attempt: u32) -> String {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::io::Cursor;
+    use std::io::{Cursor, Read};
 
     use tempfile::tempdir;
-    use tssp_ports::BlobStore;
+    use tssp_domain::StorageHandle;
+    use tssp_ports::{BlobReadError, BlobReader, BlobStore};
 
     use super::FilesystemBlobStore;
 
@@ -327,5 +348,39 @@ mod tests {
         assert!(fs::read(temp.path().join(outcome.handle.as_str()))
             .unwrap_or_else(|error| panic!("read failed: {error}"))
             .is_empty());
+    }
+
+    #[test]
+    fn open_blob_reads_stored_bytes() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let store = FilesystemBlobStore::new(temp.path())
+            .unwrap_or_else(|error| panic!("store init failed: {error}"));
+        let mut source = Cursor::new(b"hello world".as_slice());
+        let outcome = store
+            .put_stream(&mut source)
+            .unwrap_or_else(|error| panic!("put stream failed: {error}"));
+
+        let mut reader = store
+            .open_blob(&outcome.handle)
+            .unwrap_or_else(|error| panic!("open blob failed: {error}"));
+        let mut bytes = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .unwrap_or_else(|error| panic!("read failed: {error}"));
+
+        assert_eq!(bytes, b"hello world");
+    }
+
+    #[test]
+    fn open_blob_reports_missing_blob() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let store = FilesystemBlobStore::new(temp.path())
+            .unwrap_or_else(|error| panic!("store init failed: {error}"));
+        let handle = StorageHandle::new("blobs/ab/cd/missing")
+            .unwrap_or_else(|error| panic!("handle failed: {error}"));
+
+        let result = store.open_blob(&handle);
+
+        assert!(matches!(result, Err(BlobReadError::Missing { .. })));
     }
 }

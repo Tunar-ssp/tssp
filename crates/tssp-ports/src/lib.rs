@@ -4,13 +4,105 @@
 //! lets tests replace `SQLite`, filesystem storage, clocks, and ID generation with
 //! deterministic in-memory doubles.
 
+use std::fs::File;
 use std::io::Read;
+use std::sync::Arc;
 
 use thiserror::Error;
 use tssp_domain::{
-    ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, SessionToken, StorageHandle,
-    Tag, UnixTimestamp,
+    ContentHash, Cursor, FileId, FileName, FileRecord, FileSize, MimeType, SessionToken,
+    StorageHandle, Tag, TagKey, UnixTimestamp,
 };
+
+/// Sort order for file listing queries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ListSort {
+    /// Descending by upload timestamp (newest first). Default.
+    #[default]
+    UploadedDesc,
+    /// Ascending by upload timestamp (oldest first).
+    UploadedAsc,
+    /// Ascending by filename.
+    NameAsc,
+    /// Descending by filename.
+    NameDesc,
+    /// Descending by file size.
+    SizeDesc,
+    /// Ascending by file size.
+    SizeAsc,
+}
+
+impl ListSort {
+    /// Parses a sort field string as produced by CLI `--sort` flag.
+    ///
+    /// A leading `-` negates the direction. Unknown fields return `None`.
+    #[must_use]
+    pub fn from_str(value: &str) -> Option<Self> {
+        match value.trim() {
+            "uploaded" => Some(Self::UploadedAsc),
+            "-uploaded" => Some(Self::UploadedDesc),
+            "name" => Some(Self::NameAsc),
+            "-name" => Some(Self::NameDesc),
+            "size" => Some(Self::SizeAsc),
+            "-size" => Some(Self::SizeDesc),
+            _ => None,
+        }
+    }
+}
+
+/// Query parameters for filtered and paginated file listing.
+#[derive(Debug, Clone)]
+pub struct ListQuery {
+    /// Maximum files to return. Must be between 1 and 500.
+    pub limit: u64,
+    /// Required tag keys (AND semantics). Empty means no tag filter.
+    pub tags: Vec<TagKey>,
+    /// MIME type prefix filter (`"image"` matches `"image/png"`).
+    pub mime_prefix: Option<String>,
+    /// Only return files uploaded at or after this timestamp.
+    pub since: Option<UnixTimestamp>,
+    /// Only return files uploaded at or before this timestamp.
+    pub until: Option<UnixTimestamp>,
+    /// When true, only pinned files are returned.
+    pub pinned_only: bool,
+    /// Sort order for the result.
+    pub sort: ListSort,
+    /// Opaque cursor from a previous response for the next page.
+    pub after_cursor: Option<Cursor>,
+}
+
+impl Default for ListQuery {
+    fn default() -> Self {
+        Self {
+            limit: 50,
+            tags: Vec::new(),
+            mime_prefix: None,
+            since: None,
+            until: None,
+            pinned_only: false,
+            sort: ListSort::UploadedDesc,
+            after_cursor: None,
+        }
+    }
+}
+
+/// Paginated file listing result.
+#[derive(Debug, Clone)]
+pub struct PagedFiles {
+    /// File records for the current page.
+    pub files: Vec<FileRecord>,
+    /// Cursor for the next page, absent when no further results exist.
+    pub next_cursor: Option<Cursor>,
+}
+
+/// Result of a pin or unpin operation.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct PinOutcome {
+    /// True when the file record exists.
+    pub existed: bool,
+    /// True when the pin state actually changed.
+    pub changed: bool,
+}
 
 /// Supplies server-side UTC timestamps.
 pub trait Clock {
@@ -59,6 +151,16 @@ pub trait BlobStore {
     fn cleanup_unreferenced(&self, handle: &StorageHandle) -> Result<(), BlobStoreError>;
 }
 
+/// Opens durable blob bytes for download.
+pub trait BlobReader {
+    /// Opens the blob identified by `handle`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BlobReadError`] when the blob is missing or cannot be opened.
+    fn open_blob(&self, handle: &StorageHandle) -> Result<File, BlobReadError>;
+}
+
 /// Persists and queries file metadata.
 pub trait FileRepository {
     /// Inserts a logical file record for an already durable blob.
@@ -75,12 +177,185 @@ pub trait FileRepository {
     /// Returns [`RepositoryError`] when metadata lookup fails.
     fn find_file(&self, id: &FileId) -> Result<Option<FileRecord>, RepositoryError>;
 
+    /// Returns the oldest file record for a content hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when metadata lookup fails.
+    fn find_file_by_content_hash(
+        &self,
+        content_hash: &ContentHash,
+    ) -> Result<Option<FileRecord>, RepositoryError>;
+
+    /// Deletes one logical file record and reports remaining blob references.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the delete transaction cannot complete.
+    fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError>;
+
+    /// Returns recent files in descending order by upload time with an optional limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query fails.
+    fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, RepositoryError>;
+
+    /// Returns all tags with committed file counts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query fails.
+    fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError>;
+
+    /// Adds tags to an existing file idempotently.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the file does not exist, or a
+    /// repository failure when the mutation cannot be committed.
+    fn add_tags_to_file(
+        &self,
+        id: &FileId,
+        tags: &[Tag],
+    ) -> Result<TagMutationOutcome, RepositoryError>;
+
+    /// Removes one tag from an existing file idempotently.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the file does not exist, or a
+    /// repository failure when the mutation cannot be committed.
+    fn remove_tag_from_file(
+        &self,
+        id: &FileId,
+        tag: &TagKey,
+    ) -> Result<TagMutationOutcome, RepositoryError>;
+
     /// Returns aggregate metadata counts for status reporting.
     ///
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when aggregate queries fail.
     fn stats_since(&self, recent_since: UnixTimestamp) -> Result<RepositoryStats, RepositoryError>;
+
+    /// Pins a file, optionally at a specific position.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] if the file doesn't exist.
+    fn pin_file(&self, id: &FileId, position: Option<u32>) -> Result<PinOutcome, RepositoryError>;
+
+    /// Unpins a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] if the file doesn't exist.
+    fn unpin_file(&self, id: &FileId) -> Result<PinOutcome, RepositoryError>;
+
+    /// Returns pinned files in pin order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query fails.
+    fn list_pinned_files(&self) -> Result<Vec<FileRecord>, RepositoryError>;
+
+    /// Reorders pins according to the provided list of file IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the operation fails.
+    fn reorder_pins(&self, ordered_ids: &[FileId]) -> Result<(), RepositoryError>;
+}
+
+impl<T> BlobStore for Arc<T>
+where
+    T: BlobStore,
+{
+    fn put_stream(&self, source: &mut dyn Read) -> Result<BlobWriteOutcome, BlobStoreError> {
+        self.as_ref().put_stream(source)
+    }
+
+    fn cleanup_unreferenced(&self, handle: &StorageHandle) -> Result<(), BlobStoreError> {
+        self.as_ref().cleanup_unreferenced(handle)
+    }
+}
+
+impl<T> BlobReader for Arc<T>
+where
+    T: BlobReader,
+{
+    fn open_blob(&self, handle: &StorageHandle) -> Result<File, BlobReadError> {
+        self.as_ref().open_blob(handle)
+    }
+}
+
+impl<T> FileRepository for Arc<T>
+where
+    T: FileRepository,
+{
+    fn insert_file(&self, new_file: NewFileRecord) -> Result<FileRecord, RepositoryError> {
+        self.as_ref().insert_file(new_file)
+    }
+
+    fn find_file(&self, id: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref().find_file(id)
+    }
+
+    fn find_file_by_content_hash(
+        &self,
+        content_hash: &ContentHash,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref().find_file_by_content_hash(content_hash)
+    }
+
+    fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
+        self.as_ref().delete_file(id)
+    }
+
+    fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {
+        self.as_ref().list_files_recent(limit)
+    }
+
+    fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError> {
+        self.as_ref().list_tags()
+    }
+
+    fn add_tags_to_file(
+        &self,
+        id: &FileId,
+        tags: &[Tag],
+    ) -> Result<TagMutationOutcome, RepositoryError> {
+        self.as_ref().add_tags_to_file(id, tags)
+    }
+
+    fn remove_tag_from_file(
+        &self,
+        id: &FileId,
+        tag: &TagKey,
+    ) -> Result<TagMutationOutcome, RepositoryError> {
+        self.as_ref().remove_tag_from_file(id, tag)
+    }
+
+    fn stats_since(&self, recent_since: UnixTimestamp) -> Result<RepositoryStats, RepositoryError> {
+        self.as_ref().stats_since(recent_since)
+    }
+
+    fn pin_file(&self, id: &FileId, position: Option<u32>) -> Result<PinOutcome, RepositoryError> {
+        self.as_ref().pin_file(id, position)
+    }
+
+    fn unpin_file(&self, id: &FileId) -> Result<PinOutcome, RepositoryError> {
+        self.as_ref().unpin_file(id)
+    }
+
+    fn list_pinned_files(&self) -> Result<Vec<FileRecord>, RepositoryError> {
+        self.as_ref().list_pinned_files()
+    }
+
+    fn reorder_pins(&self, ordered_ids: &[FileId]) -> Result<(), RepositoryError> {
+        self.as_ref().reorder_pins(ordered_ids)
+    }
 }
 
 /// Aggregate metadata counts used by health and status views.
@@ -94,6 +369,22 @@ pub struct RepositoryStats {
     pub pinned_count: u64,
     /// Files uploaded at or after the caller-supplied recent cutoff.
     pub recent_upload_count: u64,
+}
+
+/// Tag plus the number of logical files that currently use it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagSummary {
+    /// Normalized tag display value.
+    pub tag: Tag,
+    /// Number of committed file records using this tag.
+    pub file_count: u64,
+}
+
+/// Result of an idempotent tag mutation.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct TagMutationOutcome {
+    /// Number of tag associations created or removed.
+    pub changed_count: u64,
 }
 
 /// Durable result of writing a blob.
@@ -130,6 +421,15 @@ pub struct NewFileRecord {
     pub tags: Vec<Tag>,
     /// Initial pin position.
     pub pinned_at: Option<u32>,
+}
+
+/// Result of a metadata delete transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeletedFileRecord {
+    /// Record that was removed from the metadata index.
+    pub record: FileRecord,
+    /// Remaining logical records that still reference the same content hash.
+    pub remaining_content_references: u64,
 }
 
 /// Identifier generation failure.
@@ -173,6 +473,24 @@ pub enum BlobStoreError {
     CleanupFailed {
         /// Opaque storage handle.
         handle: StorageHandle,
+        /// Stable diagnostic message.
+        message: String,
+    },
+}
+
+/// Blob read failure.
+#[derive(Debug, Error)]
+pub enum BlobReadError {
+    /// The metadata record points at a blob that no longer exists.
+    #[error("blob {handle} is missing")]
+    Missing {
+        /// Opaque storage handle.
+        handle: StorageHandle,
+    },
+
+    /// The storage backend could not open or read durable bytes.
+    #[error("could not read blob: {message}")]
+    ReadFailed {
         /// Stable diagnostic message.
         message: String,
     },

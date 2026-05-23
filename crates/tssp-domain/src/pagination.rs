@@ -101,6 +101,12 @@ mod tests {
     }
 
     #[test]
+    fn page_size_accepts_upper_bound() {
+        assert_eq!(PageSize::new(500), Ok(PageSize(500)));
+        assert_eq!(PageSize::new(500).map(PageSize::get), Ok(500));
+    }
+
+    #[test]
     fn page_size_rejects_zero() {
         assert_eq!(
             PageSize::new(0),
@@ -133,6 +139,30 @@ mod tests {
             Err(DomainError::InvalidCharacter {
                 field: "cursor",
                 character: ' '
+            })
+        );
+    }
+
+    #[test]
+    fn cursor_accepts_url_safe_tokens_and_trims_input() {
+        let cursor = Cursor::new(" cursor-ABC_123.~ ")
+            .unwrap_or_else(|error| panic!("cursor failed: {error}"));
+
+        assert_eq!(cursor.as_str(), "cursor-ABC_123.~");
+    }
+
+    #[test]
+    fn cursor_rejects_empty_and_too_long_values() {
+        assert_eq!(
+            Cursor::new(" "),
+            Err(DomainError::Empty { field: "cursor" })
+        );
+        assert_eq!(
+            Cursor::new("a".repeat(513)),
+            Err(DomainError::TooLong {
+                field: "cursor",
+                max: 512,
+                actual: 513
             })
         );
     }

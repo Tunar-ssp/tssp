@@ -295,12 +295,21 @@ fn validate_mime_characters(value: &str) -> Result<(), DomainError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{FileId, FileName, FileSize, MimeType, StorageHandle};
+    use super::{FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle};
     use crate::DomainError;
 
     #[test]
     fn file_id_accepts_url_safe_tokens() {
         assert!(FileId::new("018f-abc_DEF.1").is_ok());
+    }
+
+    #[test]
+    fn file_id_trims_input_and_displays_value() {
+        let id =
+            FileId::new(" file-1 ").unwrap_or_else(|error| panic!("file id should parse: {error}"));
+
+        assert_eq!(id.as_str(), "file-1");
+        assert_eq!(id.to_string(), "file-1");
     }
 
     #[test]
@@ -310,6 +319,22 @@ mod tests {
             Err(DomainError::InvalidCharacter {
                 field: "file id",
                 character: ' '
+            })
+        );
+    }
+
+    #[test]
+    fn file_id_rejects_empty_and_too_long_values() {
+        assert_eq!(
+            FileId::new(" "),
+            Err(DomainError::Empty { field: "file id" })
+        );
+        assert_eq!(
+            FileId::new("a".repeat(129)),
+            Err(DomainError::TooLong {
+                field: "file id",
+                max: 128,
+                actual: 129
             })
         );
     }
@@ -336,6 +361,24 @@ mod tests {
     #[test]
     fn filename_sanitizer_never_returns_dot_components() {
         assert!(matches!(FileName::new("../"), Ok(value) if value.storage_component() == "file"));
+    }
+
+    #[test]
+    fn filename_storage_component_is_bounded() {
+        let filename = format!("{}.txt", "a".repeat(200));
+
+        let name = FileName::new(filename)
+            .unwrap_or_else(|error| panic!("filename should parse: {error}"));
+
+        assert_eq!(name.storage_component().len(), 120);
+    }
+
+    #[test]
+    fn filename_display_uses_original_name() {
+        let name =
+            FileName::new("report.pdf").unwrap_or_else(|error| panic!("filename failed: {error}"));
+
+        assert_eq!(name.to_string(), "report.pdf");
     }
 
     #[test]
@@ -374,6 +417,37 @@ mod tests {
     }
 
     #[test]
+    fn mime_type_rejects_empty_too_long_and_invalid_characters() {
+        assert_eq!(
+            MimeType::new(" "),
+            Err(DomainError::Empty { field: "mime type" })
+        );
+        assert_eq!(
+            MimeType::new(format!("{}/plain", "a".repeat(128))),
+            Err(DomainError::TooLong {
+                field: "mime type",
+                max: 127,
+                actual: 134
+            })
+        );
+        assert_eq!(
+            MimeType::new("text/plain; charset=utf-8"),
+            Err(DomainError::InvalidCharacter {
+                field: "mime type",
+                character: ';'
+            })
+        );
+    }
+
+    #[test]
+    fn octet_stream_is_default_binary_mime_type() {
+        let mime_type = MimeType::octet_stream();
+
+        assert_eq!(mime_type.as_str(), "application/octet-stream");
+        assert_eq!(mime_type.to_string(), "application/octet-stream");
+    }
+
+    #[test]
     fn storage_handle_rejects_empty_values() {
         assert_eq!(
             StorageHandle::new(" "),
@@ -381,5 +455,58 @@ mod tests {
                 field: "storage handle"
             })
         );
+    }
+
+    #[test]
+    fn storage_handle_accepts_path_like_tokens_and_displays_value() {
+        let handle = StorageHandle::new("blobs/ab/cd/hash:1")
+            .unwrap_or_else(|error| panic!("storage handle failed: {error}"));
+
+        assert_eq!(handle.as_str(), "blobs/ab/cd/hash:1");
+        assert_eq!(handle.to_string(), "blobs/ab/cd/hash:1");
+    }
+
+    #[test]
+    fn storage_handle_rejects_too_long_and_invalid_values() {
+        assert_eq!(
+            StorageHandle::new("a".repeat(513)),
+            Err(DomainError::TooLong {
+                field: "storage handle",
+                max: 512,
+                actual: 513
+            })
+        );
+        assert_eq!(
+            StorageHandle::new("bad handle"),
+            Err(DomainError::InvalidCharacter {
+                field: "storage handle",
+                character: ' '
+            })
+        );
+    }
+
+    #[test]
+    fn file_record_reports_pin_state() {
+        let mut record = FileRecord {
+            id: FileId::new("file-1").unwrap_or_else(|error| panic!("id failed: {error}")),
+            name: FileName::new("note.txt")
+                .unwrap_or_else(|error| panic!("filename failed: {error}")),
+            size: FileSize::new(1),
+            content_hash: crate::ContentHash::new(
+                "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
+            )
+            .unwrap_or_else(|error| panic!("hash failed: {error}")),
+            mime_type: MimeType::octet_stream(),
+            storage_handle: StorageHandle::new("blobs/ab/cd/hash")
+                .unwrap_or_else(|error| panic!("handle failed: {error}")),
+            uploaded_at: crate::UnixTimestamp::new(1)
+                .unwrap_or_else(|error| panic!("timestamp failed: {error}")),
+            tags: Vec::new(),
+            pinned_at: None,
+        };
+
+        assert!(!record.is_pinned());
+        record.pinned_at = Some(1);
+        assert!(record.is_pinned());
     }
 }

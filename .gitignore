@@ -4,3 +4,4 @@
 /web/tssp-web/build/
 *.log
 *.tmp
+temp

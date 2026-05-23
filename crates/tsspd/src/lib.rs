@@ -1,45 +1,61 @@
 //! HTTP daemon foundation for `tsspd`.
 //!
-//! The current server exposes lifecycle and status endpoints plus an embedded
-//! placeholder web shell. Feature routes will be added through application
-//! services instead of placing business logic in handlers.
+//! The current server exposes lifecycle, status, upload, and web shell routes.
+//! HTTP handlers stay thin and delegate storage behavior to application
+//! services.
 
-use std::net::{IpAddr, SocketAddr};
+mod config;
+mod content;
+mod delete;
+mod file;
+mod list;
+mod pins;
+mod status;
+mod tags;
+mod upload;
+mod web;
+
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::body::Body;
-use axum::http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
-use axum::http::{HeaderValue, StatusCode};
-use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
-use axum::{Json, Router};
+use axum::extract::DefaultBodyLimit;
+use axum::routing::{get, post};
+use axum::Router;
 use serde::Serialize;
-use tssp_domain::UnixTimestamp;
-use tssp_ports::{Clock, FileRepository, RepositoryStats};
+use tssp_ports::BlobReader;
 
-/// Server configuration required to bind the daemon.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonConfig {
-    /// IP address to bind.
-    pub bind: IpAddr,
-    /// TCP port to listen on.
-    pub port: u16,
-}
+pub use config::{bind_error_message, DaemonConfig};
+pub use delete::{
+    ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
+};
+pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};
+pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
+pub use tags::{ApplicationFileTagProvider, FileTagProvider, HttpTagError, HttpTagMutation};
+pub use upload::{
+    ApplicationFileUploadProvider, FileRecordResponse, FileUploadProvider, HttpUploadError,
+    HttpUploadOutcome, HttpUploadRequest,
+};
 
-impl DaemonConfig {
-    /// Returns the socket address represented by the config.
-    #[must_use]
-    pub const fn socket_addr(&self) -> SocketAddr {
-        SocketAddr::new(self.bind, self.port)
-    }
-}
+use content::StaticBlobReader;
+use delete::StaticFileDeleteProvider;
+use pins::StaticFilePinProvider;
+use status::StaticMetadataStatsProvider;
+use tags::StaticFileTagProvider;
+use upload::StaticFileUploadProvider;
 
 /// Shared HTTP state.
 #[derive(Clone)]
 pub struct HttpState {
     started_at: Instant,
     stats_provider: Arc<dyn MetadataStatsProvider>,
+    upload_provider: Arc<dyn FileUploadProvider>,
+    delete_provider: Arc<dyn FileDeleteProvider>,
+    tag_provider: Arc<dyn FileTagProvider>,
+    pin_provider: Arc<dyn FilePinProvider>,
+    blob_reader: Arc<dyn BlobReader + Send + Sync>,
+    upload_temp_dir: PathBuf,
+    storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl HttpState {
@@ -49,156 +65,141 @@ impl HttpState {
         Self {
             started_at,
             stats_provider: Arc::new(StaticMetadataStatsProvider),
+            upload_provider: Arc::new(StaticFileUploadProvider),
+            delete_provider: Arc::new(StaticFileDeleteProvider),
+            tag_provider: Arc::new(StaticFileTagProvider),
+            pin_provider: Arc::new(StaticFilePinProvider),
+            blob_reader: Arc::new(StaticBlobReader),
+            upload_temp_dir: std::env::temp_dir(),
+            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
-    /// Creates HTTP state with a real metadata stats provider.
+    /// Creates HTTP state with a real metadata stats provider and no upload service.
     #[must_use]
     pub fn with_stats_provider(
         started_at: Instant,
         stats_provider: Arc<dyn MetadataStatsProvider>,
     ) -> Self {
+        Self::with_providers(
+            started_at,
+            stats_provider,
+            Arc::new(StaticFileUploadProvider),
+            std::env::temp_dir(),
+        )
+    }
+
+    /// Creates HTTP state with real providers.
+    #[must_use]
+    pub fn with_providers(
+        started_at: Instant,
+        stats_provider: Arc<dyn MetadataStatsProvider>,
+        upload_provider: Arc<dyn FileUploadProvider>,
+        upload_temp_dir: PathBuf,
+    ) -> Self {
         Self {
             started_at,
             stats_provider,
+            upload_provider,
+            delete_provider: Arc::new(StaticFileDeleteProvider),
+            tag_provider: Arc::new(StaticFileTagProvider),
+            pin_provider: Arc::new(StaticFilePinProvider),
+            blob_reader: Arc::new(StaticBlobReader),
+            upload_temp_dir,
+            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
-}
 
-/// Supplies metadata counts to the status endpoint.
-pub trait MetadataStatsProvider: Send + Sync {
-    /// Returns the latest metadata stats.
-    ///
-    /// # Errors
-    ///
-    /// Returns a short diagnostic when counts cannot be read.
-    fn stats(&self) -> Result<RepositoryStats, String>;
-}
-
-#[derive(Debug)]
-struct StaticMetadataStatsProvider;
-
-impl MetadataStatsProvider for StaticMetadataStatsProvider {
-    fn stats(&self) -> Result<RepositoryStats, String> {
-        Ok(RepositoryStats {
-            file_count: 0,
-            tag_count: 0,
-            pinned_count: 0,
-            recent_upload_count: 0,
-        })
-    }
-}
-
-/// Metadata stats provider backed by a repository and clock.
-#[derive(Debug)]
-pub struct RepositoryMetadataStatsProvider<R, C> {
-    repository: R,
-    clock: C,
-}
-
-impl<R, C> RepositoryMetadataStatsProvider<R, C> {
-    /// Creates a repository-backed stats provider.
+    /// Creates HTTP state with real metadata, upload, and blob read providers.
     #[must_use]
-    pub const fn new(repository: R, clock: C) -> Self {
-        Self { repository, clock }
+    pub fn with_all_providers(
+        started_at: Instant,
+        stats_provider: Arc<dyn MetadataStatsProvider>,
+        upload_provider: Arc<dyn FileUploadProvider>,
+        blob_reader: Arc<dyn BlobReader + Send + Sync>,
+        upload_temp_dir: PathBuf,
+    ) -> Self {
+        Self {
+            started_at,
+            stats_provider,
+            upload_provider,
+            delete_provider: Arc::new(StaticFileDeleteProvider),
+            tag_provider: Arc::new(StaticFileTagProvider),
+            pin_provider: Arc::new(StaticFilePinProvider),
+            blob_reader,
+            upload_temp_dir,
+            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
+        }
     }
-}
 
-impl<R, C> MetadataStatsProvider for RepositoryMetadataStatsProvider<R, C>
-where
-    R: FileRepository + Send + Sync,
-    C: Clock + Send + Sync,
-{
-    fn stats(&self) -> Result<RepositoryStats, String> {
-        let now = self.clock.now();
-        let cutoff = now.seconds().saturating_sub(86_400);
-        let recent_since = UnixTimestamp::new(cutoff).map_err(|error| error.to_string())?;
-        self.repository
-            .stats_since(recent_since)
-            .map_err(|error| error.to_string())
+    /// Creates HTTP state with real metadata, upload, delete, and blob read providers.
+    #[must_use]
+    pub fn with_lifecycle_providers(
+        started_at: Instant,
+        stats_provider: Arc<dyn MetadataStatsProvider>,
+        upload_provider: Arc<dyn FileUploadProvider>,
+        delete_provider: Arc<dyn FileDeleteProvider>,
+        blob_reader: Arc<dyn BlobReader + Send + Sync>,
+        upload_temp_dir: PathBuf,
+    ) -> Self {
+        Self {
+            started_at,
+            stats_provider,
+            upload_provider,
+            delete_provider,
+            tag_provider: Arc::new(StaticFileTagProvider),
+            pin_provider: Arc::new(StaticFilePinProvider),
+            blob_reader,
+            upload_temp_dir,
+            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
+        }
+    }
+
+    /// Returns state with a real tag provider.
+    #[must_use]
+    pub fn with_tag_provider(mut self, tag_provider: Arc<dyn FileTagProvider>) -> Self {
+        self.tag_provider = tag_provider;
+        self
+    }
+
+    /// Returns state with a real pin provider.
+    #[must_use]
+    pub fn with_pin_provider(mut self, pin_provider: Arc<dyn FilePinProvider>) -> Self {
+        self.pin_provider = pin_provider;
+        self
     }
 }
 
 /// Builds the daemon router.
 pub fn build_router(state: HttpState) -> Router {
     Router::new()
-        .route("/healthz", get(healthz))
-        .route("/readyz", get(readyz))
-        .route("/api/v1/status", get(status))
-        .fallback(web_fallback)
-        .with_state(state)
-}
-
-async fn healthz() -> impl IntoResponse {
-    ([(CONTENT_TYPE, "text/plain; charset=utf-8")], "ok")
-}
-
-async fn readyz() -> impl IntoResponse {
-    ([(CONTENT_TYPE, "text/plain; charset=utf-8")], "ready")
-}
-
-async fn status(axum::extract::State(state): axum::extract::State<HttpState>) -> Response {
-    match state.stats_provider.stats() {
-        Ok(repository_stats) => Json(StatusResponse {
-            schema_version: 1,
-            version: env!("CARGO_PKG_VERSION"),
-            status: "ok",
-            uptime_seconds: state.started_at.elapsed().as_secs(),
-            file_count: repository_stats.file_count,
-            tag_count: repository_stats.tag_count,
-            pinned_count: repository_stats.pinned_count,
-            recent_upload_count_24h: repository_stats.recent_upload_count,
-        })
-        .into_response(),
-        Err(message) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "metadata_unavailable",
-                    message,
-                },
-            }),
+        .route(
+            "/api/v1/files",
+            post(upload::upload_file).layer(DefaultBodyLimit::disable()),
         )
-            .into_response(),
-    }
-}
-
-async fn web_fallback() -> Response<Body> {
-    let mut response = Html(WEB_PLACEHOLDER).into_response();
-    let headers = response.headers_mut();
-    headers.insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static("text/html; charset=utf-8"),
-    );
-    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-    headers.insert(
-        CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static(
-            "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'",
-        ),
-    );
-    response
-}
-
-/// Minimal status response consumed by `tssp status`.
-#[derive(Debug, Serialize)]
-pub struct StatusResponse {
-    /// Stable response schema version.
-    pub schema_version: u8,
-    /// Daemon version.
-    pub version: &'static str,
-    /// Human-readable health state.
-    pub status: &'static str,
-    /// Seconds since process startup.
-    pub uptime_seconds: u64,
-    /// Indexed file count.
-    pub file_count: u64,
-    /// Known tag count.
-    pub tag_count: u64,
-    /// Pinned file count.
-    pub pinned_count: u64,
-    /// Uploads in the last 24 hours.
-    pub recent_upload_count_24h: u64,
+        .route("/api/v1/files", get(list::list_files))
+        .route("/api/v1/pins", get(pins::list_pins))
+        .route("/api/v1/pins/reorder", post(pins::reorder))
+        .route("/api/v1/tags", get(tags::list_tags))
+        .route("/api/v1/files/{id}/tags", post(tags::add_tags))
+        .route(
+            "/api/v1/files/{id}/tags/{tag}",
+            axum::routing::delete(tags::remove_tag),
+        )
+        .route(
+            "/api/v1/files/{id}/pin",
+            axum::routing::put(pins::pin).delete(pins::unpin),
+        )
+        .route("/api/v1/files/{id}/content", get(content::get_file_content))
+        .route(
+            "/api/v1/files/{id}",
+            get(file::get_file).delete(delete::delete_file),
+        )
+        .route("/healthz", get(status::healthz))
+        .route("/readyz", get(status::readyz))
+        .route("/api/v1/status", get(status::status))
+        .fallback(web::web_fallback)
+        .with_state(state)
 }
 
 #[derive(Debug, Serialize)]
@@ -212,52 +213,34 @@ struct ErrorBody {
     message: String,
 }
 
-const WEB_PLACEHOLDER: &str = r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TSSP</title>
-  <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
-    main { max-width: 42rem; padding: 2rem; }
-    h1 { font-size: clamp(2rem, 8vw, 4rem); margin: 0 0 1rem; }
-    p { line-height: 1.6; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>TSSP</h1>
-    <p>The embedded web shell is available. API connectivity starts at <code>/api/v1/status</code>.</p>
-  </main>
-</body>
-</html>"#;
-
-/// Maps startup bind failures to concise user-facing messages.
-#[must_use]
-pub fn bind_error_message(address: SocketAddr, error: &std::io::Error) -> String {
-    if error.kind() == std::io::ErrorKind::AddrInUse {
-        return format!(
-            "port {} is already in use; choose another port with --port",
-            address.port()
-        );
-    }
-
-    format!("could not bind {address}: {error}")
-}
-
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
     use std::time::Instant;
 
     use axum::body::{to_bytes, Body};
+    use axum::http::header::{CONTENT_RANGE, CONTENT_TYPE};
     use axum::http::{Request, StatusCode};
+    use axum::Router;
+    use tempfile::tempdir;
     use tower::ServiceExt;
+    use tssp_adapter_fs::FilesystemBlobStore;
+    use tssp_adapter_sqlite::SqliteFileRepository;
+    use tssp_adapter_system::{SystemClock, UuidV7FileIdGenerator};
+    use tssp_app::{DeleteFileService, TagService, UploadService};
+    use tssp_domain::{
+        ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
+        UnixTimestamp,
+    };
 
-    use super::{bind_error_message, build_router, DaemonConfig, HttpState, MetadataStatsProvider};
+    use super::{
+        bind_error_message, build_router, ApplicationFileDeleteProvider,
+        ApplicationFileTagProvider, ApplicationFileUploadProvider, DaemonConfig,
+        FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome, HttpUploadRequest,
+        MetadataStatsProvider, RepositoryMetadataStatsProvider,
+    };
     use tssp_ports::RepositoryStats;
 
     #[test]
@@ -342,6 +325,535 @@ mod tests {
         assert_eq!(parsed["error"]["code"], "metadata_unavailable");
     }
 
+    #[tokio::test]
+    async fn upload_endpoint_accepts_single_multipart_file() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let app = build_router(HttpState::with_providers(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+            Arc::new(EchoUploadProvider {
+                deduplicated: false,
+            }),
+            temp.path().to_path_buf(),
+        ));
+        let response = app
+            .oneshot(multipart_request(
+                "--tssp\r\n\
+                 Content-Disposition: form-data; name=\"tag\"\r\n\r\n\
+                 Docs\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"pin\"\r\n\r\n\
+                 true\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"note.txt\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 hello upload\r\n\
+                 --tssp--\r\n",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(
+            response.headers().get("x-tssp-deduplicated"),
+            Some(
+                &"false"
+                    .parse()
+                    .unwrap_or_else(|error| panic!("header parse failed: {error}"))
+            )
+        );
+        let body = to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        let parsed: serde_json::Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("json parse failed: {error}"));
+        assert_eq!(parsed["id"], "file-test");
+        assert_eq!(parsed["name"], "note.txt");
+        assert_eq!(parsed["mime_type"], "text/plain");
+        assert_eq!(parsed["tags"][0], "Docs");
+        assert_eq!(parsed["pinned"], true);
+    }
+
+    #[tokio::test]
+    async fn upload_endpoint_returns_ok_for_deduplicated_content() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let app = build_router(HttpState::with_providers(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+            Arc::new(EchoUploadProvider { deduplicated: true }),
+            temp.path().to_path_buf(),
+        ));
+        let response = app
+            .oneshot(multipart_request(
+                "--tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"note.txt\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 hello upload\r\n\
+                 --tssp--\r\n",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("x-tssp-deduplicated"),
+            Some(
+                &"true"
+                    .parse()
+                    .unwrap_or_else(|error| panic!("header parse failed: {error}"))
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_endpoint_rejects_missing_file_field() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let app = build_router(HttpState::with_providers(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+            Arc::new(EchoUploadProvider {
+                deduplicated: false,
+            }),
+            temp.path().to_path_buf(),
+        ));
+        let response = app
+            .oneshot(multipart_request(
+                "--tssp\r\n\
+                 Content-Disposition: form-data; name=\"tag\"\r\n\r\n\
+                 Docs\r\n\
+                 --tssp--\r\n",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        let parsed: serde_json::Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("json parse failed: {error}"));
+        assert_eq!(parsed["error"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn upload_endpoint_persists_file_and_returns_existing_record_on_duplicate() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let repository = Arc::new(
+            SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
+                .unwrap_or_else(|error| panic!("repository open failed: {error}")),
+        );
+        let storage = Arc::new(
+            FilesystemBlobStore::new(temp.path().join("storage"))
+                .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
+        );
+        let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
+        let upload_service = UploadService::new(
+            storage.clone(),
+            repository.clone(),
+            UuidV7FileIdGenerator,
+            SystemClock,
+        );
+        let delete_service = DeleteFileService::new(storage.clone(), repository);
+        let app = build_router(HttpState::with_lifecycle_providers(
+            Instant::now(),
+            Arc::new(stats_provider),
+            Arc::new(ApplicationFileUploadProvider::new(upload_service)),
+            Arc::new(ApplicationFileDeleteProvider::new(delete_service)),
+            storage,
+            temp.path().join("http-upload-tmp"),
+        ));
+
+        let first = app
+            .clone()
+            .oneshot(multipart_request(REAL_UPLOAD_BODY))
+            .await
+            .unwrap_or_else(|error| panic!("first request failed: {error}"));
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let first_body = response_json(first).await;
+        let first_id = first_body["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("first id is missing"));
+
+        let second = app
+            .clone()
+            .oneshot(multipart_request(DUPLICATE_UPLOAD_BODY))
+            .await
+            .unwrap_or_else(|error| panic!("second request failed: {error}"));
+        assert_eq!(second.status(), StatusCode::OK);
+        assert_eq!(
+            second.headers().get("x-tssp-deduplicated"),
+            Some(
+                &"true"
+                    .parse()
+                    .unwrap_or_else(|error| panic!("header parse failed: {error}"))
+            )
+        );
+        let second_body = response_json(second).await;
+        assert_eq!(second_body["id"].as_str(), Some(first_id));
+        assert_eq!(second_body["name"].as_str(), Some("note.txt"));
+        assert_eq!(second_body["content_hash"], first_body["content_hash"]);
+
+        let status = app
+            .clone()
+            .oneshot(status_request())
+            .await
+            .unwrap_or_else(|error| panic!("status request failed: {error}"));
+        let status_body = response_json(status).await;
+        assert_eq!(status_body["file_count"], 1);
+        assert_eq!(status_body["recent_upload_count_24h"], 1);
+
+        let list = app
+            .clone()
+            .oneshot(list_request("?limit=1"))
+            .await
+            .unwrap_or_else(|error| panic!("list request failed: {error}"));
+        let list_body = response_json(list).await;
+        assert_eq!(list_body["files"].as_array().map(Vec::len), Some(1));
+        assert_eq!(list_body["files"][0]["id"].as_str(), Some(first_id));
+
+        let found = app
+            .clone()
+            .oneshot(file_request(first_id))
+            .await
+            .unwrap_or_else(|error| panic!("file request failed: {error}"));
+        let found_body = response_json(found).await;
+        assert_eq!(found_body["id"].as_str(), Some(first_id));
+        assert_eq!(found_body["name"].as_str(), Some("note.txt"));
+
+        assert_content_downloads(app, first_id).await;
+    }
+
+    #[tokio::test]
+    async fn delete_endpoint_removes_metadata_and_is_idempotent() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let repository = Arc::new(
+            SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
+                .unwrap_or_else(|error| panic!("repository open failed: {error}")),
+        );
+        let storage = Arc::new(
+            FilesystemBlobStore::new(temp.path().join("storage"))
+                .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
+        );
+        let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
+        let upload_service = UploadService::new(
+            storage.clone(),
+            repository.clone(),
+            UuidV7FileIdGenerator,
+            SystemClock,
+        );
+        let delete_service = DeleteFileService::new(storage.clone(), repository);
+        let app = build_router(HttpState::with_lifecycle_providers(
+            Instant::now(),
+            Arc::new(stats_provider),
+            Arc::new(ApplicationFileUploadProvider::new(upload_service)),
+            Arc::new(ApplicationFileDeleteProvider::new(delete_service)),
+            storage,
+            temp.path().join("http-upload-tmp"),
+        ));
+        let upload = app
+            .clone()
+            .oneshot(multipart_request(REAL_UPLOAD_BODY))
+            .await
+            .unwrap_or_else(|error| panic!("upload request failed: {error}"));
+        let body = response_json(upload).await;
+        let id = body["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("uploaded id is missing"));
+
+        let deleted = app
+            .clone()
+            .oneshot(delete_request(id))
+            .await
+            .unwrap_or_else(|error| panic!("delete request failed: {error}"));
+
+        assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            deleted
+                .headers()
+                .get("x-tssp-already-gone")
+                .and_then(|value| value.to_str().ok()),
+            Some("false")
+        );
+        assert_eq!(
+            deleted
+                .headers()
+                .get("x-tssp-blob-cleaned")
+                .and_then(|value| value.to_str().ok()),
+            Some("true")
+        );
+
+        let found = app
+            .clone()
+            .oneshot(file_request(id))
+            .await
+            .unwrap_or_else(|error| panic!("file request failed: {error}"));
+        assert_eq!(found.status(), StatusCode::NOT_FOUND);
+
+        let deleted_again = app
+            .oneshot(delete_request(id))
+            .await
+            .unwrap_or_else(|error| panic!("second delete request failed: {error}"));
+        assert_eq!(deleted_again.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            deleted_again
+                .headers()
+                .get("x-tssp-already-gone")
+                .and_then(|value| value.to_str().ok()),
+            Some("true")
+        );
+    }
+
+    #[tokio::test]
+    async fn tag_endpoints_list_add_and_remove_tags() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let repository = Arc::new(
+            SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
+                .unwrap_or_else(|error| panic!("repository open failed: {error}")),
+        );
+        let storage = Arc::new(
+            FilesystemBlobStore::new(temp.path().join("storage"))
+                .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
+        );
+        let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
+        let upload_service = UploadService::new(
+            storage.clone(),
+            repository.clone(),
+            UuidV7FileIdGenerator,
+            SystemClock,
+        );
+        let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
+        let tag_service = TagService::new(repository);
+        let app = build_router(
+            HttpState::with_lifecycle_providers(
+                Instant::now(),
+                Arc::new(stats_provider),
+                Arc::new(ApplicationFileUploadProvider::new(upload_service)),
+                Arc::new(ApplicationFileDeleteProvider::new(delete_service)),
+                storage,
+                temp.path().join("http-upload-tmp"),
+            )
+            .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service))),
+        );
+        let upload = app
+            .clone()
+            .oneshot(multipart_request(REAL_UPLOAD_BODY))
+            .await
+            .unwrap_or_else(|error| panic!("upload request failed: {error}"));
+        let body = response_json(upload).await;
+        let id = body["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("uploaded id is missing"));
+
+        let added = app
+            .clone()
+            .oneshot(add_tags_request(id, r#"["Docs","Family"]"#))
+            .await
+            .unwrap_or_else(|error| panic!("add tags request failed: {error}"));
+        let added_body = response_json(added).await;
+        assert_eq!(added_body["changed_count"], 1);
+
+        let listed = app
+            .clone()
+            .oneshot(tags_request())
+            .await
+            .unwrap_or_else(|error| panic!("tags request failed: {error}"));
+        let listed_body = response_json(listed).await;
+        assert_eq!(listed_body["tags"].as_array().map(Vec::len), Some(2));
+        assert_eq!(listed_body["tags"][0]["name"], "Docs");
+        assert_eq!(listed_body["tags"][1]["name"], "Family");
+
+        let removed = app
+            .oneshot(remove_tag_request(id, "Family"))
+            .await
+            .unwrap_or_else(|error| panic!("remove tag request failed: {error}"));
+        let removed_body = response_json(removed).await;
+        assert_eq!(removed_body["changed_count"], 1);
+    }
+
+    async fn assert_content_downloads(app: Router, first_id: &str) {
+        let content = app
+            .clone()
+            .oneshot(content_request(first_id, None))
+            .await
+            .unwrap_or_else(|error| panic!("content request failed: {error}"));
+        assert_eq!(content.status(), StatusCode::OK);
+        assert_eq!(
+            content
+                .headers()
+                .get("content-type")
+                .and_then(|value| value.to_str().ok()),
+            Some("text/plain")
+        );
+        assert_eq!(
+            content
+                .headers()
+                .get("accept-ranges")
+                .and_then(|value| value.to_str().ok()),
+            Some("bytes")
+        );
+        let content_body = to_bytes(content.into_body(), 1024)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        assert_eq!(content_body.as_ref(), b"hello upload");
+
+        let range = app
+            .clone()
+            .oneshot(content_request(first_id, Some("bytes=6-11")))
+            .await
+            .unwrap_or_else(|error| panic!("range request failed: {error}"));
+        assert_eq!(range.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            range
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok()),
+            Some("bytes 6-11/12")
+        );
+        let range_body = to_bytes(range.into_body(), 1024)
+            .await
+            .unwrap_or_else(|error| panic!("range body read failed: {error}"));
+        assert_eq!(range_body.as_ref(), b"upload");
+
+        let invalid_range = app
+            .oneshot(content_request(first_id, Some("bytes=50-60")))
+            .await
+            .unwrap_or_else(|error| panic!("invalid range request failed: {error}"));
+        assert_eq!(invalid_range.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(
+            invalid_range
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok()),
+            Some("bytes */12")
+        );
+    }
+
+    #[tokio::test]
+    async fn content_endpoint_reports_missing_blob_as_gone() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let storage = Arc::new(
+            FilesystemBlobStore::new(temp.path().join("storage"))
+                .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
+        );
+        let app = build_router(HttpState::with_all_providers(
+            Instant::now(),
+            Arc::new(SingleRecordStatsProvider),
+            Arc::new(EchoUploadProvider {
+                deduplicated: false,
+            }),
+            storage,
+            temp.path().join("http-upload-tmp"),
+        ));
+
+        let response = app
+            .oneshot(content_request("file-test", None))
+            .await
+            .unwrap_or_else(|error| panic!("content request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::GONE);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "blob_missing");
+    }
+
+    #[tokio::test]
+    async fn list_endpoint_rejects_zero_limit() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+        ));
+        let response = app
+            .oneshot(list_request("?limit=0"))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn list_endpoint_rejects_limit_above_maximum() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+        ));
+        let response = app
+            .oneshot(list_request("?limit=501"))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert!(body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("500")));
+    }
+
+    #[tokio::test]
+    async fn list_endpoint_reports_metadata_failure() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FailingStatsProvider),
+        ));
+        let response = app
+            .oneshot(list_request("?limit=1"))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "list_failed");
+    }
+
+    #[tokio::test]
+    async fn file_endpoint_rejects_invalid_id() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+        ));
+        let response = app
+            .oneshot(file_request("bad%20id"))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "invalid_file_id");
+    }
+
+    #[tokio::test]
+    async fn file_endpoint_returns_not_found() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FixedStatsProvider),
+        ));
+        let response = app
+            .oneshot(file_request("file-test"))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "file_not_found");
+    }
+
+    #[tokio::test]
+    async fn file_endpoint_reports_metadata_failure() {
+        let app = build_router(HttpState::with_stats_provider(
+            Instant::now(),
+            Arc::new(FailingStatsProvider),
+        ));
+        let response = app
+            .oneshot(file_request("file-test"))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "metadata_unavailable");
+    }
+
     #[test]
     fn bind_error_mentions_busy_port() {
         let message = bind_error_message(
@@ -366,6 +878,17 @@ mod tests {
                 recent_upload_count: 1,
             })
         }
+
+        fn list_files_recent(&self, _limit: u64) -> Result<Vec<tssp_domain::FileRecord>, String> {
+            Ok(Vec::new())
+        }
+
+        fn find_file(
+            &self,
+            _id: &tssp_domain::FileId,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(None)
+        }
     }
 
     struct FailingStatsProvider;
@@ -374,5 +897,235 @@ mod tests {
         fn stats(&self) -> Result<RepositoryStats, String> {
             Err("metadata database is unavailable".to_owned())
         }
+
+        fn list_files_recent(&self, _limit: u64) -> Result<Vec<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn find_file(
+            &self,
+            _id: &tssp_domain::FileId,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+    }
+
+    struct SingleRecordStatsProvider;
+
+    impl MetadataStatsProvider for SingleRecordStatsProvider {
+        fn stats(&self) -> Result<RepositoryStats, String> {
+            Ok(RepositoryStats {
+                file_count: 1,
+                tag_count: 0,
+                pinned_count: 0,
+                recent_upload_count: 0,
+            })
+        }
+
+        fn list_files_recent(&self, _limit: u64) -> Result<Vec<tssp_domain::FileRecord>, String> {
+            Ok(vec![single_record()])
+        }
+
+        fn find_file(
+            &self,
+            _id: &tssp_domain::FileId,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(Some(single_record()))
+        }
+    }
+
+    struct EchoUploadProvider {
+        deduplicated: bool,
+    }
+
+    impl FileUploadProvider for EchoUploadProvider {
+        fn upload(
+            &self,
+            mut request: HttpUploadRequest,
+        ) -> Result<HttpUploadOutcome, HttpUploadError> {
+            let mut bytes = Vec::new();
+            request
+                .source
+                .read_to_end(&mut bytes)
+                .map_err(|error| HttpUploadError::Internal {
+                    message: error.to_string(),
+                })?;
+            if bytes != b"hello upload" {
+                return Err(HttpUploadError::InvalidRequest {
+                    message: "unexpected test upload bytes".to_owned(),
+                });
+            }
+
+            Ok(HttpUploadOutcome {
+                record: test_record(&request),
+                deduplicated: self.deduplicated,
+            })
+        }
+    }
+
+    fn multipart_request(body: &'static str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/files")
+            .header(CONTENT_TYPE, "multipart/form-data; boundary=tssp")
+            .body(Body::from(body))
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn status_request() -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri("/api/v1/status")
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn list_request(query: &str) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/v1/files{query}"))
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn file_request(id: &str) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/v1/files/{id}"))
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn content_request(id: &str, range: Option<&str>) -> Request<Body> {
+        let mut builder = Request::builder()
+            .method("GET")
+            .uri(format!("/api/v1/files/{id}/content?disposition=inline"));
+        if let Some(range) = range {
+            builder = builder.header("range", range);
+        }
+        builder
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn delete_request(id: &str) -> Request<Body> {
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/api/v1/files/{id}"))
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn tags_request() -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri("/api/v1/tags")
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn add_tags_request(id: &str, body: &'static str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/v1/files/{id}/tags"))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn remove_tag_request(id: &str, tag: &str) -> Request<Body> {
+        Request::builder()
+            .method("DELETE")
+            .uri(format!("/api/v1/files/{id}/tags/{tag}"))
+            .body(Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    async fn response_json(response: axum::response::Response) -> serde_json::Value {
+        let body = to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        serde_json::from_slice(&body).unwrap_or_else(|error| panic!("json parse failed: {error}"))
+    }
+
+    const REAL_UPLOAD_BODY: &str = "--tssp\r\n\
+        Content-Disposition: form-data; name=\"tag\"\r\n\r\n\
+        Docs\r\n\
+        --tssp\r\n\
+        Content-Disposition: form-data; name=\"pin\"\r\n\r\n\
+        TRUE\r\n\
+        --tssp\r\n\
+        Content-Disposition: form-data; name=\"file\"; filename=\"note.txt\"\r\n\
+        Content-Type: text/plain\r\n\r\n\
+        hello upload\r\n\
+        --tssp--\r\n";
+
+    const DUPLICATE_UPLOAD_BODY: &str = "--tssp\r\n\
+        Content-Disposition: form-data; name=\"file\"; filename=\"other.txt\"\r\n\
+        Content-Type: text/plain\r\n\r\n\
+        hello upload\r\n\
+        --tssp--\r\n";
+
+    fn test_record(request: &HttpUploadRequest) -> FileRecord {
+        FileRecord {
+            id: file_id("file-test"),
+            name: filename(&request.filename),
+            size: FileSize::new(12),
+            content_hash: content_hash(),
+            mime_type: mime_type(
+                request
+                    .mime_type
+                    .as_deref()
+                    .unwrap_or("application/octet-stream"),
+            ),
+            storage_handle: storage_handle(),
+            uploaded_at: timestamp(1_700_000_000),
+            tags: request.tags.iter().map(|tag| tag_value(tag)).collect(),
+            pinned_at: request.pinned.then_some(1),
+        }
+    }
+
+    fn single_record() -> FileRecord {
+        FileRecord {
+            id: file_id("file-test"),
+            name: filename("note.txt"),
+            size: FileSize::new(12),
+            content_hash: content_hash(),
+            mime_type: mime_type("text/plain"),
+            storage_handle: storage_handle(),
+            uploaded_at: timestamp(1_700_000_000),
+            tags: Vec::new(),
+            pinned_at: None,
+        }
+    }
+
+    fn file_id(value: &str) -> FileId {
+        FileId::new(value).unwrap_or_else(|error| panic!("invalid file id: {error}"))
+    }
+
+    fn filename(value: &str) -> FileName {
+        FileName::new(value).unwrap_or_else(|error| panic!("invalid filename: {error}"))
+    }
+
+    fn content_hash() -> ContentHash {
+        ContentHash::new("abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123")
+            .unwrap_or_else(|error| panic!("invalid hash: {error}"))
+    }
+
+    fn mime_type(value: &str) -> MimeType {
+        MimeType::new(value).unwrap_or_else(|error| panic!("invalid mime type: {error}"))
+    }
+
+    fn storage_handle() -> StorageHandle {
+        StorageHandle::new("blobs/ab/cd/abcdef")
+            .unwrap_or_else(|error| panic!("invalid storage handle: {error}"))
+    }
+
+    fn timestamp(seconds: i64) -> UnixTimestamp {
+        UnixTimestamp::new(seconds).unwrap_or_else(|error| panic!("invalid timestamp: {error}"))
+    }
+
+    fn tag_value(value: &str) -> Tag {
+        Tag::new(value).unwrap_or_else(|error| panic!("invalid tag: {error}"))
     }
 }

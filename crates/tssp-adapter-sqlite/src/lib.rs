@@ -10,10 +10,13 @@ use std::sync::{Mutex, MutexGuard};
 use rusqlite::{params, Connection, ErrorCode, Row};
 use thiserror::Error;
 use tssp_domain::{
-    ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
+    ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag, TagKey,
     UnixTimestamp,
 };
-use tssp_ports::{FileRepository, NewFileRecord, RepositoryError, RepositoryStats};
+use tssp_ports::{
+    DeletedFileRecord, FileRepository, NewFileRecord, RepositoryError, RepositoryStats,
+    TagMutationOutcome, TagSummary,
+};
 
 /// `SQLite` metadata repository.
 #[derive(Debug)]
@@ -104,6 +107,192 @@ impl FileRepository for SqliteFileRepository {
         Ok(Some(record))
     }
 
+    fn find_file_by_content_hash(
+        &self,
+        content_hash: &ContentHash,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+                 FROM files
+                 WHERE content_hash = ?1
+                 ORDER BY uploaded_at ASC, id ASC
+                 LIMIT 1",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        let mut rows = statement
+            .query(params![content_hash.as_str()])
+            .map_err(map_rusqlite_repository_error)?;
+        let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? else {
+            return Ok(None);
+        };
+
+        let mut record = map_file_row(row)?;
+        let id = record.id.clone();
+        record.tags = load_tags(&connection, &id)?;
+        Ok(Some(record))
+    }
+
+    fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+
+        let Some(mut record) = find_file_in_transaction(&transaction, id)? else {
+            transaction
+                .commit()
+                .map_err(map_rusqlite_repository_error)?;
+            return Ok(None);
+        };
+        record.tags = load_tags(&transaction, id)?;
+
+        transaction
+            .execute("DELETE FROM files WHERE id = ?1", params![id.as_str()])
+            .map_err(map_rusqlite_repository_error)?;
+        cleanup_orphaned_tags(&transaction)?;
+        let remaining_content_references = count(
+            &transaction,
+            "SELECT COUNT(*) FROM files WHERE content_hash = ?1",
+            params![record.content_hash.as_str()],
+        )?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(Some(DeletedFileRecord {
+            record,
+            remaining_content_references,
+        }))
+    }
+
+    fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+                 FROM files
+                 ORDER BY uploaded_at DESC, id DESC
+                 LIMIT ?1",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        let limit_i64 = i64::try_from(limit).map_err(|error| RepositoryError::OperationFailed {
+            message: format!("list limit does not fit sqlite integer: {error}"),
+        })?;
+
+        let mut rows = statement
+            .query(params![limit_i64])
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let mut record = map_file_row(row)?;
+            let id = record.id.clone();
+            record.tags = load_tags(&connection, &id)?;
+            records.push(record);
+        }
+        Ok(records)
+    }
+
+    fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT tags.display, COUNT(file_tags.file_id) AS file_count
+                 FROM tags
+                 JOIN file_tags ON file_tags.tag_key = tags.key
+                 GROUP BY tags.key, tags.display
+                 ORDER BY tags.key ASC",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        let mut rows = statement.query([]).map_err(map_rusqlite_repository_error)?;
+
+        let mut tags = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let display: String = row.get(0).map_err(map_rusqlite_repository_error)?;
+            let file_count: i64 = row.get(1).map_err(map_rusqlite_repository_error)?;
+            tags.push(TagSummary {
+                tag: Tag::new(display).map_err(|error| map_domain_repository_error(&error))?,
+                file_count: u64::try_from(file_count).map_err(|error| {
+                    RepositoryError::OperationFailed {
+                        message: format!("stored tag count is invalid: {error}"),
+                    }
+                })?,
+            });
+        }
+        Ok(tags)
+    }
+
+    fn add_tags_to_file(
+        &self,
+        id: &FileId,
+        tags: &[Tag],
+    ) -> Result<TagMutationOutcome, RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_file_exists(&transaction, id)?;
+
+        let mut changed_count = 0_u64;
+        for tag in tags {
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO tags (key, display) VALUES (?1, ?2)",
+                    params![tag.key().as_str(), tag.display()],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+            let changed = transaction
+                .execute(
+                    "INSERT OR IGNORE INTO file_tags (file_id, tag_key) VALUES (?1, ?2)",
+                    params![id.as_str(), tag.key().as_str()],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+            changed_count = changed_count
+                .checked_add(u64::try_from(changed).unwrap_or(u64::MAX))
+                .ok_or_else(|| RepositoryError::OperationFailed {
+                    message: "tag mutation count overflow".to_owned(),
+                })?;
+        }
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(TagMutationOutcome { changed_count })
+    }
+
+    fn remove_tag_from_file(
+        &self,
+        id: &FileId,
+        tag: &TagKey,
+    ) -> Result<TagMutationOutcome, RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_file_exists(&transaction, id)?;
+        let changed = transaction
+            .execute(
+                "DELETE FROM file_tags WHERE file_id = ?1 AND tag_key = ?2",
+                params![id.as_str(), tag.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        cleanup_orphaned_tags(&transaction)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(TagMutationOutcome {
+            changed_count: u64::try_from(changed).map_err(|error| {
+                RepositoryError::OperationFailed {
+                    message: format!("tag mutation count is invalid: {error}"),
+                }
+            })?,
+        })
+    }
+
     fn stats_since(&self, recent_since: UnixTimestamp) -> Result<RepositoryStats, RepositoryError> {
         let connection = self.lock()?;
         Ok(RepositoryStats {
@@ -120,6 +309,131 @@ impl FileRepository for SqliteFileRepository {
                 params![recent_since.seconds()],
             )?,
         })
+    }
+
+    fn pin_file(
+        &self,
+        id: &FileId,
+        position: Option<u32>,
+    ) -> Result<tssp_ports::PinOutcome, RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_file_exists(&transaction, id)?;
+
+        let already_pinned: bool = transaction
+            .query_row(
+                "SELECT pinned_at IS NOT NULL FROM files WHERE id = ?1",
+                params![id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        let pin_position = position.unwrap_or_else(|| {
+            let max: Option<i64> = transaction
+                .query_row(
+                    "SELECT MAX(pinned_at) FROM files WHERE pinned_at IS NOT NULL",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(None);
+            max.map_or(1, |v| u32::try_from(v + 1).unwrap_or(u32::MAX))
+        });
+
+        transaction
+            .execute(
+                "UPDATE files SET pinned_at = ?1 WHERE id = ?2",
+                params![pin_position, id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(tssp_ports::PinOutcome {
+            existed: true,
+            changed: !already_pinned,
+        })
+    }
+
+    fn unpin_file(&self, id: &FileId) -> Result<tssp_ports::PinOutcome, RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_file_exists(&transaction, id)?;
+
+        let already_pinned: bool = transaction
+            .query_row(
+                "SELECT pinned_at IS NOT NULL FROM files WHERE id = ?1",
+                params![id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        transaction
+            .execute(
+                "UPDATE files SET pinned_at = NULL WHERE id = ?1",
+                params![id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(tssp_ports::PinOutcome {
+            existed: true,
+            changed: already_pinned,
+        })
+    }
+
+    fn list_pinned_files(&self) -> Result<Vec<FileRecord>, RepositoryError> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+                 FROM files
+                 WHERE pinned_at IS NOT NULL
+                 ORDER BY pinned_at ASC, id ASC",
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        let mut rows = statement.query([]).map_err(map_rusqlite_repository_error)?;
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let mut record = map_file_row(row)?;
+            let id = record.id.clone();
+            record.tags = load_tags(&connection, &id)?;
+            records.push(record);
+        }
+        Ok(records)
+    }
+
+    fn reorder_pins(&self, ordered_ids: &[FileId]) -> Result<(), RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        for (index, id) in ordered_ids.iter().enumerate() {
+            let position = u32::try_from(index.saturating_add(1)).map_err(|error| {
+                RepositoryError::OperationFailed {
+                    message: format!("pin position overflow: {error}"),
+                }
+            })?;
+            let changed = transaction
+                .execute(
+                    "UPDATE files SET pinned_at = ?1 WHERE id = ?2 AND pinned_at IS NOT NULL",
+                    params![position, id.as_str()],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+            if changed == 0 {
+                return Err(RepositoryError::NotFound);
+            }
+        }
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(())
     }
 }
 
@@ -242,6 +556,43 @@ fn insert_file_row(
         .map_err(map_rusqlite_repository_error)
 }
 
+fn ensure_file_exists(
+    transaction: &rusqlite::Transaction<'_>,
+    id: &FileId,
+) -> Result<(), RepositoryError> {
+    let exists: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM files WHERE id = ?1)",
+            params![id.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(map_rusqlite_repository_error)?;
+    if exists {
+        return Ok(());
+    }
+    Err(RepositoryError::NotFound)
+}
+
+fn find_file_in_transaction(
+    transaction: &rusqlite::Transaction<'_>,
+    id: &FileId,
+) -> Result<Option<FileRecord>, RepositoryError> {
+    let mut statement = transaction
+        .prepare(
+            "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
+             FROM files
+             WHERE id = ?1",
+        )
+        .map_err(map_rusqlite_repository_error)?;
+    let mut rows = statement
+        .query(params![id.as_str()])
+        .map_err(map_rusqlite_repository_error)?;
+    let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? else {
+        return Ok(None);
+    };
+    map_file_row(row).map(Some)
+}
+
 fn insert_tags(
     transaction: &rusqlite::Transaction<'_>,
     new_file: &NewFileRecord,
@@ -261,6 +612,19 @@ fn insert_tags(
             .map_err(map_rusqlite_repository_error)?;
     }
     Ok(())
+}
+
+fn cleanup_orphaned_tags(transaction: &rusqlite::Transaction<'_>) -> Result<(), RepositoryError> {
+    transaction
+        .execute(
+            "DELETE FROM tags
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM file_tags WHERE file_tags.tag_key = tags.key
+             )",
+            [],
+        )
+        .map(|_rows| ())
+        .map_err(map_rusqlite_repository_error)
 }
 
 fn load_tags(connection: &Connection, id: &FileId) -> Result<Vec<Tag>, RepositoryError> {
@@ -426,6 +790,28 @@ mod tests {
     }
 
     #[test]
+    fn find_file_by_content_hash_returns_oldest_matching_record() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-2", &["new"], 2_000))
+            .unwrap_or_else(|error| panic!("new insert failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &["old"], 1_000))
+            .unwrap_or_else(|error| panic!("old insert failed: {error}"));
+
+        let found = repository
+            .find_file_by_content_hash(&hash())
+            .unwrap_or_else(|error| panic!("hash lookup failed: {error}"));
+
+        assert!(matches!(
+            found,
+            Some(record) if record.id.as_str() == "file-1"
+                && record.tags == vec![tag_value("old")]
+        ));
+    }
+
+    #[test]
     fn stats_since_counts_files_tags_pins_and_recent_uploads() {
         let repository = SqliteFileRepository::open_in_memory()
             .unwrap_or_else(|error| panic!("repository open failed: {error}"));
@@ -444,6 +830,291 @@ mod tests {
         assert_eq!(stats.tag_count, 2);
         assert_eq!(stats.pinned_count, 2);
         assert_eq!(stats.recent_upload_count, 1);
+    }
+
+    #[test]
+    fn list_files_recent_returns_newest_first() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("old", &[], 1_000))
+            .unwrap_or_else(|error| panic!("old insert failed: {error}"));
+        repository
+            .insert_file(new_file("middle", &[], 2_000))
+            .unwrap_or_else(|error| panic!("middle insert failed: {error}"));
+        repository
+            .insert_file(new_file("new", &[], 3_000))
+            .unwrap_or_else(|error| panic!("new insert failed: {error}"));
+
+        let list = repository
+            .list_files_recent(10)
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].id.as_str(), "new");
+        assert_eq!(list[1].id.as_str(), "middle");
+        assert_eq!(list[2].id.as_str(), "old");
+    }
+
+    #[test]
+    fn list_files_recent_respects_limit() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("1", &[], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+        repository
+            .insert_file(new_file("2", &[], 2_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+        repository
+            .insert_file(new_file("3", &[], 3_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let list = repository
+            .list_files_recent(2)
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].id.as_str(), "3");
+        assert_eq!(list[1].id.as_str(), "2");
+    }
+
+    #[test]
+    fn delete_file_removes_metadata_tags_and_reports_last_reference() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &["docs"], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let deleted = repository
+            .delete_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("delete failed: {error}"));
+        let stats = repository
+            .stats_since(timestamp(0))
+            .unwrap_or_else(|error| panic!("stats failed: {error}"));
+
+        assert!(matches!(
+            deleted,
+            Some(record) if record.record.id.as_str() == "file-1"
+                && record.record.tags == vec![tag_value("docs")]
+                && record.remaining_content_references == 0
+        ));
+        assert_eq!(stats.file_count, 0);
+        assert_eq!(stats.tag_count, 0);
+        assert!(repository
+            .find_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("find failed: {error}"))
+            .is_none());
+    }
+
+    #[test]
+    fn delete_file_keeps_shared_tags_and_reports_remaining_references() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &["shared"], 1_000))
+            .unwrap_or_else(|error| panic!("first insert failed: {error}"));
+        repository
+            .insert_file(new_file("file-2", &["shared"], 2_000))
+            .unwrap_or_else(|error| panic!("second insert failed: {error}"));
+
+        let deleted = repository
+            .delete_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("delete failed: {error}"));
+        let stats = repository
+            .stats_since(timestamp(0))
+            .unwrap_or_else(|error| panic!("stats failed: {error}"));
+
+        assert!(matches!(
+            deleted,
+            Some(record) if record.remaining_content_references == 1
+        ));
+        assert_eq!(stats.file_count, 1);
+        assert_eq!(stats.tag_count, 1);
+    }
+
+    #[test]
+    fn delete_missing_file_is_idempotent() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+
+        let deleted = repository
+            .delete_file(&file_id("missing"))
+            .unwrap_or_else(|error| panic!("delete failed: {error}"));
+
+        assert!(deleted.is_none());
+    }
+
+    #[test]
+    fn list_tags_returns_counts_in_key_order() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &["Beta", "alpha"], 1_000))
+            .unwrap_or_else(|error| panic!("first insert failed: {error}"));
+        repository
+            .insert_file(new_file("file-2", &["beta"], 2_000))
+            .unwrap_or_else(|error| panic!("second insert failed: {error}"));
+
+        let tags = repository
+            .list_tags()
+            .unwrap_or_else(|error| panic!("list tags failed: {error}"));
+
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].tag.display(), "alpha");
+        assert_eq!(tags[0].file_count, 1);
+        assert_eq!(tags[1].tag.display(), "Beta");
+        assert_eq!(tags[1].file_count, 2);
+    }
+
+    #[test]
+    fn add_tags_to_file_is_idempotent_and_normalizes_duplicates() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &["Docs"], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+        let tags = vec![tag_value("docs"), tag_value("Family")];
+
+        let outcome = repository
+            .add_tags_to_file(&file_id("file-1"), &tags)
+            .unwrap_or_else(|error| panic!("add tags failed: {error}"));
+        let found = repository
+            .find_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("find failed: {error}"));
+
+        assert_eq!(outcome.changed_count, 1);
+        assert!(matches!(
+            found,
+            Some(record) if record.tags == vec![tag_value("Docs"), tag_value("Family")]
+        ));
+    }
+
+    #[test]
+    fn tag_mutations_report_missing_file() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        let tags = vec![tag_value("Docs")];
+
+        let add = repository.add_tags_to_file(&file_id("missing"), &tags);
+        let remove = repository.remove_tag_from_file(&file_id("missing"), tag_value("Docs").key());
+
+        assert!(matches!(add, Err(RepositoryError::NotFound)));
+        assert!(matches!(remove, Err(RepositoryError::NotFound)));
+    }
+
+    #[test]
+    fn remove_tag_from_file_is_idempotent_and_cleans_orphaned_tag() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &["Docs"], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let first = repository
+            .remove_tag_from_file(&file_id("file-1"), tag_value("Docs").key())
+            .unwrap_or_else(|error| panic!("remove failed: {error}"));
+        let second = repository
+            .remove_tag_from_file(&file_id("file-1"), tag_value("Docs").key())
+            .unwrap_or_else(|error| panic!("second remove failed: {error}"));
+        let tags = repository
+            .list_tags()
+            .unwrap_or_else(|error| panic!("list tags failed: {error}"));
+
+        assert_eq!(first.changed_count, 1);
+        assert_eq!(second.changed_count, 0);
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn pin_file_sets_position_and_returns_changed() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(NewFileRecord {
+                id: file_id("file-1"),
+                name: filename("report.pdf"),
+                size: FileSize::new(42),
+                content_hash: hash(),
+                mime_type: mime_type("application/pdf"),
+                storage_handle: storage_handle(),
+                uploaded_at: timestamp(1_000),
+                tags: vec![],
+                pinned_at: None,
+            })
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let first = repository
+            .pin_file(&file_id("file-1"), Some(5))
+            .unwrap_or_else(|error| panic!("pin failed: {error}"));
+        let second = repository
+            .pin_file(&file_id("file-1"), Some(5))
+            .unwrap_or_else(|error| panic!("second pin failed: {error}"));
+
+        let list = repository
+            .list_pinned_files()
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert!(first.existed);
+        assert!(first.changed);
+        assert!(second.existed);
+        assert!(!second.changed);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id.as_str(), "file-1");
+        assert_eq!(list[0].pinned_at, Some(5));
+    }
+
+    #[test]
+    fn unpin_file_clears_position_and_returns_changed() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &[], 1_000)) // new_file pins by default
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let first = repository
+            .unpin_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("unpin failed: {error}"));
+        let second = repository
+            .unpin_file(&file_id("file-1"))
+            .unwrap_or_else(|error| panic!("second unpin failed: {error}"));
+
+        let list = repository
+            .list_pinned_files()
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert!(first.existed);
+        assert!(first.changed);
+        assert!(second.existed);
+        assert!(!second.changed);
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn reorder_pins_updates_positions() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &[], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+        repository
+            .insert_file(new_file("file-2", &[], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        repository
+            .reorder_pins(&[file_id("file-2"), file_id("file-1")])
+            .unwrap_or_else(|error| panic!("reorder failed: {error}"));
+
+        let list = repository
+            .list_pinned_files()
+            .unwrap_or_else(|error| panic!("list failed: {error}"));
+
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].id.as_str(), "file-2");
+        assert_eq!(list[0].pinned_at, Some(1));
+        assert_eq!(list[1].id.as_str(), "file-1");
+        assert_eq!(list[1].pinned_at, Some(2));
     }
 
     fn new_file(id: &str, tags: &[&str], uploaded_at: i64) -> NewFileRecord {

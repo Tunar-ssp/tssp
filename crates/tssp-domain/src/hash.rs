@@ -68,6 +68,18 @@ mod tests {
     }
 
     #[test]
+    fn hash_trims_input_and_displays_lowercase_value() {
+        let hash =
+            ContentHash::new(" ABCDEFabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123 ")
+                .unwrap_or_else(|error| panic!("hash failed: {error}"));
+
+        assert_eq!(
+            hash.to_string(),
+            "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123"
+        );
+    }
+
+    #[test]
     fn wrong_length_is_rejected() {
         let hash = ContentHash::new("abc");
 

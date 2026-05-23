@@ -1,28 +1,23 @@
 //! Implementation of `tssp status`.
 
-use std::time::Duration;
-
-use reqwest::blocking::Client;
-use reqwest::header::ACCEPT;
+use reqwest::{header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
 use tssp_cli_core::CliExitCode;
 
-use tssp::{Cli, ConnectionArgs};
-
-const DEFAULT_HOST: &str = "127.0.0.1";
-const DEFAULT_PORT: u16 = 8421;
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const READ_TIMEOUT: Duration = Duration::from_secs(60);
+use crate::backend::{build_client, BackendAddress};
+use tssp::Cli;
 
 pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
-    let address = BackendAddress::from_connection_args(&cli.connection)?;
-    let client = Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(READ_TIMEOUT)
-        .build()
-        .map_err(|error| format!("could not build HTTP client: {error}"))?;
+    let address = match BackendAddress::from_connection_args(&cli.connection) {
+        Ok(value) => value,
+        Err(message) => {
+            eprintln!("error: {message}");
+            return Ok(CliExitCode::Usage);
+        }
+    };
+    let client = build_client()?;
     let response = client
-        .get(address.status_url())
+        .get(address.url("/api/v1/status"))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {
@@ -37,55 +32,36 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
         Err(code) => return Ok(code),
     };
 
-    if response.status().is_server_error() {
+    if let Err(code) = classify_response_status(response.status()) {
         eprintln!("error: daemon returned {}", response.status());
-        return Ok(CliExitCode::Server);
+        return Ok(code);
     }
 
-    if !response.status().is_success() {
-        eprintln!("error: daemon returned {}", response.status());
-        return Ok(CliExitCode::Generic);
-    }
-
-    let status = response.json::<DaemonStatus>().map_err(|error| {
+    let body = response.text().map_err(|error| {
         format!(
-            "daemon at {} returned an invalid status response: {error}",
+            "daemon at {} returned an unreadable status response: {error}",
             address.base_url()
         )
     })?;
+    let status = parse_status_body(&body, &address.base_url())?;
     print_status(&status, cli.output.json)?;
     Ok(CliExitCode::Success)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct BackendAddress {
-    host: String,
-    port: u16,
+fn classify_response_status(status: StatusCode) -> Result<(), CliExitCode> {
+    if status.is_server_error() {
+        return Err(CliExitCode::Server);
+    }
+    if !status.is_success() {
+        return Err(CliExitCode::Generic);
+    }
+    Ok(())
 }
 
-impl BackendAddress {
-    fn from_connection_args(args: &ConnectionArgs) -> Result<Self, String> {
-        let host = args.host.as_deref().unwrap_or(DEFAULT_HOST).trim();
-        if host.is_empty() {
-            return Err("host must not be empty".to_owned());
-        }
-        if host.contains('/') {
-            return Err("host must not contain a URL path".to_owned());
-        }
-
-        Ok(Self {
-            host: host.to_owned(),
-            port: args.port.unwrap_or(DEFAULT_PORT),
-        })
-    }
-
-    fn base_url(&self) -> String {
-        format!("http://{}:{}", self.host, self.port)
-    }
-
-    fn status_url(&self) -> String {
-        format!("{}/api/v1/status", self.base_url())
-    }
+fn parse_status_body(body: &str, base_url: &str) -> Result<DaemonStatus, String> {
+    serde_json::from_str::<DaemonStatus>(body).map_err(|error| {
+        format!("daemon at {base_url} returned an invalid status response: {error}")
+    })
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -120,38 +96,79 @@ fn print_status(status: &DaemonStatus, json: bool) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BackendAddress, DEFAULT_PORT};
-    use tssp::ConnectionArgs;
+    use super::{classify_response_status, parse_status_body, print_status, DaemonStatus};
+    use reqwest::StatusCode;
+    use tssp_cli_core::CliExitCode;
 
     #[test]
-    fn default_status_url_uses_local_daemon() {
-        let address = BackendAddress::from_connection_args(&ConnectionArgs {
-            host: None,
-            port: None,
-        })
-        .unwrap_or_else(|error| panic!("address failed: {error}"));
+    fn daemon_status_shape_is_stable() {
+        let status = DaemonStatus {
+            schema_version: 1,
+            version: "0.1.0".to_owned(),
+            status: "ok".to_owned(),
+            uptime_seconds: 1,
+            file_count: 2,
+            tag_count: 3,
+            pinned_count: 4,
+            recent_upload_count_24h: 5,
+        };
 
-        assert_eq!(address.status_url(), "http://127.0.0.1:8421/api/v1/status");
+        assert_eq!(status.schema_version, 1);
+        assert_eq!(status.file_count, 2);
     }
 
     #[test]
-    fn explicit_host_and_port_override_defaults() {
-        let address = BackendAddress::from_connection_args(&ConnectionArgs {
-            host: Some("tsspd.local".to_owned()),
-            port: Some(9000),
-        })
-        .unwrap_or_else(|error| panic!("address failed: {error}"));
+    fn response_status_maps_server_errors() {
+        let result = classify_response_status(StatusCode::INTERNAL_SERVER_ERROR);
 
-        assert_eq!(address.base_url(), "http://tsspd.local:9000");
+        assert_eq!(result, Err(CliExitCode::Server));
     }
 
     #[test]
-    fn host_must_not_include_path() {
-        let address = BackendAddress::from_connection_args(&ConnectionArgs {
-            host: Some("127.0.0.1/api".to_owned()),
-            port: Some(DEFAULT_PORT),
-        });
+    fn response_status_maps_client_errors() {
+        let result = classify_response_status(StatusCode::NOT_FOUND);
 
-        assert!(address.is_err());
+        assert_eq!(result, Err(CliExitCode::Generic));
+    }
+
+    #[test]
+    fn response_status_allows_success() {
+        assert_eq!(classify_response_status(StatusCode::OK), Ok(()));
+    }
+
+    #[test]
+    fn parse_status_body_accepts_valid_payload() {
+        let status = parse_status_body(
+            r#"{"schema_version":1,"version":"0.1.0","status":"ok","uptime_seconds":1,"file_count":2,"tag_count":3,"pinned_count":4,"recent_upload_count_24h":5}"#,
+            "http://127.0.0.1:8421",
+        )
+        .unwrap_or_else(|error| panic!("parse failed: {error}"));
+
+        assert_eq!(status.version, "0.1.0");
+        assert_eq!(status.recent_upload_count_24h, 5);
+    }
+
+    #[test]
+    fn parse_status_body_rejects_invalid_payload() {
+        let result = parse_status_body(r#"{"schema_version":1}"#, "http://127.0.0.1:8421");
+
+        assert!(matches!(result, Err(message) if message.contains("invalid status response")));
+    }
+
+    #[test]
+    fn print_status_supports_json_and_human_output() {
+        let status = DaemonStatus {
+            schema_version: 1,
+            version: "0.1.0".to_owned(),
+            status: "ok".to_owned(),
+            uptime_seconds: 1,
+            file_count: 2,
+            tag_count: 3,
+            pinned_count: 4,
+            recent_upload_count_24h: 5,
+        };
+
+        assert_eq!(print_status(&status, true), Ok(()));
+        assert_eq!(print_status(&status, false), Ok(()));
     }
 }

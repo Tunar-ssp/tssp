@@ -119,10 +119,26 @@ mod tests {
     }
 
     #[test]
+    fn tag_display_uses_normalized_text() {
+        let tag =
+            Tag::new("  Family\t Photos  ").unwrap_or_else(|error| panic!("tag failed: {error}"));
+
+        assert_eq!(tag.to_string(), "Family Photos");
+    }
+
+    #[test]
     fn tag_lookup_key_uses_same_rules() {
         let key = TagKey::new("FAMILY PHOTOS");
 
         assert!(matches!(key, Ok(value) if value.as_str() == "family photos"));
+    }
+
+    #[test]
+    fn tag_lookup_key_displays_normalized_key() {
+        let key =
+            TagKey::new("FAMILY PHOTOS").unwrap_or_else(|error| panic!("key failed: {error}"));
+
+        assert_eq!(key.to_string(), "family photos");
     }
 
     #[test]
@@ -137,6 +153,31 @@ mod tests {
             Err(DomainError::InvalidCharacter {
                 field: "tag",
                 character: '\u{0}'
+            })
+        );
+    }
+
+    #[test]
+    fn separators_are_rejected() {
+        assert_eq!(
+            Tag::new("bad/tag"),
+            Err(DomainError::InvalidCharacter {
+                field: "tag",
+                character: '/'
+            })
+        );
+        assert_eq!(
+            Tag::new("bad\\tag"),
+            Err(DomainError::InvalidCharacter {
+                field: "tag",
+                character: '\\'
+            })
+        );
+        assert_eq!(
+            Tag::new("bad,tag"),
+            Err(DomainError::InvalidCharacter {
+                field: "tag",
+                character: ','
             })
         );
     }

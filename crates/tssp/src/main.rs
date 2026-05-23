@@ -1,6 +1,13 @@
 //! `tssp` binary entry point.
 
+mod backend;
+mod info;
+mod list;
+mod pull;
+mod remove;
 mod status;
+mod tags;
+mod upload;
 
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -22,17 +29,169 @@ fn main() -> ExitCode {
 
 fn run(cli: &Cli) -> Result<CliExitCode, String> {
     if let Some(Command::Completions(args)) = cli.command.as_ref() {
-        let script = generate_completion(args.shell);
-        io::stdout()
-            .write_all(&script)
-            .map_err(|error| format!("could not write completion script: {error}"))?;
-        return Ok(CliExitCode::Success);
+        return write_completion(args, &mut io::stdout());
     }
 
     if matches!(cli.command, Some(Command::Status)) {
         return status::run(cli);
     }
+    if let Some(Command::List(args)) = cli.command.as_ref() {
+        return list::run_list(cli, args);
+    }
+    if let Some(Command::Last(args)) = cli.command.as_ref() {
+        return list::run_last(cli, args);
+    }
+    if let Some(Command::Info(args)) = cli.command.as_ref() {
+        return info::run(cli, args);
+    }
+    if let Some(Command::Pull(args)) = cli.command.as_ref() {
+        return pull::run(cli, args);
+    }
+    if let Some(Command::Remove(args)) = cli.command.as_ref() {
+        return remove::run(cli, args);
+    }
+    if let Some(Command::Tag(args)) = cli.command.as_ref() {
+        return tags::run_tag(cli, args);
+    }
+    if let Some(Command::Untag(args)) = cli.command.as_ref() {
+        return tags::run_untag(cli, args);
+    }
+
+    if cli.command.is_none() {
+        return upload::run(cli);
+    }
 
     println!("tssp command surface is available; backend command execution is not wired yet");
     Ok(CliExitCode::Generic)
+}
+
+fn write_completion(
+    args: &tssp::CompletionArgs,
+    output: &mut impl Write,
+) -> Result<CliExitCode, String> {
+    let script = generate_completion(args.shell);
+    output
+        .write_all(&script)
+        .map_err(|error| format!("could not write completion script: {error}"))?;
+    Ok(CliExitCode::Success)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{run, write_completion};
+    use tssp::{
+        Cli, Command, CompletionArgs, CompletionShell, ConnectionArgs, ListArgs, LoggingArgs,
+        OutputArgs, RemoveArgs, TagArgs, UploadArgs,
+    };
+    use tssp_cli_core::CliExitCode;
+
+    #[test]
+    fn run_generates_completion_scripts() {
+        let args = CompletionArgs {
+            shell: CompletionShell::Bash,
+        };
+        let mut output = Vec::new();
+
+        let result = write_completion(&args, &mut output);
+
+        assert_eq!(result, Ok(CliExitCode::Success));
+        assert!(String::from_utf8_lossy(&output).contains("_tssp"));
+    }
+
+    #[test]
+    fn run_rejects_empty_default_upload_without_network() {
+        let cli = cli(None);
+
+        let result = run(&cli);
+
+        assert_eq!(result, Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_rejects_invalid_status_host_without_network() {
+        let mut cli = cli(Some(Command::Status));
+        cli.connection.host = Some("bad/host".to_owned());
+
+        let result = run(&cli);
+
+        assert_eq!(result, Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_rejects_invalid_list_limit_without_network() {
+        let cli = cli(Some(Command::List(ListArgs {
+            tags: Vec::new(),
+            mime_prefix: None,
+            since: None,
+            limit: Some(0),
+            sort: None,
+            pinned: false,
+            page: None,
+        })));
+
+        let result = run(&cli);
+
+        assert_eq!(result, Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_returns_generic_for_unwired_commands() {
+        let cli = cli(Some(Command::Init));
+
+        let result = run(&cli);
+
+        assert_eq!(result, Ok(CliExitCode::Generic));
+    }
+
+    #[test]
+    fn run_rejects_remove_without_yes_when_non_interactive() {
+        let cli = cli(Some(Command::Remove(RemoveArgs {
+            id: "file-test".to_owned(),
+            yes: false,
+        })));
+
+        let result = run(&cli);
+
+        assert_eq!(result, Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_rejects_empty_tag_commands_without_network() {
+        let tag = cli(Some(Command::Tag(TagArgs {
+            id: "file-test".to_owned(),
+            tags: Vec::new(),
+        })));
+        let untag = cli(Some(Command::Untag(TagArgs {
+            id: "file-test".to_owned(),
+            tags: Vec::new(),
+        })));
+
+        assert_eq!(run(&tag), Ok(CliExitCode::Usage));
+        assert_eq!(run(&untag), Ok(CliExitCode::Usage));
+    }
+
+    fn cli(command: Option<Command>) -> Cli {
+        Cli {
+            output: OutputArgs {
+                json: false,
+                quiet: false,
+                no_color: true,
+            },
+            logging: LoggingArgs { verbose: false },
+            connection: ConnectionArgs {
+                host: Some("127.0.0.1".to_owned()),
+                port: Some(8421),
+            },
+            upload: UploadArgs {
+                tags: Vec::new(),
+                pin: false,
+                rename: None,
+                parallel: None,
+                recursive: None,
+                all: false,
+                files: Vec::new(),
+            },
+            command,
+        }
+    }
 }

@@ -69,6 +69,18 @@ mod tests {
     }
 
     #[test]
+    fn timestamp_accessors_return_seconds() {
+        let timestamp = UnixTimestamp::new(1_700_000_000).unwrap_or_else(|error| panic!("{error}"));
+
+        assert_eq!(timestamp.seconds(), 1_700_000_000);
+        assert_eq!(timestamp.seconds_u64(), 1_700_000_000);
+        assert_eq!(
+            UnixTimestamp::max().seconds_u64(),
+            UnixTimestamp::MAX_SECONDS
+        );
+    }
+
+    #[test]
     fn negative_time_is_rejected() {
         assert_eq!(
             UnixTimestamp::new(-1),

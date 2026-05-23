@@ -1,0 +1,809 @@
+//! Multipart file upload delivery.
+
+use std::io::{Read, Write};
+use std::path::Path;
+
+use axum::extract::{Multipart, State};
+use axum::http::header::LOCATION;
+use axum::http::{HeaderName, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+use serde::Serialize;
+use tempfile::NamedTempFile;
+use tokio::task;
+use tssp_app::{UploadError, UploadRequest, UploadService};
+use tssp_domain::FileRecord;
+use tssp_ports::{BlobStore, Clock, FileRepository, IdGenerator, RepositoryError};
+
+use crate::{ErrorBody, ErrorResponse, HttpState};
+
+/// Handles completed HTTP upload streams through the application layer.
+pub trait FileUploadProvider: Send + Sync {
+    /// Stores one uploaded file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpUploadError`] when metadata is invalid, storage fails, or
+    /// the metadata commit cannot complete.
+    fn upload(&self, request: HttpUploadRequest) -> Result<HttpUploadOutcome, HttpUploadError>;
+}
+
+#[derive(Debug)]
+pub(crate) struct StaticFileUploadProvider;
+
+impl FileUploadProvider for StaticFileUploadProvider {
+    fn upload(&self, _request: HttpUploadRequest) -> Result<HttpUploadOutcome, HttpUploadError> {
+        Err(HttpUploadError::Unavailable {
+            message: "upload service is not configured".to_owned(),
+        })
+    }
+}
+
+/// Request passed from HTTP delivery to the upload provider.
+pub struct HttpUploadRequest {
+    /// Original filename from multipart metadata.
+    pub filename: String,
+    /// Optional MIME type from multipart metadata.
+    pub mime_type: Option<String>,
+    /// Repeated tag fields.
+    pub tags: Vec<String>,
+    /// Whether the file should be pinned at upload time.
+    pub pinned: bool,
+    /// Streaming file content.
+    pub source: Box<dyn Read + Send>,
+}
+
+/// Result returned by the upload provider.
+pub struct HttpUploadOutcome {
+    /// Created or deduplicated file record.
+    pub record: FileRecord,
+    /// True when stored bytes already existed.
+    pub deduplicated: bool,
+}
+
+/// Upload failure mapped to HTTP error responses.
+#[derive(Debug)]
+pub enum HttpUploadError {
+    /// Client supplied invalid metadata.
+    InvalidRequest {
+        /// Short client-facing message.
+        message: String,
+    },
+    /// Storage does not have enough room.
+    InsufficientStorage {
+        /// Short client-facing message.
+        message: String,
+    },
+    /// Metadata store is busy.
+    Busy {
+        /// Short client-facing message.
+        message: String,
+    },
+    /// Upload could not commit because of a conflict.
+    Conflict {
+        /// Short client-facing message.
+        message: String,
+    },
+    /// Upload service is unavailable.
+    Unavailable {
+        /// Short client-facing message.
+        message: String,
+    },
+    /// Unexpected server-side failure.
+    Internal {
+        /// Short client-facing message.
+        message: String,
+    },
+}
+
+impl HttpUploadError {
+    fn response(&self) -> Response {
+        let (status, code, message) = match self {
+            Self::InvalidRequest { message } => {
+                (StatusCode::BAD_REQUEST, "invalid_request", message.clone())
+            }
+            Self::InsufficientStorage { message } => {
+                (status_code(507), "insufficient_storage", message.clone())
+            }
+            Self::Busy { message } => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metadata_busy",
+                message.clone(),
+            ),
+            Self::Conflict { message } => (StatusCode::CONFLICT, "conflict", message.clone()),
+            Self::Unavailable { message } => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "upload_unavailable",
+                message.clone(),
+            ),
+            Self::Internal { message } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                message.clone(),
+            ),
+        };
+
+        (
+            status,
+            Json(ErrorResponse {
+                error: ErrorBody { code, message },
+            }),
+        )
+            .into_response()
+    }
+}
+
+/// Upload provider backed by the core application upload service.
+pub struct ApplicationFileUploadProvider<B, R, I, C> {
+    service: UploadService<B, R, I, C>,
+}
+
+impl<B, R, I, C> ApplicationFileUploadProvider<B, R, I, C> {
+    /// Creates a provider from an upload service.
+    #[must_use]
+    pub const fn new(service: UploadService<B, R, I, C>) -> Self {
+        Self { service }
+    }
+}
+
+impl<B, R, I, C> FileUploadProvider for ApplicationFileUploadProvider<B, R, I, C>
+where
+    B: BlobStore + Send + Sync,
+    R: FileRepository + Send + Sync,
+    I: IdGenerator + Send + Sync,
+    C: Clock + Send + Sync,
+{
+    fn upload(&self, mut request: HttpUploadRequest) -> Result<HttpUploadOutcome, HttpUploadError> {
+        let tag_refs = request.tags.iter().map(String::as_str).collect::<Vec<_>>();
+        let mut upload_request = UploadRequest {
+            filename: &request.filename,
+            mime_type: request.mime_type.as_deref(),
+            tags: &tag_refs,
+            pinned_at: request.pinned.then_some(1),
+            source: request.source.as_mut(),
+        };
+        self.service
+            .upload(&mut upload_request)
+            .map(|outcome| HttpUploadOutcome {
+                record: outcome.record,
+                deduplicated: outcome.deduplicated,
+            })
+            .map_err(map_upload_error)
+    }
+}
+
+pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multipart) -> Response {
+    let staged = match stage_multipart_upload(multipart, &state.upload_temp_dir).await {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+
+    let source = match staged.temp_file.reopen() {
+        Ok(file) => file,
+        Err(error) => {
+            return HttpUploadError::Internal {
+                message: format!("could not reopen staged upload: {error}"),
+            }
+            .response();
+        }
+    };
+
+    let upload_provider = state.upload_provider.clone();
+    let upload_request = HttpUploadRequest {
+        filename: staged.filename,
+        mime_type: staged.mime_type,
+        tags: staged.tags,
+        pinned: staged.pinned,
+        source: Box::new(source),
+    };
+
+    let _mutation_guard = state.storage_mutation_lock.lock().await;
+    match task::spawn_blocking(move || upload_provider.upload(upload_request)).await {
+        Ok(Ok(outcome)) => upload_success_response(&outcome),
+        Ok(Err(error)) => error.response(),
+        Err(error) => HttpUploadError::Internal {
+            message: format!("upload worker failed: {error}"),
+        }
+        .response(),
+    }
+}
+
+struct StagedMultipartUpload {
+    filename: String,
+    mime_type: Option<String>,
+    tags: Vec<String>,
+    pinned: bool,
+    temp_file: NamedTempFile,
+}
+
+async fn stage_multipart_upload(
+    mut multipart: Multipart,
+    upload_temp_dir: &Path,
+) -> Result<StagedMultipartUpload, HttpUploadError> {
+    std::fs::create_dir_all(upload_temp_dir).map_err(|error| HttpUploadError::Internal {
+        message: format!("could not create upload temp directory: {error}"),
+    })?;
+    let mut temp_file =
+        NamedTempFile::new_in(upload_temp_dir).map_err(|error| HttpUploadError::Internal {
+            message: format!("could not create staged upload file: {error}"),
+        })?;
+    let mut filename = None;
+    let mut mime_type = None;
+    let mut tags = Vec::new();
+    let mut pinned = false;
+
+    while let Some(field) = next_field(&mut multipart).await? {
+        let Some(name) = field.name().map(str::to_owned) else {
+            return Err(HttpUploadError::InvalidRequest {
+                message: "multipart field is missing a name".to_owned(),
+            });
+        };
+
+        match name.as_str() {
+            "file" => {
+                ensure_single_file(filename.as_ref())?;
+                let next_filename = field
+                    .file_name()
+                    .map_or_else(|| "upload.bin".to_owned(), str::to_owned);
+                mime_type = field.content_type().map(str::to_owned);
+                write_field_to_temp(field, &mut temp_file).await?;
+                filename = Some(next_filename);
+            }
+            "tag" | "tags" => tags.push(field_text(field).await?),
+            "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
+            "destination" | "destination_hint" => {
+                let _ignored = field_text(field).await?;
+            }
+            _unknown => return Err(unknown_field(&name)),
+        }
+    }
+
+    finish_staged_upload(filename, mime_type, tags, pinned, temp_file)
+}
+
+async fn next_field(
+    multipart: &mut Multipart,
+) -> Result<Option<axum::extract::multipart::Field<'_>>, HttpUploadError> {
+    multipart
+        .next_field()
+        .await
+        .map_err(|error| HttpUploadError::InvalidRequest {
+            message: format!("invalid multipart upload: {error}"),
+        })
+}
+
+fn ensure_single_file(filename: Option<&String>) -> Result<(), HttpUploadError> {
+    if filename.is_some() {
+        return Err(HttpUploadError::InvalidRequest {
+            message: "single-file upload accepts exactly one file field".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn unknown_field(name: &str) -> HttpUploadError {
+    HttpUploadError::InvalidRequest {
+        message: format!("unknown multipart field: {name}"),
+    }
+}
+
+fn finish_staged_upload(
+    filename: Option<String>,
+    mime_type: Option<String>,
+    tags: Vec<String>,
+    pinned: bool,
+    mut temp_file: NamedTempFile,
+) -> Result<StagedMultipartUpload, HttpUploadError> {
+    let Some(filename) = filename else {
+        return Err(HttpUploadError::InvalidRequest {
+            message: "multipart upload must include a file field".to_owned(),
+        });
+    };
+
+    temp_file
+        .flush()
+        .map_err(|error| HttpUploadError::Internal {
+            message: format!("could not flush staged upload: {error}"),
+        })?;
+    temp_file
+        .as_file()
+        .sync_all()
+        .map_err(|error| HttpUploadError::Internal {
+            message: format!("could not sync staged upload: {error}"),
+        })?;
+
+    Ok(StagedMultipartUpload {
+        filename,
+        mime_type,
+        tags,
+        pinned,
+        temp_file,
+    })
+}
+
+async fn write_field_to_temp(
+    mut field: axum::extract::multipart::Field<'_>,
+    temp_file: &mut NamedTempFile,
+) -> Result<(), HttpUploadError> {
+    while let Some(chunk) =
+        field
+            .chunk()
+            .await
+            .map_err(|error| HttpUploadError::InvalidRequest {
+                message: format!("invalid file field: {error}"),
+            })?
+    {
+        temp_file
+            .write_all(&chunk)
+            .map_err(|error| HttpUploadError::Internal {
+                message: format!("could not write staged upload: {error}"),
+            })?;
+    }
+    Ok(())
+}
+
+async fn field_text(field: axum::extract::multipart::Field<'_>) -> Result<String, HttpUploadError> {
+    field
+        .text()
+        .await
+        .map_err(|error| HttpUploadError::InvalidRequest {
+            message: format!("invalid text field: {error}"),
+        })
+}
+
+fn parse_pin_field(value: &str) -> Result<bool, HttpUploadError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Ok(true);
+    }
+
+    if matches!(normalized.as_str(), "1" | "true" | "yes" | "on") {
+        return Ok(true);
+    }
+    if matches!(normalized.as_str(), "0" | "false" | "no" | "off") {
+        return Ok(false);
+    }
+
+    Err(HttpUploadError::InvalidRequest {
+        message: format!("invalid pin value: {value}"),
+    })
+}
+
+fn upload_success_response(outcome: &HttpUploadOutcome) -> Response {
+    let status = if outcome.deduplicated {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    let record = FileRecordResponse::from_record(&outcome.record);
+    let mut response = (status, Json(record)).into_response();
+    response.headers_mut().insert(
+        HeaderName::from_static("x-tssp-deduplicated"),
+        HeaderValue::from_static(if outcome.deduplicated {
+            "true"
+        } else {
+            "false"
+        }),
+    );
+    if let Ok(location) = HeaderValue::from_str(&format!("/api/v1/files/{}", outcome.record.id)) {
+        response.headers_mut().insert(LOCATION, location);
+    }
+    response
+}
+
+/// JSON representation of one file record.
+#[derive(Debug, Serialize)]
+pub struct FileRecordResponse {
+    /// Stable response schema version.
+    pub schema_version: u8,
+    /// Client-visible file id.
+    pub id: String,
+    /// Original filename.
+    pub name: String,
+    /// File size in bytes.
+    pub size_bytes: u64,
+    /// Lowercase BLAKE3 content hash.
+    pub content_hash: String,
+    /// MIME type used for serving the file.
+    pub mime_type: String,
+    /// Server-side UTC upload timestamp in Unix seconds.
+    pub uploaded_at: i64,
+    /// Normalized tag display names.
+    pub tags: Vec<String>,
+    /// Whether the file is pinned.
+    pub pinned: bool,
+}
+
+impl FileRecordResponse {
+    pub(crate) fn from_record(record: &FileRecord) -> Self {
+        Self {
+            schema_version: 1,
+            id: record.id.as_str().to_owned(),
+            name: record.name.original().to_owned(),
+            size_bytes: record.size.bytes(),
+            content_hash: record.content_hash.as_str().to_owned(),
+            mime_type: record.mime_type.as_str().to_owned(),
+            uploaded_at: record.uploaded_at.seconds(),
+            tags: record
+                .tags
+                .iter()
+                .map(|tag| tag.display().to_owned())
+                .collect(),
+            pinned: record.is_pinned(),
+        }
+    }
+}
+
+fn map_upload_error(error: UploadError) -> HttpUploadError {
+    match error {
+        UploadError::InvalidRequest(error) => HttpUploadError::InvalidRequest {
+            message: error.to_string(),
+        },
+        UploadError::IdGeneration(error) => HttpUploadError::Internal {
+            message: error.to_string(),
+        },
+        UploadError::BlobStore(tssp_ports::BlobStoreError::InsufficientStorage {
+            required_bytes,
+            available_bytes,
+        }) => HttpUploadError::InsufficientStorage {
+            message: format!(
+                "not enough storage for upload: required {required_bytes} bytes, available {available_bytes} bytes"
+            ),
+        },
+        UploadError::BlobStore(error) => HttpUploadError::Internal {
+            message: error.to_string(),
+        },
+        UploadError::DedupLookup(error) => map_commit_error(&error, None),
+        UploadError::CommitFailed {
+            repository,
+            cleanup,
+        } => map_commit_error(&repository, cleanup.as_ref()),
+    }
+}
+
+fn map_commit_error(
+    repository: &RepositoryError,
+    cleanup: Option<&tssp_ports::BlobStoreError>,
+) -> HttpUploadError {
+    if let Some(cleanup_error) = cleanup {
+        return HttpUploadError::Internal {
+            message: format!(
+                "metadata commit failed and cleanup also failed: {repository}; {cleanup_error}"
+            ),
+        };
+    }
+
+    match repository {
+        RepositoryError::Busy => HttpUploadError::Busy {
+            message: "metadata store is busy; retry the upload".to_owned(),
+        },
+        RepositoryError::Conflict { message } => HttpUploadError::Conflict {
+            message: message.clone(),
+        },
+        RepositoryError::NotFound | RepositoryError::OperationFailed { .. } => {
+            HttpUploadError::Internal {
+                message: repository.to_string(),
+            }
+        }
+    }
+}
+
+fn status_code(code: u16) -> StatusCode {
+    StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Cursor, Write};
+
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use tssp_app::UploadError;
+    use tssp_domain::{
+        ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
+        UnixTimestamp,
+    };
+    use tssp_ports::{BlobStoreError, IdGenerationError, RepositoryError};
+
+    use super::{
+        ensure_single_file, finish_staged_upload, map_commit_error, map_upload_error,
+        parse_pin_field, status_code, upload_success_response, FileUploadProvider, HttpUploadError,
+        HttpUploadOutcome, HttpUploadRequest, StaticFileUploadProvider,
+    };
+
+    #[test]
+    fn parse_pin_field_accepts_common_boolean_values() {
+        assert!(parse_pin_field("").unwrap_or_else(|error| panic!("{error:?}")));
+        assert!(parse_pin_field(" YES ").unwrap_or_else(|error| panic!("{error:?}")));
+        assert!(parse_pin_field("on").unwrap_or_else(|error| panic!("{error:?}")));
+        assert!(!parse_pin_field("0").unwrap_or_else(|error| panic!("{error:?}")));
+        assert!(!parse_pin_field("false").unwrap_or_else(|error| panic!("{error:?}")));
+    }
+
+    #[test]
+    fn parse_pin_field_rejects_unknown_value() {
+        let result = parse_pin_field("maybe");
+
+        assert!(
+            matches!(result, Err(HttpUploadError::InvalidRequest { message }) if message.contains("maybe"))
+        );
+    }
+
+    #[test]
+    fn ensure_single_file_rejects_duplicate_file_fields() {
+        let filename = "one.txt".to_owned();
+
+        let result = ensure_single_file(Some(&filename));
+
+        assert!(
+            matches!(result, Err(HttpUploadError::InvalidRequest { message }) if message.contains("exactly one"))
+        );
+    }
+
+    #[test]
+    fn finish_staged_upload_requires_file_field() {
+        let temp = tempfile::NamedTempFile::new()
+            .unwrap_or_else(|error| panic!("temp file failed: {error}"));
+
+        let result = finish_staged_upload(None, None, Vec::new(), false, temp);
+
+        assert!(
+            matches!(result, Err(HttpUploadError::InvalidRequest { message }) if message.contains("file field"))
+        );
+    }
+
+    #[test]
+    fn finish_staged_upload_flushes_and_returns_metadata() {
+        let mut temp = tempfile::NamedTempFile::new()
+            .unwrap_or_else(|error| panic!("temp file failed: {error}"));
+        temp.write_all(b"hello")
+            .unwrap_or_else(|error| panic!("write failed: {error}"));
+
+        let staged = finish_staged_upload(
+            Some("note.txt".to_owned()),
+            Some("text/plain".to_owned()),
+            vec!["Docs".to_owned()],
+            true,
+            temp,
+        )
+        .unwrap_or_else(|error| panic!("finish failed: {error:?}"));
+
+        assert_eq!(staged.filename, "note.txt");
+        assert_eq!(staged.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(staged.tags, vec!["Docs"]);
+        assert!(staged.pinned);
+    }
+
+    #[test]
+    fn static_upload_provider_reports_unavailable() {
+        let provider = StaticFileUploadProvider;
+        let request = HttpUploadRequest {
+            filename: "note.txt".to_owned(),
+            mime_type: None,
+            tags: Vec::new(),
+            pinned: false,
+            source: Box::new(Cursor::new(Vec::<u8>::new())),
+        };
+
+        let result = provider.upload(request);
+
+        assert!(
+            matches!(result, Err(HttpUploadError::Unavailable { message }) if message.contains("not configured"))
+        );
+    }
+
+    #[tokio::test]
+    async fn http_upload_error_response_uses_stable_status_and_error_codes() {
+        let cases = vec![
+            (
+                HttpUploadError::InvalidRequest {
+                    message: "bad".to_owned(),
+                },
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+            ),
+            (
+                HttpUploadError::InsufficientStorage {
+                    message: "full".to_owned(),
+                },
+                status_code(507),
+                "insufficient_storage",
+            ),
+            (
+                HttpUploadError::Busy {
+                    message: "busy".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metadata_busy",
+            ),
+            (
+                HttpUploadError::Conflict {
+                    message: "conflict".to_owned(),
+                },
+                StatusCode::CONFLICT,
+                "conflict",
+            ),
+            (
+                HttpUploadError::Unavailable {
+                    message: "missing".to_owned(),
+                },
+                StatusCode::SERVICE_UNAVAILABLE,
+                "upload_unavailable",
+            ),
+            (
+                HttpUploadError::Internal {
+                    message: "failed".to_owned(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+        ];
+
+        for (error, expected_status, expected_code) in cases {
+            let response = error.response();
+
+            assert_eq!(response.status(), expected_status);
+            let body = to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap_or_else(|error| panic!("body read failed: {error}"));
+            let parsed: serde_json::Value = serde_json::from_slice(&body)
+                .unwrap_or_else(|error| panic!("json parse failed: {error}"));
+            assert_eq!(parsed["error"]["code"], expected_code);
+        }
+    }
+
+    #[test]
+    fn map_upload_error_translates_application_errors() {
+        let Err(invalid) = FileName::new("") else {
+            panic!("empty filename unexpectedly parsed");
+        };
+        assert!(matches!(
+            map_upload_error(UploadError::InvalidRequest(invalid)),
+            HttpUploadError::InvalidRequest { .. }
+        ));
+
+        assert!(matches!(
+            map_upload_error(UploadError::IdGeneration(IdGenerationError {
+                message: "id failed".to_owned(),
+            })),
+            HttpUploadError::Internal { .. }
+        ));
+
+        assert!(matches!(
+            map_upload_error(UploadError::BlobStore(
+                BlobStoreError::InsufficientStorage {
+                    required_bytes: 10,
+                    available_bytes: 1,
+                },
+            )),
+            HttpUploadError::InsufficientStorage { .. }
+        ));
+
+        assert!(matches!(
+            map_upload_error(UploadError::BlobStore(BlobStoreError::ReadFailed {
+                message: "read failed".to_owned(),
+            })),
+            HttpUploadError::Internal { .. }
+        ));
+
+        assert!(matches!(
+            map_upload_error(UploadError::DedupLookup(RepositoryError::Busy)),
+            HttpUploadError::Busy { .. }
+        ));
+    }
+
+    #[test]
+    fn map_commit_error_preserves_retriable_and_conflict_failures() {
+        assert!(matches!(
+            map_commit_error(&RepositoryError::Busy, None),
+            HttpUploadError::Busy { .. }
+        ));
+        assert!(matches!(
+            map_commit_error(
+                &RepositoryError::Conflict {
+                    message: "duplicate id".to_owned(),
+                },
+                None,
+            ),
+            HttpUploadError::Conflict { .. }
+        ));
+        assert!(matches!(
+            map_commit_error(&RepositoryError::NotFound, None),
+            HttpUploadError::Internal { .. }
+        ));
+        assert!(matches!(
+            map_commit_error(
+                &RepositoryError::OperationFailed {
+                    message: "query failed".to_owned(),
+                },
+                Some(&BlobStoreError::CleanupFailed {
+                    handle: storage_handle(),
+                    message: "cleanup failed".to_owned(),
+                }),
+            ),
+            HttpUploadError::Internal { message } if message.contains("cleanup also failed")
+        ));
+    }
+
+    #[test]
+    fn status_code_falls_back_to_internal_error_for_invalid_values() {
+        assert_eq!(status_code(99), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn upload_success_response_sets_status_headers_and_body() {
+        let outcome = HttpUploadOutcome {
+            record: file_record(),
+            deduplicated: true,
+        };
+
+        let response = upload_success_response(&outcome);
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("x-tssp-deduplicated")
+                .and_then(|value| value.to_str().ok()),
+            Some("true")
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::LOCATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("/api/v1/files/file-test")
+        );
+        let body = to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        let parsed: serde_json::Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("json parse failed: {error}"));
+        assert_eq!(parsed["name"], "note.txt");
+        assert_eq!(parsed["pinned"], true);
+    }
+
+    fn file_record() -> FileRecord {
+        FileRecord {
+            id: file_id("file-test"),
+            name: filename("note.txt"),
+            size: FileSize::new(12),
+            content_hash: content_hash(),
+            mime_type: mime_type("text/plain"),
+            storage_handle: storage_handle(),
+            uploaded_at: timestamp(1_700_000_000),
+            tags: vec![tag_value("Docs")],
+            pinned_at: Some(1),
+        }
+    }
+
+    fn file_id(value: &str) -> FileId {
+        FileId::new(value).unwrap_or_else(|error| panic!("invalid file id: {error}"))
+    }
+
+    fn filename(value: &str) -> FileName {
+        FileName::new(value).unwrap_or_else(|error| panic!("invalid filename: {error}"))
+    }
+
+    fn content_hash() -> ContentHash {
+        ContentHash::new("abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123")
+            .unwrap_or_else(|error| panic!("invalid hash: {error}"))
+    }
+
+    fn mime_type(value: &str) -> MimeType {
+        MimeType::new(value).unwrap_or_else(|error| panic!("invalid mime type: {error}"))
+    }
+
+    fn storage_handle() -> StorageHandle {
+        StorageHandle::new("blobs/ab/cd/abcdef")
+            .unwrap_or_else(|error| panic!("invalid storage handle: {error}"))
+    }
+
+    fn timestamp(seconds: i64) -> UnixTimestamp {
+        UnixTimestamp::new(seconds).unwrap_or_else(|error| panic!("invalid timestamp: {error}"))
+    }
+
+    fn tag_value(value: &str) -> Tag {
+        Tag::new(value).unwrap_or_else(|error| panic!("invalid tag: {error}"))
+    }
+}

@@ -210,6 +210,15 @@ mod tests {
     }
 
     #[test]
+    fn token_trims_input_and_displays_value() {
+        let token = SessionToken::new(" abcdefghijklmnopqrstu1 ")
+            .unwrap_or_else(|error| panic!("token failed: {error}"));
+
+        assert_eq!(token.as_str(), "abcdefghijklmnopqrstu1");
+        assert_eq!(token.to_string(), "abcdefghijklmnopqrstu1");
+    }
+
+    #[test]
     fn token_rejects_padding() {
         assert_eq!(
             SessionToken::new("abcdefghijklmnopqrstu="),
@@ -234,6 +243,44 @@ mod tests {
                 field: "send session source file"
             })
         );
+    }
+
+    #[test]
+    fn expiration_must_be_after_creation() {
+        assert_eq!(
+            TransferSession::new(
+                token(),
+                SessionKind::Receive,
+                timestamp(20),
+                timestamp(20),
+                None
+            ),
+            Err(DomainError::OutOfRange {
+                field: "session expiration",
+                min: 21,
+                max: UnixTimestamp::MAX_SECONDS,
+                actual: 20
+            })
+        );
+    }
+
+    #[test]
+    fn receive_session_starts_unused_and_can_expire() {
+        let session = TransferSession::new(
+            token(),
+            SessionKind::Receive,
+            timestamp(10),
+            timestamp(20),
+            None,
+        )
+        .unwrap_or_else(|error| panic!("session failed: {error}"));
+
+        assert!(!session.is_used());
+        assert!(!session.is_expired_at(timestamp(19)));
+        assert!(session.is_expired_at(timestamp(20)));
+        assert_eq!(session.source_file, None);
+        assert_eq!(session.received_file, None);
+        assert_eq!(session.expected_name, None);
     }
 
     #[test]

@@ -60,9 +60,20 @@ changing the use-case code.
 
 ## Application Services
 
-`tssp-app` coordinates domain values and ports. The first service is
-`UploadService`, which streams bytes into `BlobStore`, creates metadata through
-`FileRepository`, and asks storage to clean up if metadata commit fails.
+`tssp-app` coordinates domain values and ports. `UploadService` streams bytes
+into `BlobStore`, creates metadata through `FileRepository`, and asks storage to
+clean up if metadata commit fails. When storage reports duplicate bytes, the
+service queries metadata by content hash and returns the oldest existing record
+instead of creating a second logical record.
+
+`DeleteFileService` removes one logical metadata record and receives the
+remaining content-reference count from the repository transaction. It removes
+the content-addressed blob only when no other file record still references the
+same hash.
+
+`TagService` lists tag summaries and performs idempotent add/remove mutations.
+It normalizes raw tag strings through the domain layer before asking the
+repository to update the join table.
 
 The application layer owns ordering and consistency rules. It does not contain
 HTTP status codes, SQLite statements, or terminal output.
@@ -123,12 +134,31 @@ The daemon foundation lives in `tsspd`. It currently exposes:
 - `GET /healthz`
 - `GET /readyz`
 - `GET /api/v1/status`
+- `POST /api/v1/files`
+- `GET /api/v1/files`
+- `GET /api/v1/tags`
+- `GET /api/v1/files/{id}`
+- `GET /api/v1/files/{id}/content`
+- `DELETE /api/v1/files/{id}`
+- `POST /api/v1/files/{id}/tags`
+- `DELETE /api/v1/files/{id}/tags/{tag}`
 - `GET /<any-non-api-path>` as a placeholder web shell
 
 The binary initializes the data directory, opens the SQLite metadata repository,
 verifies blob storage can be initialized, and wires repository-backed status
-counts into the HTTP state. Other handlers will call application services as
-capabilities are added.
+counts and upload storage into the HTTP state. The upload route stages multipart
+file content to a temporary file while reading chunks, then hands a blocking
+`Read` stream to the application upload service. The list route reads recent
+metadata through the repository-backed status provider, and the single-file
+route uses the same provider for id lookups. The content route combines metadata
+lookup with the read-side blob port, applies download headers, and handles
+single-range byte requests. The delete route calls the application delete
+service and reports idempotent deletes through headers. HTTP upload and delete
+storage mutations share a daemon-local async mutex so a final-reference blob
+cleanup cannot race with an in-flight upload that is trying to reuse the same
+content-addressed bytes. The tag routes use the application tag service and keep
+the metadata join-table rules out of HTTP handlers. Other handlers will call
+application services as capabilities are added.
 
 ## Dependency Direction
 
@@ -149,12 +179,21 @@ adapters, but inner crates never depend on delivery crates.
 
 Uploads are designed around streaming. The application service receives a
 `Read` stream and passes it to storage without buffering the whole file. The
-future filesystem adapter will write to a temporary file, fsync, and rename into
-a content-addressed path.
+filesystem adapter writes to a temporary file, fsyncs completed bytes, and
+renames into a content-addressed path.
+
+Downloads validate metadata before opening storage and return `410 Gone` when a
+metadata record points at a missing blob. Range requests are validated before
+reading bytes and rejected with `416 Range Not Satisfiable` plus
+`Content-Range: bytes */<size>` when the requested range cannot exist.
 
 The metadata commit happens only after blob storage succeeds. If metadata commit
 fails, the app calls `cleanup_unreferenced` on storage. This creates an explicit
 recovery point for crash-safe adapter implementations.
+
+Deletes commit metadata first, then clean the blob only after the repository has
+reported zero remaining references for that hash. Deleting an already absent id
+is a success and surfaces `x-tssp-already-gone: true` to clients.
 
 ## Security Boundary
 

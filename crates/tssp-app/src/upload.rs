@@ -52,6 +52,21 @@ where
             .unwrap_or_else(MimeType::octet_stream);
         let tags = normalize_tags(request.tags)?;
         let blob = self.blob_store.put_stream(request.source)?;
+        if blob.deduplicated {
+            match self
+                .repository
+                .find_file_by_content_hash(&blob.content_hash)
+            {
+                Ok(Some(record)) => {
+                    return Ok(UploadResult {
+                        record,
+                        deduplicated: true,
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => return Err(UploadError::DedupLookup(error)),
+            }
+        }
 
         let new_file = NewFileRecord {
             id: self.id_generator.new_file_id()?,
@@ -71,8 +86,12 @@ where
                 deduplicated: blob.deduplicated,
             }),
             Err(error) => {
-                let cleanup = self.blob_store.cleanup_unreferenced(&blob.handle);
-                Err(UploadError::commit_failed(error, cleanup.err()))
+                let cleanup = if blob.deduplicated {
+                    None
+                } else {
+                    self.blob_store.cleanup_unreferenced(&blob.handle).err()
+                };
+                Err(UploadError::commit_failed(error, cleanup))
             }
         }
     }
@@ -116,6 +135,10 @@ pub enum UploadError {
     #[error(transparent)]
     BlobStore(#[from] BlobStoreError),
 
+    /// Metadata lookup for an existing deduplicated blob failed.
+    #[error("metadata deduplication lookup failed")]
+    DedupLookup(RepositoryError),
+
     /// Metadata commit failed after blob storage succeeded.
     #[error("metadata commit failed after blob write")]
     CommitFailed {
@@ -156,11 +179,13 @@ mod tests {
     use std::io::{Cursor, Read};
 
     use tssp_domain::{
-        ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, UnixTimestamp,
+        ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag, TagKey,
+        UnixTimestamp,
     };
     use tssp_ports::{
-        BlobStore, BlobStoreError, BlobWriteOutcome, Clock, FileRepository, IdGenerationError,
-        IdGenerator, NewFileRecord, RepositoryError, RepositoryStats,
+        BlobStore, BlobStoreError, BlobWriteOutcome, Clock, DeletedFileRecord, FileRepository,
+        IdGenerationError, IdGenerator, NewFileRecord, PinOutcome, RepositoryError,
+        RepositoryStats, TagMutationOutcome, TagSummary,
     };
 
     use super::{UploadError, UploadRequest, UploadService};
@@ -229,23 +254,41 @@ mod tests {
 
     struct FakeRepository {
         failure: Option<RepositoryError>,
+        existing_by_hash: Option<FileRecord>,
+        insert_calls: RefCell<usize>,
+    }
+
+    impl FakeRepository {
+        fn ok() -> Self {
+            Self {
+                failure: None,
+                existing_by_hash: None,
+                insert_calls: RefCell::new(0),
+            }
+        }
+
+        fn failing(error: RepositoryError) -> Self {
+            Self {
+                failure: Some(error),
+                existing_by_hash: None,
+                insert_calls: RefCell::new(0),
+            }
+        }
+
+        fn with_existing(existing: FileRecord) -> Self {
+            Self {
+                failure: None,
+                existing_by_hash: Some(existing),
+                insert_calls: RefCell::new(0),
+            }
+        }
     }
 
     impl FileRepository for FakeRepository {
         fn insert_file(&self, new_file: NewFileRecord) -> Result<FileRecord, RepositoryError> {
+            *self.insert_calls.borrow_mut() += 1;
             if let Some(error) = &self.failure {
-                return Err(match error {
-                    RepositoryError::Busy => RepositoryError::Busy,
-                    RepositoryError::Conflict { message } => RepositoryError::Conflict {
-                        message: message.clone(),
-                    },
-                    RepositoryError::NotFound => RepositoryError::NotFound,
-                    RepositoryError::OperationFailed { message } => {
-                        RepositoryError::OperationFailed {
-                            message: message.clone(),
-                        }
-                    }
-                });
+                return Err(clone_repository_error(error));
             }
 
             Ok(FileRecord {
@@ -265,6 +308,45 @@ mod tests {
             Ok(None)
         }
 
+        fn find_file_by_content_hash(
+            &self,
+            _content_hash: &ContentHash,
+        ) -> Result<Option<FileRecord>, RepositoryError> {
+            if let Some(error) = &self.failure {
+                return Err(clone_repository_error(error));
+            }
+
+            Ok(self.existing_by_hash.clone())
+        }
+
+        fn delete_file(&self, _id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
+            Ok(None)
+        }
+
+        fn list_files_recent(&self, _limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn add_tags_to_file(
+            &self,
+            _id: &FileId,
+            _tags: &[Tag],
+        ) -> Result<TagMutationOutcome, RepositoryError> {
+            Ok(TagMutationOutcome { changed_count: 0 })
+        }
+
+        fn remove_tag_from_file(
+            &self,
+            _id: &FileId,
+            _tag: &TagKey,
+        ) -> Result<TagMutationOutcome, RepositoryError> {
+            Ok(TagMutationOutcome { changed_count: 0 })
+        }
+
         fn stats_since(
             &self,
             _recent_since: UnixTimestamp,
@@ -275,6 +357,45 @@ mod tests {
                 pinned_count: 0,
                 recent_upload_count: 0,
             })
+        }
+
+        fn pin_file(
+            &self,
+            _id: &FileId,
+            _position: Option<u32>,
+        ) -> Result<PinOutcome, RepositoryError> {
+            Ok(PinOutcome {
+                existed: true,
+                changed: false,
+            })
+        }
+
+        fn unpin_file(&self, _id: &FileId) -> Result<PinOutcome, RepositoryError> {
+            Ok(PinOutcome {
+                existed: true,
+                changed: false,
+            })
+        }
+
+        fn list_pinned_files(&self) -> Result<Vec<FileRecord>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn reorder_pins(&self, _ordered_ids: &[FileId]) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    fn clone_repository_error(error: &RepositoryError) -> RepositoryError {
+        match error {
+            RepositoryError::Busy => RepositoryError::Busy,
+            RepositoryError::Conflict { message } => RepositoryError::Conflict {
+                message: message.clone(),
+            },
+            RepositoryError::NotFound => RepositoryError::NotFound,
+            RepositoryError::OperationFailed { message } => RepositoryError::OperationFailed {
+                message: message.clone(),
+            },
         }
     }
 
@@ -330,7 +451,7 @@ mod tests {
         let store = blob_store(false);
         let service = UploadService::new(
             store,
-            FakeRepository { failure: None },
+            FakeRepository::ok(),
             QueueIds::new(vec![file_id("file-1")]),
             FixedClock,
         );
@@ -357,14 +478,39 @@ mod tests {
     }
 
     #[test]
+    fn deduplicated_upload_returns_existing_record_without_insert() {
+        let existing = existing_record();
+        let service = UploadService::new(
+            blob_store(true),
+            FakeRepository::with_existing(existing),
+            QueueIds::new(Vec::new()),
+            FixedClock,
+        );
+        let mut source = Cursor::new(b"hello world".as_slice());
+        let mut request = UploadRequest {
+            filename: "duplicate.jpg",
+            mime_type: Some("image/jpeg"),
+            tags: &["ignored"],
+            pinned_at: Some(1),
+            source: &mut source,
+        };
+
+        let result = service.upload(&mut request);
+
+        assert!(matches!(
+            result,
+            Ok(value) if value.record.id.as_str() == "file-existing" && value.deduplicated
+        ));
+        assert_eq!(*service.repository.insert_calls.borrow(), 0);
+    }
+
+    #[test]
     fn upload_cleans_blob_when_metadata_commit_fails() {
-        let store = blob_store(true);
+        let store = blob_store(false);
         let expected_handle = store.outcome.handle.clone();
         let service = UploadService::new(
             store,
-            FakeRepository {
-                failure: Some(RepositoryError::Busy),
-            },
+            FakeRepository::failing(RepositoryError::Busy),
             QueueIds::new(vec![file_id("file-1")]),
             FixedClock,
         );
@@ -390,5 +536,126 @@ mod tests {
             service.blob_store.cleanup_calls.borrow().as_slice(),
             &[expected_handle]
         );
+    }
+
+    #[test]
+    fn upload_rejects_invalid_request_metadata_before_storage() {
+        let service = UploadService::new(
+            blob_store(false),
+            FakeRepository::ok(),
+            QueueIds::new(vec![file_id("file-1")]),
+            FixedClock,
+        );
+        let mut source = Cursor::new(b"hello world".as_slice());
+        let mut request = UploadRequest {
+            filename: "",
+            mime_type: Some("text/plain"),
+            tags: &[],
+            pinned_at: None,
+            source: &mut source,
+        };
+
+        let result = service.upload(&mut request);
+
+        assert!(matches!(result, Err(UploadError::InvalidRequest(_))));
+        assert!(service.blob_store.cleanup_calls.borrow().is_empty());
+    }
+
+    #[test]
+    fn upload_reports_id_generation_failure_after_blob_write() {
+        let service = UploadService::new(
+            blob_store(false),
+            FakeRepository::ok(),
+            QueueIds::new(Vec::new()),
+            FixedClock,
+        );
+        let mut source = Cursor::new(b"hello world".as_slice());
+        let mut request = UploadRequest {
+            filename: "photo.jpg",
+            mime_type: None,
+            tags: &[],
+            pinned_at: None,
+            source: &mut source,
+        };
+
+        let result = service.upload(&mut request);
+
+        assert!(matches!(result, Err(UploadError::IdGeneration(_))));
+    }
+
+    #[test]
+    fn upload_reports_blob_read_failure() {
+        let service = UploadService::new(
+            blob_store(false),
+            FakeRepository::ok(),
+            QueueIds::new(vec![file_id("file-1")]),
+            FixedClock,
+        );
+        let mut source = FailingReader;
+        let mut request = UploadRequest {
+            filename: "photo.jpg",
+            mime_type: None,
+            tags: &[],
+            pinned_at: None,
+            source: &mut source,
+        };
+
+        let result = service.upload(&mut request);
+
+        assert!(matches!(
+            result,
+            Err(UploadError::BlobStore(BlobStoreError::ReadFailed { .. }))
+        ));
+    }
+
+    #[test]
+    fn deduplicated_upload_reports_lookup_failure() {
+        let service = UploadService::new(
+            blob_store(true),
+            FakeRepository::failing(RepositoryError::OperationFailed {
+                message: "lookup failed".to_owned(),
+            }),
+            QueueIds::new(Vec::new()),
+            FixedClock,
+        );
+        let mut source = Cursor::new(b"hello world".as_slice());
+        let mut request = UploadRequest {
+            filename: "duplicate.jpg",
+            mime_type: Some("image/jpeg"),
+            tags: &[],
+            pinned_at: None,
+            source: &mut source,
+        };
+
+        let result = service.upload(&mut request);
+
+        assert!(matches!(
+            result,
+            Err(UploadError::DedupLookup(
+                RepositoryError::OperationFailed { .. }
+            ))
+        ));
+    }
+
+    fn existing_record() -> FileRecord {
+        FileRecord {
+            id: file_id("file-existing"),
+            name: filename("original.jpg"),
+            size: FileSize::new(11),
+            content_hash: valid_hash(),
+            mime_type: mime_type("image/jpeg"),
+            storage_handle: handle(),
+            uploaded_at: FixedClock.now(),
+            tags: Vec::new(),
+            pinned_at: None,
+        }
+    }
+
+    struct FailingReader;
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("read failed"))
+        }
     }
 }

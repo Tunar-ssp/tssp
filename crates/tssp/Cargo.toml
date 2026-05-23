@@ -16,5 +16,8 @@ serde.workspace = true
 serde_json.workspace = true
 tssp-cli-core = { path = "../tssp-cli-core" }
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true
