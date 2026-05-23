@@ -6,10 +6,12 @@
 
 mod delete;
 mod pins;
+mod sessions;
 mod tags;
 mod upload;
 
 pub use delete::{DeleteFileError, DeleteFileResult, DeleteFileService};
 pub use pins::{PinError, PinService};
+pub use sessions::SessionService;
 pub use tags::{TagError, TagService};
 pub use upload::{UploadError, UploadRequest, UploadResult, UploadService};
