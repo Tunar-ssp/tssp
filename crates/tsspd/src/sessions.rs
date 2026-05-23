@@ -7,7 +7,14 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_domain::SessionToken;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use tssp_app::SessionService;
+use tssp_ports::{Clock, SessionRepository};
+
 use crate::{ErrorBody, ErrorResponse, HttpState};
+
+#[allow(dead_code)]
+static TOKEN_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Creates and manages transfer sessions for sharing.
 pub trait SessionProvider: Send + Sync {
@@ -66,6 +73,106 @@ impl SessionProvider for StaticSessionProvider {
     }
 }
 
+/// Application-level session provider backed by SessionService.
+#[allow(dead_code)]
+pub struct ApplicationSessionProvider<R: SessionRepository, C: Clock> {
+    service: SessionService<R>,
+    clock: C,
+}
+
+impl<R: SessionRepository, C: Clock> ApplicationSessionProvider<R, C> {
+    /// Creates a new application session provider.
+    #[allow(dead_code)]
+    pub fn new(service: SessionService<R>, clock: C) -> Self {
+        Self { service, clock }
+    }
+}
+
+impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
+    for ApplicationSessionProvider<R, C>
+{
+    fn create_send_session(
+        &self,
+        file_id: &str,
+        ttl_seconds: u64,
+    ) -> Result<SessionResponse, String> {
+        let now = self.clock.now();
+        let token = generate_session_token();
+
+        let session = self
+            .service
+            .create_send_session(token, file_id, ttl_seconds, now)
+            .map_err(|e| format!("failed to create send session: {e}"))?;
+
+        Ok(SessionResponse {
+            token: session.token.as_str().to_string(),
+            kind: match session.kind {
+                tssp_domain::SessionKind::Send => "send".to_string(),
+                tssp_domain::SessionKind::Receive => "receive".to_string(),
+            },
+            created_at: session.created_at.seconds(),
+            expires_at: session.expires_at.seconds(),
+            source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
+            received_file: session.received_file.as_ref().map(|f| f.as_str().to_string()),
+            expected_name: session.expected_name.as_ref().map(|n| n.original().to_string()),
+            used_at: None,
+        })
+    }
+
+    fn create_receive_session(&self, ttl_seconds: u64) -> Result<SessionResponse, String> {
+        let now = self.clock.now();
+        let token = generate_session_token();
+
+        let session = self
+            .service
+            .create_receive_session(token, ttl_seconds, now)
+            .map_err(|e| format!("failed to create receive session: {e}"))?;
+
+        Ok(SessionResponse {
+            token: session.token.as_str().to_string(),
+            kind: match session.kind {
+                tssp_domain::SessionKind::Send => "send".to_string(),
+                tssp_domain::SessionKind::Receive => "receive".to_string(),
+            },
+            created_at: session.created_at.seconds(),
+            expires_at: session.expires_at.seconds(),
+            source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
+            received_file: session.received_file.as_ref().map(|f| f.as_str().to_string()),
+            expected_name: session.expected_name.as_ref().map(|n| n.original().to_string()),
+            used_at: None,
+        })
+    }
+
+    fn get_session(&self, token: &SessionToken) -> Result<SessionResponse, String> {
+        let session = self
+            .service
+            .get_session(token)
+            .map_err(|e| format!("failed to get session: {e}"))?
+            .ok_or_else(|| "session not found".to_string())?;
+
+        Ok(SessionResponse {
+            token: session.token.as_str().to_string(),
+            kind: match session.kind {
+                tssp_domain::SessionKind::Send => "send".to_string(),
+                tssp_domain::SessionKind::Receive => "receive".to_string(),
+            },
+            created_at: session.created_at.seconds(),
+            expires_at: session.expires_at.seconds(),
+            source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
+            received_file: session.received_file.as_ref().map(|f| f.as_str().to_string()),
+            expected_name: session.expected_name.as_ref().map(|n| n.original().to_string()),
+            used_at: None,
+        })
+    }
+
+    fn use_session(&self, token: &SessionToken) -> Result<(), String> {
+        let now = self.clock.now();
+        self.service
+            .use_session(token, now)
+            .map_err(|e| format!("failed to use session: {e}"))
+    }
+}
+
 /// HTTP response for session operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionResponse {
@@ -111,6 +218,31 @@ pub struct CreateReceiveSessionRequest {
 
 fn default_ttl() -> u64 {
     86_400
+}
+
+#[allow(dead_code)]
+fn generate_session_token() -> SessionToken {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let counter = TOKEN_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+    // Generate a 22-character base64url-compatible token from timestamp and counter
+    // Use only characters from base64url alphabet: a-zA-Z0-9-_
+    let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut token = String::with_capacity(22);
+
+    let combined = timestamp.wrapping_mul(1000000).wrapping_add(counter);
+    let mut value = combined;
+
+    for _ in 0..22 {
+        let idx = (value % 64) as usize;
+        token.push(alphabet.chars().nth(idx).unwrap());
+        value /= 64;
+    }
+
+    SessionToken::new(&token).expect("failed to create valid token")
 }
 
 /// HTTP error response for session operations.
