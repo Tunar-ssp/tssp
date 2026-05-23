@@ -61,12 +61,10 @@ struct UploadPlan {
 impl UploadPlan {
     fn from_args(args: &UploadArgs) -> Result<Self, UploadInputError> {
         if args.all {
-            return Err(UploadInputError::usage(
-                "uploading all files is not wired yet",
-            ));
+            return Self::from_all_files(args);
         }
-        if args.recursive.is_some() {
-            return Err(UploadInputError::usage("recursive upload is not wired yet"));
+        if let Some(root) = &args.recursive {
+            return Self::from_recursive(root, args);
         }
         if args.files.is_empty() {
             return Err(UploadInputError::usage("no files specified for upload"));
@@ -82,6 +80,86 @@ impl UploadPlan {
             .iter()
             .map(|path| UploadItem::from_path(path, args))
             .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { items })
+    }
+
+    fn from_all_files(args: &UploadArgs) -> Result<Self, UploadInputError> {
+        let current_dir = std::env::current_dir().map_err(|error| {
+            UploadInputError::from_io_error(
+                format!("could not read current directory: {error}"),
+                &error,
+            )
+        })?;
+
+        let mut items = Vec::new();
+        for entry in std::fs::read_dir(&current_dir).map_err(|error| {
+            UploadInputError::from_io_error(
+                format!("could not list current directory: {error}"),
+                &error,
+            )
+        })? {
+            let entry = entry.map_err(|error| {
+                UploadInputError::from_io_error(
+                    format!("could not read directory entry: {error}"),
+                    &error,
+                )
+            })?;
+            let path = entry.path();
+            if path.is_file() && !is_hidden(&path) {
+                items.push(UploadItem::from_path(&path, args)?);
+            }
+        }
+
+        if items.is_empty() {
+            return Err(UploadInputError::usage(
+                "no non-hidden files found in current directory",
+            ));
+        }
+
+        Ok(Self { items })
+    }
+
+    fn from_recursive(root: &Path, args: &UploadArgs) -> Result<Self, UploadInputError> {
+        if !root.is_dir() {
+            return Err(UploadInputError::usage(format!(
+                "{} is not a directory",
+                root.display()
+            )));
+        }
+
+        let mut items = Vec::new();
+        let mut queue = VecDeque::from([root.to_path_buf()]);
+
+        while let Some(dir) = queue.pop_front() {
+            for entry in std::fs::read_dir(&dir).map_err(|error| {
+                UploadInputError::from_io_error(
+                    format!("could not list {}: {error}", dir.display()),
+                    &error,
+                )
+            })? {
+                let entry = entry.map_err(|error| {
+                    UploadInputError::from_io_error(
+                        format!("could not read directory entry: {error}"),
+                        &error,
+                    )
+                })?;
+                let path = entry.path();
+                if !is_hidden(&path) {
+                    if path.is_dir() {
+                        queue.push_back(path);
+                    } else if path.is_file() {
+                        items.push(UploadItem::from_path(&path, args)?);
+                    }
+                }
+            }
+        }
+
+        if items.is_empty() {
+            return Err(UploadInputError::usage(
+                "no files found in the specified directory tree",
+            ));
+        }
+
         Ok(Self { items })
     }
 }
@@ -329,6 +407,12 @@ impl<'a> UploadOutput<'a> {
     }
 }
 
+fn is_hidden(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map_or(false, |name| name.starts_with('.'))
+}
+
 fn upload_filename(path: &Path, args: &UploadArgs) -> Result<String, String> {
     if let Some(rename) = &args.rename {
         return Ok(rename.clone());
@@ -509,24 +593,62 @@ mod tests {
     }
 
     #[test]
-    fn upload_plan_rejects_all_flag_until_wired() {
+    fn upload_plan_rejects_all_flag_when_no_files_in_directory() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let current = std::env::current_dir().unwrap_or_else(|error| panic!("cwd failed: {error}"));
+        std::env::set_current_dir(temp.path())
+            .unwrap_or_else(|error| panic!("chdir failed: {error}"));
+        let mut args = upload_args(Vec::new());
+        args.all = true;
+        args.files = Vec::new(); // Ensure no files are specified
+
+        let plan = UploadPlan::from_args(&args);
+        std::env::set_current_dir(&current).ok();
+
+        assert!(matches!(plan, Err(error) if error.message.contains("no files") || error.message.contains("no non-hidden")));
+    }
+
+    #[test]
+    fn upload_plan_accepts_all_flag_with_files_in_directory() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let file1 = temp.path().join("file1.txt");
+        std::fs::write(&file1, b"data").unwrap_or_else(|error| panic!("write failed: {error}"));
+        let current = std::env::current_dir().unwrap_or_else(|error| panic!("cwd failed: {error}"));
+        std::env::set_current_dir(temp.path())
+            .unwrap_or_else(|error| panic!("chdir failed: {error}"));
         let mut args = upload_args(Vec::new());
         args.all = true;
 
         let plan = UploadPlan::from_args(&args);
+        std::env::set_current_dir(&current).ok();
 
-        assert!(matches!(plan, Err(error) if error.message.contains("all files")));
+        assert!(plan.is_ok());
+        assert_eq!(plan.unwrap().items.len(), 1);
     }
 
     #[test]
-    fn upload_plan_rejects_recursive_flag_until_wired() {
+    fn upload_plan_rejects_recursive_flag_when_directory_is_empty() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let mut args = upload_args(Vec::new());
         args.recursive = Some(temp.path().to_path_buf());
 
         let plan = UploadPlan::from_args(&args);
 
-        assert!(matches!(plan, Err(error) if error.message.contains("recursive")));
+        assert!(matches!(plan, Err(error) if error.message.contains("no files")));
+    }
+
+    #[test]
+    fn upload_plan_accepts_recursive_flag_with_files() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let file1 = temp.path().join("file1.txt");
+        std::fs::write(&file1, b"data").unwrap_or_else(|error| panic!("write failed: {error}"));
+        let mut args = upload_args(Vec::new());
+        args.recursive = Some(temp.path().to_path_buf());
+
+        let plan = UploadPlan::from_args(&args);
+
+        assert!(plan.is_ok());
+        assert_eq!(plan.unwrap().items.len(), 1);
     }
 
     #[test]
@@ -776,10 +898,17 @@ mod tests {
 
     #[test]
     fn run_returns_usage_on_plan_error() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let current = std::env::current_dir().unwrap_or_else(|error| panic!("cwd failed: {error}"));
+        std::env::set_current_dir(temp.path())
+            .unwrap_or_else(|error| panic!("chdir failed: {error}"));
         let mut cli_args = cli(false, false);
         cli_args.upload.all = true;
 
-        assert_eq!(super::run(&cli_args), Ok(CliExitCode::Usage));
+        let result = super::run(&cli_args);
+        std::env::set_current_dir(&current).ok();
+
+        assert_eq!(result, Ok(CliExitCode::Usage));
     }
 
     fn file_record() -> FileRecordResponse {
