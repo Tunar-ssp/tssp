@@ -26,7 +26,9 @@ impl<R: SessionRepository> SessionService<R> {
         ttl_seconds: u64,
         now: UnixTimestamp,
     ) -> Result<TransferSession, RepositoryError> {
-        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl_seconds as i64))
+        #[allow(clippy::cast_possible_wrap)]
+        let ttl = ttl_seconds as i64;
+        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl))
             .map_err(|e| RepositoryError::OperationFailed {
                 message: format!("failed to calculate session expiration: {e}"),
             })?;
@@ -57,7 +59,9 @@ impl<R: SessionRepository> SessionService<R> {
         ttl_seconds: u64,
         now: UnixTimestamp,
     ) -> Result<TransferSession, RepositoryError> {
-        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl_seconds as i64))
+        #[allow(clippy::cast_possible_wrap)]
+        let ttl = ttl_seconds as i64;
+        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl))
             .map_err(|e| RepositoryError::OperationFailed {
                 message: format!("failed to calculate session expiration: {e}"),
             })?;
