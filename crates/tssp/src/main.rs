@@ -3,12 +3,12 @@
 mod backend;
 mod info;
 mod list;
+mod pins;
 mod pull;
 mod remove;
 mod status;
 mod tags;
 mod upload;
-mod pins;
 
 use std::io::{self, Write};
 use std::process::ExitCode;

@@ -19,7 +19,9 @@ pub(crate) fn run_pin(cli: &Cli, args: &PinArgs) -> Result<CliExitCode, String> 
     let client = build_client()?;
     let url = format!("{}/api/v1/files/{}/pin", address.base_url(), args.id);
 
-    let mut request = client.put(url).header(ACCEPT, "application/vnd.tssp.v1+json");
+    let mut request = client
+        .put(url)
+        .header(ACCEPT, "application/vnd.tssp.v1+json");
     if let Some(pos) = args.position {
         request = request.json(&serde_json::json!({ "position": pos }));
     }
@@ -136,7 +138,7 @@ fn run_pins_list(cli: &Cli) -> Result<CliExitCode, String> {
     let text = response
         .text()
         .map_err(|error| format!("failed to read response: {error}"))?;
-    
+
     if cli.output.json {
         println!("{text}");
         return Ok(CliExitCode::Success);
@@ -144,7 +146,7 @@ fn run_pins_list(cli: &Cli) -> Result<CliExitCode, String> {
 
     let parsed: serde_json::Value =
         serde_json::from_str(&text).map_err(|error| format!("invalid json: {error}"))?;
-    
+
     if let Some(files) = parsed["files"].as_array() {
         for file in files {
             if let (Some(id), Some(name)) = (file["id"].as_str(), file["name"].as_str()) {
@@ -223,9 +225,9 @@ fn print_status_error(status: StatusCode, code: CliExitCode, id: &str) {
 
 #[cfg(test)]
 mod tests {
+    use super::classify_response_status;
     use reqwest::StatusCode;
     use tssp_cli_core::CliExitCode;
-    use super::classify_response_status;
 
     #[test]
     fn response_status_maps_pin_contract() {

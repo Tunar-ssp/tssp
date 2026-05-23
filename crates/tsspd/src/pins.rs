@@ -184,7 +184,10 @@ where
     }
 
     fn unpin(&self, id: String) -> Result<HttpPinMutation, HttpPinError> {
-        self.service.unpin(&id).map(Into::into).map_err(map_pin_error)
+        self.service
+            .unpin(&id)
+            .map(Into::into)
+            .map_err(map_pin_error)
     }
 
     fn reorder(&self, ids: Vec<String>) -> Result<(), HttpPinError> {
@@ -302,7 +305,10 @@ impl PinListResponse {
     fn from_records(records: &[FileRecord]) -> Self {
         Self {
             schema_version: 1,
-            files: records.iter().map(FileRecordResponse::from_record).collect(),
+            files: records
+                .iter()
+                .map(FileRecordResponse::from_record)
+                .collect(),
         }
     }
 }

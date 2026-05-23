@@ -62,10 +62,7 @@ where
     ///
     /// Returns [`PinError`] when any id is invalid or the reorder fails.
     pub fn reorder(&self, ids: &[&str]) -> Result<(), PinError> {
-        let file_ids: Vec<FileId> = ids
-            .iter()
-            .map(FileId::new)
-            .collect::<Result<Vec<_>, _>>()?;
+        let file_ids: Vec<FileId> = ids.iter().map(FileId::new).collect::<Result<Vec<_>, _>>()?;
         self.repository
             .reorder_pins(&file_ids)
             .map_err(PinError::Repository)
@@ -122,10 +119,7 @@ mod tests {
             Ok(None)
         }
 
-        fn delete_file(
-            &self,
-            _id: &FileId,
-        ) -> Result<Option<DeletedFileRecord>, RepositoryError> {
+        fn delete_file(&self, _id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
             Ok(None)
         }
 
