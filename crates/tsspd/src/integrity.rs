@@ -67,10 +67,7 @@ pub fn run_startup_integrity_scan(
     match count_missing_blobs(&repository, &blob_store) {
         Ok(missing) => {
             if missing > 0 {
-                tracing::warn!(
-                    missing,
-                    "integrity scan found files with missing blobs"
-                );
+                tracing::warn!(missing, "integrity scan found files with missing blobs");
             } else {
                 tracing::info!("integrity scan: all indexed blobs present");
             }
@@ -91,10 +88,9 @@ mod tests {
     #[test]
     fn missing_blob_is_not_found() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let hash = ContentHash::new(
-            "0000000000000000000000000000000000000000000000000000000000000000",
-        )
-        .expect("hash");
+        let hash =
+            ContentHash::new("0000000000000000000000000000000000000000000000000000000000000000")
+                .expect("hash");
         assert!(!blob_exists(temp.path(), &hash));
     }
 

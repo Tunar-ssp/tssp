@@ -51,9 +51,8 @@ impl AuthStore {
             .connection
             .lock()
             .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
-        let mut statement = connection.prepare(
-            "SELECT value FROM auth_config WHERE key = 'password_hash' LIMIT 1",
-        )?;
+        let mut statement = connection
+            .prepare("SELECT value FROM auth_config WHERE key = 'password_hash' LIMIT 1")?;
         let mut rows = statement.query([])?;
         if let Some(row) = rows.next()? {
             return Ok(Some(row.get(0)?));
@@ -91,6 +90,8 @@ impl AuthStore {
         &self,
         token: &str,
         kind: &str,
+        user_id: Option<&str>,
+        device_id: Option<&str>,
         created_at: i64,
         expires_at: i64,
     ) -> Result<(), AuthStoreError> {
@@ -99,19 +100,50 @@ impl AuthStore {
             .lock()
             .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
         connection.execute(
-            "INSERT INTO auth_tokens (token, kind, created_at, expires_at)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![token, kind, created_at, expires_at],
+            "INSERT INTO auth_tokens (token, kind, user_id, device_id, created_at, expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![token, kind, user_id, device_id, created_at, expires_at],
         )?;
         Ok(())
     }
 
-    /// Returns true when the token exists and has not expired.
+    /// Returns session identity for a valid token.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the lookup fails.
+    pub fn token_session(
+        &self,
+        token: &str,
+        now: i64,
+    ) -> Result<Option<(String, String, String)>, AuthStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let mut statement = connection.prepare(
+            "SELECT u.id, u.role, u.name
+             FROM auth_tokens t
+             JOIN users u ON u.id = t.user_id
+             WHERE t.token = ?1 AND t.expires_at > ?2 AND u.disabled_at IS NULL
+             LIMIT 1",
+        )?;
+        let mut rows = statement.query(params![token, now])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        Ok(Some((row.get(0)?, row.get(1)?, row.get(2)?)))
+    }
+
+    /// Returns true when the token exists and has not expired (legacy).
     ///
     /// # Errors
     ///
     /// Returns an error when the lookup fails.
     pub fn token_valid(&self, token: &str, now: i64) -> Result<bool, AuthStoreError> {
+        if token.trim().is_empty() {
+            return Ok(false);
+        }
         let connection = self
             .connection
             .lock()
@@ -175,6 +207,8 @@ fn run_auth_migration(connection: &Connection) -> Result<(), AuthStoreError> {
         CREATE TABLE IF NOT EXISTS auth_tokens (
             token TEXT PRIMARY KEY,
             kind TEXT NOT NULL,
+            user_id TEXT,
+            device_id TEXT,
             created_at INTEGER NOT NULL,
             expires_at INTEGER NOT NULL
         );
@@ -214,10 +248,7 @@ mod tests {
             .set_password_hash("$2b$12$abcdefghijklmnopqrstuv")
             .expect("write");
         let hash = store.password_hash().expect("read");
-        assert_eq!(
-            hash.as_deref(),
-            Some("$2b$12$abcdefghijklmnopqrstuv")
-        );
+        assert_eq!(hash.as_deref(), Some("$2b$12$abcdefghijklmnopqrstuv"));
     }
 
     #[test]
@@ -225,7 +256,7 @@ mod tests {
         let (_temp, path) = temp_db();
         let store = AuthStore::open(&path).expect("open");
         store
-            .insert_token("tok-a", "api", 100, 200)
+            .insert_token("tok-a", "api", None, None, 100, 200)
             .expect("insert");
         assert!(store.token_valid("tok-a", 150).expect("valid"));
         assert!(!store.token_valid("tok-a", 200).expect("expired"));

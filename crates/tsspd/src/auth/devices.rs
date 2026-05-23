@@ -142,7 +142,10 @@ impl DeviceStore {
     /// # Errors
     ///
     /// Returns an error when the query fails.
-    pub fn list_devices(&self, user_id: Option<&UserId>) -> Result<Vec<TrustedDevice>, DeviceStoreError> {
+    pub fn list_devices(
+        &self,
+        user_id: Option<&UserId>,
+    ) -> Result<Vec<TrustedDevice>, DeviceStoreError> {
         let connection = self.lock()?;
         let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match user_id {
             Some(id) => (
@@ -174,8 +177,10 @@ impl DeviceStore {
     /// Returns an error when delete fails.
     pub fn revoke(&self, token: &str) -> Result<(), DeviceStoreError> {
         let connection = self.lock()?;
-        let changed =
-            connection.execute("DELETE FROM trusted_devices WHERE device_token = ?1", params![token])?;
+        let changed = connection.execute(
+            "DELETE FROM trusted_devices WHERE device_token = ?1",
+            params![token],
+        )?;
         if changed == 0 {
             return Err(DeviceStoreError::NotFound);
         }
@@ -219,16 +224,14 @@ impl DeviceStore {
 
 fn map_device_row(row: &rusqlite::Row<'_>) -> Result<TrustedDevice, DeviceStoreError> {
     let user_id = UserId::new(row.get::<_, String>(1)?).map_err(|error| {
-        DeviceStoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            error.to_string(),
-        ))))
+        DeviceStoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()),
+        )))
     })?;
     let role = UserRole::parse(&row.get::<_, String>(2)?).map_err(|error| {
-        DeviceStoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            error.to_string(),
-        ))))
+        DeviceStoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()),
+        )))
     })?;
     Ok(TrustedDevice {
         device_token: row.get(0)?,
@@ -268,9 +271,6 @@ fn run_devices_migration(connection: &Connection) -> Result<(), DeviceStoreError
         );
         CREATE INDEX IF NOT EXISTS idx_trusted_devices_user ON trusted_devices(user_id);
         CREATE INDEX IF NOT EXISTS idx_trusted_devices_expires ON trusted_devices(expires_at);
-
-        ALTER TABLE auth_tokens ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
-        ALTER TABLE auth_tokens ADD COLUMN device_id TEXT;
         ",
     )?;
 

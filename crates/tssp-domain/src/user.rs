@@ -16,20 +16,20 @@ impl UserId {
         let value = value.into();
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err(crate::DomainError::invalid("user id must not be empty"));
+            return Err(crate::DomainError::Empty { field: "user id" });
         }
         if trimmed.len() > 64 {
-            return Err(crate::DomainError::invalid(
-                "user id must not exceed 64 characters",
-            ));
+            return Err(crate::DomainError::TooLong {
+                field: "user id",
+                max: 64,
+                actual: trimmed.len(),
+            });
         }
         if !trimmed
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
         {
-            return Err(crate::DomainError::invalid(
-                "user id contains invalid characters",
-            ));
+            return Err(crate::DomainError::InvalidFormat { field: "user id" });
         }
         Ok(Self(trimmed.to_owned()))
     }
@@ -66,7 +66,7 @@ impl UserRole {
         match value.trim().to_ascii_lowercase().as_str() {
             "admin" => Ok(Self::Admin),
             "user" => Ok(Self::User),
-            _ => Err(crate::DomainError::invalid("unknown user role")),
+            _ => Err(crate::DomainError::InvalidFormat { field: "role" }),
         }
     }
 
@@ -100,7 +100,9 @@ impl Visibility {
         match value.trim().to_ascii_lowercase().as_str() {
             "private" => Ok(Self::Private),
             "public" => Ok(Self::Public),
-            _ => Err(crate::DomainError::invalid("unknown visibility")),
+            _ => Err(crate::DomainError::InvalidFormat {
+                field: "visibility",
+            }),
         }
     }
 
@@ -128,20 +130,20 @@ impl UserName {
         let value = value.into();
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err(crate::DomainError::invalid("user name must not be empty"));
+            return Err(crate::DomainError::Empty { field: "user name" });
         }
         if trimmed.len() > 64 {
-            return Err(crate::DomainError::invalid(
-                "user name must not exceed 64 characters",
-            ));
+            return Err(crate::DomainError::TooLong {
+                field: "user name",
+                max: 64,
+                actual: trimmed.len(),
+            });
         }
         if !trimmed
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
         {
-            return Err(crate::DomainError::invalid(
-                "user name contains invalid characters",
-            ));
+            return Err(crate::DomainError::InvalidFormat { field: "user name" });
         }
         Ok(Self(trimmed.to_owned()))
     }

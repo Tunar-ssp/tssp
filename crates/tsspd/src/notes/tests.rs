@@ -5,10 +5,10 @@ use std::sync::Arc;
 use axum::body::to_bytes;
 use axum::http::{Request, StatusCode};
 use axum::Router;
+use tower::ServiceExt;
 use tssp_adapter_sqlite::SqliteFileRepository;
 use tssp_adapter_system::{SystemClock, UuidV7FileIdGenerator};
 use tssp_app::NoteService;
-use tower::ServiceExt;
 
 use crate::notes::ApplicationNoteProvider;
 use crate::{build_router, HttpState};
@@ -18,8 +18,7 @@ fn note_router(repository: SqliteFileRepository) -> Router {
     let service = NoteService::new(repository, SystemClock, UuidV7FileIdGenerator);
     let provider = ApplicationNoteProvider::new(service);
     build_router(
-        HttpState::test_http_state( std::env::temp_dir())
-            .with_note_provider(Arc::new(provider)),
+        HttpState::test_http_state(std::env::temp_dir()).with_note_provider(Arc::new(provider)),
     )
 }
 

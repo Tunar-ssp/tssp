@@ -241,7 +241,7 @@ pub async fn admin_folders(State(state): State<HttpState>) -> impl IntoResponse 
                 })),
             )
         }
-            .into_response(),
+        .into_response(),
         Err(message) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {

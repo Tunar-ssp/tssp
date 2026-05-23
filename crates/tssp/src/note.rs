@@ -101,10 +101,13 @@ fn run_show(cli: &Cli, args: &NoteShowArgs) -> Result<CliExitCode, String> {
     let address = BackendAddress::from_connection_args(&cli.connection)
         .map_err(|message| format!("invalid backend address: {message}"))?;
     let client = build_client()?;
-    let response = api_get(&client, &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
-        .header(ACCEPT, "application/vnd.tssp.v1+json")
-        .send()
-        .map_err(|error| format!("could not reach daemon: {error}"))?;
+    let response = api_get(
+        &client,
+        &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)),
+    )
+    .header(ACCEPT, "application/vnd.tssp.v1+json")
+    .send()
+    .map_err(|error| format!("could not reach daemon: {error}"))?;
 
     if !response.status().is_success() {
         eprintln!("error: daemon returned {}", response.status());
@@ -116,7 +119,10 @@ fn run_show(cli: &Cli, args: &NoteShowArgs) -> Result<CliExitCode, String> {
         .map_err(|error| format!("invalid note response: {error}"))?;
 
     if cli.output.json {
-        println!("{}", serde_json::to_string(&note).map_err(|error| error.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string(&note).map_err(|error| error.to_string())?
+        );
         return Ok(CliExitCode::Success);
     }
 
@@ -143,11 +149,14 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
         body,
     };
     let client = build_client()?;
-    let response = api_put(&client, &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
-        .header(ACCEPT, "application/vnd.tssp.v1+json")
-        .json(&payload)
-        .send()
-        .map_err(|error| format!("could not reach daemon: {error}"))?;
+    let response = api_put(
+        &client,
+        &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)),
+    )
+    .header(ACCEPT, "application/vnd.tssp.v1+json")
+    .json(&payload)
+    .send()
+    .map_err(|error| format!("could not reach daemon: {error}"))?;
 
     handle_note_response(response, cli, "updated")
 }
@@ -156,10 +165,13 @@ fn run_delete(cli: &Cli, args: &NoteDeleteArgs) -> Result<CliExitCode, String> {
     let address = BackendAddress::from_connection_args(&cli.connection)
         .map_err(|message| format!("invalid backend address: {message}"))?;
     let client = build_client()?;
-    let response = api_delete(&client, &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
-        .header(ACCEPT, "application/vnd.tssp.v1+json")
-        .send()
-        .map_err(|error| format!("could not reach daemon: {error}"))?;
+    let response = api_delete(
+        &client,
+        &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)),
+    )
+    .header(ACCEPT, "application/vnd.tssp.v1+json")
+    .send()
+    .map_err(|error| format!("could not reach daemon: {error}"))?;
 
     if response.status() == StatusCode::NO_CONTENT || response.status().is_success() {
         if !cli.output.quiet {
@@ -184,7 +196,10 @@ fn handle_note_response(
         .json()
         .map_err(|error| format!("invalid note response: {error}"))?;
     if cli.output.json {
-        println!("{}", serde_json::to_string(&note).map_err(|error| error.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string(&note).map_err(|error| error.to_string())?
+        );
     } else if !cli.output.quiet {
         println!("{verb} note {} ({})", note.id, note.title);
     }

@@ -52,7 +52,9 @@ impl NoteTitle {
     pub fn new(value: impl AsRef<str>) -> Result<Self, DomainError> {
         let value = text::trim_and_collapse_whitespace(value.as_ref());
         if value.is_empty() {
-            return Err(DomainError::Empty { field: "note title" });
+            return Err(DomainError::Empty {
+                field: "note title",
+            });
         }
         if value.len() > MAX_TITLE_BYTES {
             return Err(DomainError::TooLong {

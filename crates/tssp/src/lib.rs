@@ -142,6 +142,10 @@ pub enum Command {
     Init,
     /// Authenticate against a remote daemon and store an API token.
     Login,
+    /// Clear the saved API token.
+    Logout,
+    /// Show the current authenticated user.
+    Whoami,
     /// Manage CLI configuration.
     Config(ConfigCommand),
     /// Manage Markdown notes.

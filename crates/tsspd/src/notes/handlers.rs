@@ -94,7 +94,11 @@ pub(crate) async fn get_note(State(state): State<HttpState>, Path(id): Path<Stri
     let provider = state.note_provider.clone();
 
     match run_blocking(provider, move |provider| provider.get_note(note_id)).await {
-        Ok(record) => (StatusCode::OK, Json(NoteRecordResponse::from_record(&record))).into_response(),
+        Ok(record) => (
+            StatusCode::OK,
+            Json(NoteRecordResponse::from_record(&record)),
+        )
+            .into_response(),
         Err(response) => response,
     }
 }
@@ -118,8 +122,16 @@ pub(crate) async fn update_note(
         body: body.body,
     };
 
-    match run_blocking(provider, move |provider| provider.update_note(note_id, request)).await {
-        Ok(record) => (StatusCode::OK, Json(NoteRecordResponse::from_record(&record))).into_response(),
+    match run_blocking(provider, move |provider| {
+        provider.update_note(note_id, request)
+    })
+    .await
+    {
+        Ok(record) => (
+            StatusCode::OK,
+            Json(NoteRecordResponse::from_record(&record)),
+        )
+            .into_response(),
         Err(response) => response,
     }
 }
@@ -179,10 +191,7 @@ pub(crate) async fn remove_note_tag(
     }
 }
 
-pub(crate) async fn pin_note(
-    State(state): State<HttpState>,
-    Path(id): Path<String>,
-) -> Response {
+pub(crate) async fn pin_note(State(state): State<HttpState>, Path(id): Path<String>) -> Response {
     pin_with_position(state, id, None).await
 }
 
@@ -199,24 +208,27 @@ pub(crate) async fn unpin_note(State(state): State<HttpState>, Path(id): Path<St
     }
 }
 
-async fn pin_with_position(
-    state: HttpState,
-    id: String,
-    position: Option<u32>,
-) -> Response {
+async fn pin_with_position(state: HttpState, id: String, position: Option<u32>) -> Response {
     let note_id = match parse_note_id(id) {
         Ok(value) => value,
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
 
-    match run_blocking(provider, move |provider| provider.pin_note(note_id, position)).await {
+    match run_blocking(provider, move |provider| {
+        provider.pin_note(note_id, position)
+    })
+    .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(response) => response,
     }
 }
 
-async fn run_blocking<T, F>(provider: std::sync::Arc<dyn NoteProvider>, work: F) -> Result<T, Response>
+async fn run_blocking<T, F>(
+    provider: std::sync::Arc<dyn NoteProvider>,
+    work: F,
+) -> Result<T, Response>
 where
     F: FnOnce(std::sync::Arc<dyn NoteProvider>) -> Result<T, HttpNoteError> + Send + 'static,
     T: Send + 'static,

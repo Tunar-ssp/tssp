@@ -7,17 +7,24 @@
       ev.preventDefault();
       const err = T.$("#login-error");
       err.classList.add("hidden");
-      const password = T.$("#login-password").value;
+      const name = T.$("#login-name").value.trim();
+      const code = T.$("#login-code").value;
+      const remember_device = T.$("#login-remember").checked;
       try {
         await fetch(T.API + "/auth/login", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({
+            name,
+            code,
+            remember_device,
+            device_name: navigator.userAgent.slice(0, 80),
+          }),
         }).then(async (res) => {
           if (!res.ok) {
             const b = await res.json().catch(() => ({}));
-            throw new Error(b.error?.message || b.error || "Invalid password");
+            throw new Error(b.error?.message || b.error || "Invalid credentials");
           }
         });
         T.showApp();
@@ -37,6 +44,15 @@
 
     T.$("#nav-toggle").addEventListener("click", () => {
       T.$("#side-nav").classList.toggle("open");
+    });
+
+    T.$("#logout-btn")?.addEventListener("click", async () => {
+      try {
+        await fetch(T.API + "/auth/logout", { method: "POST", credentials: "same-origin" });
+      } catch {
+        /* ignore */
+      }
+      T.showLogin();
     });
 
     T.$("#refresh-btn").addEventListener("click", () => {
@@ -88,6 +104,11 @@
       const editNote = ev.target.closest("[data-edit-note]");
       if (editNote) {
         T.openNote(editNote.dataset.editNote);
+        return;
+      }
+      const vis = ev.target.closest("[data-vis]");
+      if (vis) {
+        T.setFileVisibility(vis.dataset.vis, vis.dataset.v);
       }
     });
 

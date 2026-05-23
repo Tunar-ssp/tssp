@@ -19,9 +19,7 @@ mod user;
 pub use error::DomainError;
 pub use file::{FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle};
 pub use hash::ContentHash;
-pub use note::{
-    derive_note_title, NoteBody, NoteId, NoteRecord, NoteTitle, MAX_NOTE_BODY_BYTES,
-};
+pub use note::{derive_note_title, NoteBody, NoteId, NoteRecord, NoteTitle, MAX_NOTE_BODY_BYTES};
 pub use pagination::{Cursor, PageSize};
 pub use search_query::build_fts_query;
 pub use session::{SessionKind, SessionToken, TransferSession};

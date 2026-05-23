@@ -12,15 +12,18 @@ use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::{SqliteFileRepository, SqliteSessionRepository};
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
-use tssp_app::{DeleteFileService, NoteService, PinService, SessionService, TagService, UploadService};
+use tssp_app::{
+    DeleteFileService, NoteService, PinService, SessionService, TagService, UploadService,
+};
 use tssp_ports::Clock;
+use tsspd::workspaces::WorkspaceStore;
 use tsspd::{
-    auth::{AuthService, AuthStore},
+    auth::{AuthService, AuthStore, DeviceStore, UserStore},
     bind_error_message, build_router, run_startup_integrity_scan, spawn_advertisement,
-    ApplicationFileDeleteProvider,
-    ApplicationFilePinProvider, ApplicationFileTagProvider, ApplicationFileUploadProvider,
-    ApplicationNoteProvider, ApplicationSessionProvider, CliOverrides, DaemonSettings, HttpState,
-    PublicUrlBuilder, RepositoryFileSearchProvider, RepositoryMetadataStatsProvider,
+    ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
+    ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
+    CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder, RepositoryFileSearchProvider,
+    RepositoryMetadataStatsProvider,
 };
 
 /// Backend daemon for TSSP.
@@ -146,6 +149,34 @@ fn cleanup_temp_uploads(temp_dir: &std::path::Path) {
     }
 }
 
+fn bootstrap_admin_user(auth: &AuthService, now: i64) -> Result<(), String> {
+    let Some(users) = auth.users() else {
+        return Ok(());
+    };
+    if users.count_users().map_err(|e| e.to_string())? > 0 {
+        return Ok(());
+    }
+    let code =
+        std::env::var("TSSPD_BOOTSTRAP_ADMIN_CODE").unwrap_or_else(|_| "changeme".to_owned());
+    let code = code.trim();
+    if code.len() < 4 {
+        return Err("TSSPD_BOOTSTRAP_ADMIN_CODE must be at least 4 characters".to_owned());
+    }
+    let id = tssp_domain::UserId::new("user-tunar").map_err(|e| e.to_string())?;
+    let name = tssp_domain::UserName::new(
+        std::env::var("TSSPD_BOOTSTRAP_ADMIN_NAME").unwrap_or_else(|_| "Tunar".to_owned()),
+    )
+    .map_err(|e| e.to_string())?;
+    users
+        .create_user(&id, &name, tssp_domain::UserRole::Admin, code, now)
+        .map_err(|e| e.to_string())?;
+    tracing::info!(
+        "startup: created default admin user '{}' (set TSSPD_BOOTSTRAP_ADMIN_CODE to customize)",
+        name.as_str()
+    );
+    Ok(())
+}
+
 fn configure_auth_password(auth: &AuthService) -> Result<(), String> {
     if let Ok(hash) = std::env::var("TSSPD_AUTH_PASSWORD_HASH") {
         let hash = hash.trim();
@@ -240,8 +271,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             .map_err(|error| format!("could not initialize blob storage: {error}"))?,
     );
 
-    let corrupt_file_count =
-        run_startup_integrity_scan(repository.clone(), storage.clone());
+    let corrupt_file_count = run_startup_integrity_scan(repository.clone(), storage.clone());
 
     let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
     let upload_service = UploadService::new(
@@ -253,11 +283,7 @@ async fn run(cli: Cli) -> Result<(), String> {
     let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
     let tag_service = TagService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
-    let note_service = NoteService::new(
-        repository.clone(),
-        SystemClock,
-        UuidV7FileIdGenerator,
-    );
+    let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
     let session_connection = rusqlite::Connection::open(&metadata_path)
         .map_err(|error| format!("could not open session database connection: {error}"))?;
     let session_repository =
@@ -278,14 +304,33 @@ async fn run(cli: Cli) -> Result<(), String> {
         AuthStore::open(&metadata_path)
             .map_err(|error| format!("could not initialize auth store: {error}"))?,
     );
-    let auth_service = AuthService::new(auth_store, settings.trust_forwarded);
-    configure_auth_password(&auth_service)?;
+    let user_store = Arc::new(
+        UserStore::open(&metadata_path)
+            .map_err(|error| format!("could not initialize user store: {error}"))?,
+    );
+    let device_store = Arc::new(
+        DeviceStore::open(&metadata_path)
+            .map_err(|error| format!("could not initialize device store: {error}"))?,
+    );
+    let global_auth_required = settings.public_url.is_some();
+    let auth_service = AuthService::new(
+        auth_store,
+        user_store,
+        device_store,
+        settings.trust_forwarded,
+        global_auth_required,
+    );
     let now_secs = SystemClock.now().seconds();
-    let removed_tokens = auth_service
+    bootstrap_admin_user(&auth_service, now_secs)?;
+    configure_auth_password(&auth_service)?;
+    let (removed_tokens, removed_devices) = auth_service
         .cleanup_expired(now_secs)
-        .map_err(|error| format!("auth token cleanup failed: {error}"))?;
+        .map_err(|error| format!("auth cleanup failed: {error}"))?;
     if removed_tokens > 0 {
         tracing::info!("startup: removed {removed_tokens} expired auth tokens");
+    }
+    if removed_devices > 0 {
+        tracing::info!("startup: removed {removed_devices} expired trusted devices");
     }
 
     let settings = Arc::new(settings);
@@ -299,6 +344,11 @@ async fn run(cli: Cli) -> Result<(), String> {
         spawn_advertisement(settings.port);
     }
 
+    let workspace_store = Arc::new(
+        WorkspaceStore::open(&metadata_path)
+            .map_err(|error| format!("could not initialize workspace store: {error}"))?,
+    );
+
     let state = HttpState::new(
         Instant::now(),
         http_upload_temp_dir,
@@ -306,6 +356,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         public_urls,
         corrupt_file_count,
     )
+    .with_workspaces(workspace_store)
     .with_stats_provider(Arc::new(stats_provider))
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
     .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))

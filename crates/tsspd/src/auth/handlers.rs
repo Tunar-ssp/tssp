@@ -1,4 +1,4 @@
-//! HTTP handlers for dual-mode authentication.
+//! HTTP handlers for user authentication and sessions.
 
 use axum::extract::{ConnectInfo, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -14,12 +14,23 @@ use crate::auth::service::{AuthError, AuthService};
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
 pub(crate) const SESSION_COOKIE: &str = "tssp_session";
+pub(crate) const DEVICE_COOKIE: &str = "tssp_device";
 
 /// Login request body.
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
-    /// Shared access password.
-    pub password: String,
+    /// User display name (multi-user mode).
+    pub name: Option<String>,
+    /// Access code (multi-user mode).
+    pub code: Option<String>,
+    /// Legacy shared password (single-user bootstrap).
+    pub password: Option<String>,
+    /// Remember this device on the local network.
+    #[serde(default)]
+    pub remember_device: bool,
+    /// Optional device label.
+    #[serde(default)]
+    pub device_name: Option<String>,
 }
 
 /// Token response for CLI clients.
@@ -29,6 +40,10 @@ pub struct TokenResponse {
     pub schema_version: u8,
     /// Bearer token value.
     pub token: String,
+    /// Authenticated user name.
+    pub name: String,
+    /// Role (`admin` or `user`).
+    pub role: String,
 }
 
 /// Whether authentication is required for the current client.
@@ -38,6 +53,8 @@ pub struct AuthRequiredResponse {
     pub schema_version: u8,
     /// True when this client must authenticate.
     pub required: bool,
+    /// True when multi-user login is active.
+    pub users_enabled: bool,
 }
 
 /// Session probe response.
@@ -47,6 +64,12 @@ pub struct AuthMeResponse {
     pub schema_version: u8,
     /// Whether the caller is authenticated for remote access.
     pub authenticated: bool,
+    /// User name when authenticated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Role when authenticated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
 }
 
 fn now_seconds() -> i64 {
@@ -64,32 +87,29 @@ fn map_auth_error(error: AuthError) -> (StatusCode, Json<ErrorResponse>) {
                 },
             }),
         ),
-        AuthError::InvalidPassword => (
+        AuthError::InvalidCredentials => (
             StatusCode::UNAUTHORIZED,
             Json(ErrorResponse {
                 error: ErrorBody {
                     code: "invalid_credentials",
-                    message: "invalid password".to_owned(),
+                    message: "invalid name or code".to_owned(),
                 },
             }),
         ),
-        AuthError::Store(error) => (
+        AuthError::Store(message) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: ErrorBody {
                     code: "auth_store_error",
-                    message: error.to_string(),
+                    message,
                 },
             }),
         ),
     }
 }
 
-fn session_cookie_value(token: &str) -> String {
-    let max_age = AuthService::web_cookie_max_age().as_secs();
-    format!(
-        "{SESSION_COOKIE}={token}; HttpOnly; Path=/; Max-Age={max_age}; SameSite=Strict"
-    )
+fn session_cookie_value(name: &str, token: &str, max_age_secs: u64) -> String {
+    format!("{name}={token}; HttpOnly; Path=/; Max-Age={max_age_secs}; SameSite=Strict")
 }
 
 pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<String> {
@@ -102,14 +122,15 @@ pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<String> {
         .map(str::to_owned)
 }
 
-pub(crate) fn extract_cookie_token(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn extract_cookie_token(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
+    let prefix = format!("{cookie_name}=");
     headers
         .get(header::COOKIE)
         .and_then(|value| value.to_str().ok())
         .and_then(|cookies| {
             cookies.split(';').find_map(|part| {
                 let part = part.trim();
-                part.strip_prefix(&format!("{SESSION_COOKIE}="))
+                part.strip_prefix(&prefix)
                     .map(str::trim)
                     .filter(|token| !token.is_empty())
                     .map(str::to_owned)
@@ -144,11 +165,13 @@ pub async fn auth_required(
                 .into_response();
         }
     };
+    let users_enabled = state.auth.users_enabled().unwrap_or(false);
     (
         StatusCode::OK,
         Json(AuthRequiredResponse {
-            schema_version: 1,
+            schema_version: 2,
             required,
+            users_enabled,
         }),
     )
         .into_response()
@@ -185,87 +208,185 @@ pub async fn auth_me(
         return (
             StatusCode::OK,
             Json(AuthMeResponse {
-                schema_version: 1,
+                schema_version: 2,
                 authenticated: true,
+                name: None,
+                role: None,
             }),
         )
             .into_response();
     }
 
-    let token = extract_bearer(&headers).or_else(|| extract_cookie_token(&headers));
-    let authenticated = match token {
-        Some(token) => state
+    let now = now_seconds();
+    let session = extract_bearer(&headers)
+        .or_else(|| extract_cookie_token(&headers, SESSION_COOKIE))
+        .and_then(|token| state.auth.resolve_token(&token, now).ok().flatten());
+    let device = extract_cookie_token(&headers, DEVICE_COOKIE).and_then(|token| {
+        state
             .auth
-            .validate_token(&token, now_seconds())
-            .unwrap_or(false),
-        None => false,
-    };
-    if !authenticated {
-        return StatusCode::UNAUTHORIZED.into_response();
+            .resolve_device(
+                &token,
+                now,
+                Some(&client.to_string()),
+                headers
+                    .get(header::USER_AGENT)
+                    .and_then(|v| v.to_str().ok()),
+            )
+            .ok()
+            .flatten()
+    });
+
+    if let Some(info) = session.or(device) {
+        return (
+            StatusCode::OK,
+            Json(AuthMeResponse {
+                schema_version: 2,
+                authenticated: true,
+                name: Some(info.name.as_str().to_owned()),
+                role: Some(info.role.as_str().to_owned()),
+            }),
+        )
+            .into_response();
     }
-    (
-        StatusCode::OK,
-        Json(AuthMeResponse {
-            schema_version: 1,
-            authenticated: true,
-        }),
-    )
-        .into_response()
+
+    StatusCode::UNAUTHORIZED.into_response()
 }
 
-/// Web login: sets session cookie and returns token for API clients.
-pub async fn auth_login(
-    State(state): State<HttpState>,
-    Json(body): Json<LoginRequest>,
+async fn perform_login(
+    state: &HttpState,
+    body: LoginRequest,
+    kind: &str,
+    peer: SocketAddr,
+    headers: &HeaderMap,
+    set_cookie: bool,
 ) -> Response {
     let now = now_seconds();
-    let token = match state.auth.authenticate(body.password.trim(), "web", now) {
-        Ok(token) => token,
+    let client_ip = Some(peer.ip().to_string());
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+
+    let users_enabled = state.auth.users_enabled().unwrap_or(false);
+
+    let session = if users_enabled {
+        let name = body
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty());
+        let code = body
+            .code
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty());
+        match (name, code) {
+            (Some(name), Some(code)) => state.auth.authenticate_user(
+                name,
+                code,
+                kind,
+                body.remember_device,
+                body.device_name.as_deref().unwrap_or(""),
+                now,
+                client_ip.as_deref(),
+                user_agent.as_deref(),
+            ),
+            _ => Err(AuthError::InvalidCredentials),
+        }
+    } else if let Some(password) = body
+        .password
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        state
+            .auth
+            .authenticate_legacy_password(password, kind, now)
+            .map(|token| super::service::SessionInfo {
+                token,
+                user_id: tssp_domain::UserId::new("legacy")
+                    .unwrap_or_else(|_| tssp_domain::UserId::new("user-legacy").expect("id")),
+                name: tssp_domain::UserName::new("legacy")
+                    .unwrap_or_else(|_| tssp_domain::UserName::new("legacy").expect("name")),
+                role: tssp_domain::UserRole::Admin,
+                device_token: None,
+            })
+    } else {
+        Err(AuthError::NotConfigured)
+    };
+
+    let session = match session {
+        Ok(value) => value,
         Err(error) => return map_auth_error(error).into_response(),
     };
+
     let mut response = (
         StatusCode::OK,
         Json(TokenResponse {
-            schema_version: 1,
-            token: token.clone(),
+            schema_version: 2,
+            token: session.token.clone(),
+            name: session.name.as_str().to_owned(),
+            role: session.role.as_str().to_owned(),
         }),
     )
         .into_response();
-    if let Ok(value) = header::HeaderValue::from_str(&session_cookie_value(&token)) {
-        response.headers_mut().append(header::SET_COOKIE, value);
+
+    if set_cookie {
+        if let Ok(value) = header::HeaderValue::from_str(&session_cookie_value(
+            SESSION_COOKIE,
+            &session.token,
+            AuthService::web_cookie_max_age().as_secs(),
+        )) {
+            response.headers_mut().append(header::SET_COOKIE, value);
+        }
+        if let Some(device_token) = &session.device_token {
+            if let Ok(value) = header::HeaderValue::from_str(&session_cookie_value(
+                DEVICE_COOKIE,
+                device_token,
+                AuthService::trusted_device_max_age().as_secs(),
+            )) {
+                response.headers_mut().append(header::SET_COOKIE, value);
+            }
+        }
     }
     response
+}
+
+/// Web login: sets session cookie and returns token.
+pub async fn auth_login(
+    State(state): State<HttpState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<LoginRequest>,
+) -> Response {
+    perform_login(&state, body, "web", peer, &headers, true).await
 }
 
 /// CLI token exchange (Bearer only, no cookie).
 pub async fn auth_token(
     State(state): State<HttpState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    let now = now_seconds();
-    match state.auth.authenticate(body.password.trim(), "api", now) {
-        Ok(token) => (
-            StatusCode::OK,
-            Json(TokenResponse {
-                schema_version: 1,
-                token,
-            }),
-        )
-            .into_response(),
-        Err(error) => map_auth_error(error).into_response(),
-    }
+    perform_login(&state, body, "api", peer, &headers, false).await
 }
 
 /// Logout: revokes cookie/bearer token when present.
 pub async fn auth_logout(State(state): State<HttpState>, headers: HeaderMap) -> impl IntoResponse {
-    if let Some(token) = extract_bearer(&headers).or_else(|| extract_cookie_token(&headers)) {
+    if let Some(token) =
+        extract_bearer(&headers).or_else(|| extract_cookie_token(&headers, SESSION_COOKIE))
+    {
         let _ = state.auth.revoke_token(&token);
     }
+    if let Some(device) = extract_cookie_token(&headers, DEVICE_COOKIE) {
+        let _ = state.auth.revoke_device(&device);
+    }
     let mut response = StatusCode::NO_CONTENT.into_response();
-    if let Ok(value) = header::HeaderValue::from_str(&format!(
-        "{SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict"
-    )) {
-        response.headers_mut().append(header::SET_COOKIE, value);
+    for cookie in [SESSION_COOKIE, DEVICE_COOKIE] {
+        if let Ok(value) = header::HeaderValue::from_str(&session_cookie_value(cookie, "", 0)) {
+            response.headers_mut().append(header::SET_COOKIE, value);
+        }
     }
     response
 }

@@ -70,11 +70,8 @@ impl UserStore {
     /// Returns an error when the query fails.
     pub fn count_users(&self) -> Result<u64, UserStoreError> {
         let connection = self.lock()?;
-        let count: i64 = connection.query_row(
-            "SELECT COUNT(*) FROM users",
-            [],
-            |row| row.get(0),
-        )?;
+        let count: i64 =
+            connection.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
         Ok(u64::try_from(count).unwrap_or(0))
     }
 
@@ -96,11 +93,10 @@ impl UserStore {
                 "access code must be at least 4 characters".to_owned(),
             ));
         }
-        let code_hash = hash(code, DEFAULT_COST).map_err(|error| {
-            UserStoreError::Invalid(format!("could not hash code: {error}"))
-        })?;
+        let code_hash = hash(code, DEFAULT_COST)
+            .map_err(|error| UserStoreError::Invalid(format!("could not hash code: {error}")))?;
         let connection = self.lock()?;
-        let inserted = connection.execute(
+        let result = connection.execute(
             "INSERT INTO users (id, name, name_lower, role, code_hash, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
@@ -112,17 +108,15 @@ impl UserStore {
                 created_at,
             ],
         );
-        if let Err(rusqlite::Error::SqliteFailure(error, _)) = inserted {
-            if error.extended_code == rusqlite::ErrorCode::ConstraintViolation as i32
-                || error.code == rusqlite::ErrorCode::ConstraintViolation
-            {
+        if let Err(rusqlite::Error::SqliteFailure(err, _)) = result {
+            if err.code == rusqlite::ErrorCode::ConstraintViolation {
                 return Err(UserStoreError::NameTaken);
             }
             return Err(UserStoreError::Database(rusqlite::Error::SqliteFailure(
-                error, None,
+                err, None,
             )));
         }
-        inserted?;
+        result?;
         Ok(UserRecord {
             id: id.clone(),
             name: name.clone(),
@@ -137,11 +131,7 @@ impl UserStore {
     /// # Errors
     ///
     /// Returns [`UserStoreError::NotFound`] when credentials are wrong.
-    pub fn verify_credentials(
-        &self,
-        name: &str,
-        code: &str,
-    ) -> Result<UserRecord, UserStoreError> {
+    pub fn verify_credentials(&self, name: &str, code: &str) -> Result<UserRecord, UserStoreError> {
         let connection = self.lock()?;
         let name_lower = name.trim().to_ascii_lowercase();
         let mut statement = connection.prepare(
@@ -199,8 +189,8 @@ impl UserStore {
                 .map_err(|e| UserStoreError::Invalid(e.to_string()))?;
             let name = UserName::new(row.get::<_, String>(1)?)
                 .map_err(|e| UserStoreError::Invalid(e.to_string()))?;
-            let role =
-                UserRole::parse(&row.get::<_, String>(2)?).map_err(|e| UserStoreError::Invalid(e.to_string()))?;
+            let role = UserRole::parse(&row.get::<_, String>(2)?)
+                .map_err(|e| UserStoreError::Invalid(e.to_string()))?;
             users.push(UserRecord {
                 id,
                 name,
@@ -219,9 +209,8 @@ impl UserStore {
     /// Returns an error when lookup fails.
     pub fn find_user(&self, id: &UserId) -> Result<Option<UserRecord>, UserStoreError> {
         let connection = self.lock()?;
-        let mut statement = connection.prepare(
-            "SELECT id, name, role, created_at, disabled_at FROM users WHERE id = ?1",
-        )?;
+        let mut statement = connection
+            .prepare("SELECT id, name, role, created_at, disabled_at FROM users WHERE id = ?1")?;
         let mut rows = statement.query(params![id.as_str()])?;
         let Some(row) = rows.next()? else {
             return Ok(None);
@@ -230,8 +219,8 @@ impl UserStore {
             .map_err(|e| UserStoreError::Invalid(e.to_string()))?;
         let name = UserName::new(row.get::<_, String>(1)?)
             .map_err(|e| UserStoreError::Invalid(e.to_string()))?;
-        let role =
-            UserRole::parse(&row.get::<_, String>(2)?).map_err(|e| UserStoreError::Invalid(e.to_string()))?;
+        let role = UserRole::parse(&row.get::<_, String>(2)?)
+            .map_err(|e| UserStoreError::Invalid(e.to_string()))?;
         Ok(Some(UserRecord {
             id,
             name,
@@ -269,9 +258,8 @@ impl UserStore {
                 "access code must be at least 4 characters".to_owned(),
             ));
         }
-        let code_hash = hash(code, DEFAULT_COST).map_err(|error| {
-            UserStoreError::Invalid(format!("could not hash code: {error}"))
-        })?;
+        let code_hash = hash(code, DEFAULT_COST)
+            .map_err(|error| UserStoreError::Invalid(format!("could not hash code: {error}")))?;
         let connection = self.lock()?;
         let changed = connection.execute(
             "UPDATE users SET code_hash = ?1 WHERE id = ?2",
@@ -307,7 +295,8 @@ impl UserStore {
                 "cannot delete the last admin user".to_owned(),
             ));
         }
-        let changed = connection.execute("DELETE FROM users WHERE id = ?1", params![id.as_str()])?;
+        let changed =
+            connection.execute("DELETE FROM users WHERE id = ?1", params![id.as_str()])?;
         if changed == 0 {
             return Err(UserStoreError::NotFound);
         }

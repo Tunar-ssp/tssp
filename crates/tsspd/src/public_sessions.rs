@@ -209,6 +209,7 @@ pub async fn post_receive_session_upload(
         tags: staged.tags,
         pinned: false,
         folder_path: staged.folder_path,
+        owner_id: None,
         source: Box::new(source),
     };
 

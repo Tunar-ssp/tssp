@@ -511,7 +511,10 @@ mod tests {
                 .unwrap_or_else(|error| panic!("timestamp failed: {error}")),
             tags: Vec::new(),
             pinned_at: None,
-        folder_path: String::new(),
+            folder_path: String::new(),
+            owner_id: None,
+            visibility: crate::Visibility::Private,
+            public_token: None,
         };
 
         assert!(!record.is_pinned());

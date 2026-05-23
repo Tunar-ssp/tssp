@@ -111,8 +111,7 @@ impl ListQueryParams {
 
         let folder_prefix = self
             .folder
-            .map(|value| crate::folders::normalize_folder_path(&value))
-            .transpose()?;
+            .map(|value| crate::folders::normalize_folder_path(&value));
 
         Ok(RepositoryListQuery {
             limit: self.limit,
@@ -125,6 +124,8 @@ impl ListQueryParams {
             sort,
             after_cursor,
             folder_prefix,
+            visibility: None,
+            owner_id: None,
         })
     }
 }
@@ -298,7 +299,7 @@ mod tests {
                 pinned_only: false,
                 sort: None,
                 page: None,
-            folder: None,
+                folder: None,
             };
             assert!(
                 query.into_repository_query().is_ok(),

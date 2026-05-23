@@ -45,6 +45,12 @@ impl PublicUrlBuilder {
     pub fn status_url(&self) -> String {
         format!("{}/api/v1/status", self.base)
     }
+
+    /// Public file download URL for a public link token.
+    #[must_use]
+    pub fn public_file_url(&self, token: &str) -> String {
+        format!("{}/p/{}", self.base, token)
+    }
 }
 
 fn trim_trailing_slash(url: &str) -> String {

@@ -51,6 +51,8 @@ pub struct HttpUploadRequest {
     pub pinned: bool,
     /// Virtual folder path within the bucket.
     pub folder_path: String,
+    /// Owning user when authenticated at upload time.
+    pub owner_id: Option<tssp_domain::UserId>,
     /// Streaming file content.
     pub source: Box<dyn Read + Send>,
 }
@@ -167,6 +169,9 @@ where
             tags: &tag_refs,
             pinned_at: request.pinned.then_some(1),
             folder_path: &request.folder_path,
+            owner_id: request.owner_id.clone(),
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: request.source.as_mut(),
         };
         self.service
@@ -179,7 +184,11 @@ where
     }
 }
 
-pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multipart) -> Response {
+pub(crate) async fn upload_file(
+    State(state): State<HttpState>,
+    auth: crate::auth::OptionalAuthContext,
+    multipart: Multipart,
+) -> Response {
     if let Err(error) = check_free_space(&state, &state.upload_temp_dir).await {
         return error.response();
     }
@@ -190,7 +199,8 @@ pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multi
     };
 
     let _mutation_guard = state.storage_mutation_lock.lock().await;
-    match upload_staged_file(&state, staged).await {
+    let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
+    match upload_staged_file(&state, staged, owner_id).await {
         Ok(outcome) => upload_success_response(&outcome),
         Err(error) => error.response(),
     }
@@ -198,6 +208,7 @@ pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multi
 
 pub(crate) async fn upload_files_batch(
     State(state): State<HttpState>,
+    auth: crate::auth::OptionalAuthContext,
     multipart: Multipart,
 ) -> Response {
     if let Err(error) = check_free_space(&state, &state.upload_temp_dir).await {
@@ -213,7 +224,8 @@ pub(crate) async fn upload_files_batch(
     let mut results = Vec::with_capacity(staged_files.len());
     for staged in staged_files {
         let filename = staged.filename.clone();
-        let outcome = upload_staged_file(&state, staged).await;
+        let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
+        let outcome = upload_staged_file(&state, staged, owner_id).await;
         results.push(BatchUploadItemResponse::from_upload_result(
             filename, outcome,
         ));
@@ -279,6 +291,7 @@ fn nix_statvfs(path: &Path) -> Result<DiskStat, HttpUploadError> {
 async fn upload_staged_file(
     state: &HttpState,
     staged: StagedMultipartUpload,
+    owner_id: Option<tssp_domain::UserId>,
 ) -> Result<HttpUploadOutcome, HttpUploadError> {
     let source = match staged.temp_file.reopen() {
         Ok(file) => file,
@@ -296,6 +309,7 @@ async fn upload_staged_file(
         tags: staged.tags,
         pinned: staged.pinned,
         folder_path: staged.folder_path,
+        owner_id,
         source: Box::new(source),
     };
 
@@ -359,8 +373,7 @@ pub(crate) async fn stage_multipart_upload(
             "tag" | "tags" => tags.push(field_text(field).await?),
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
             "folder" | "folder_path" => {
-                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?)
-                    .map_err(|message| HttpUploadError::InvalidRequest { message })?;
+                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?);
             }
             "destination" | "destination_hint" => {
                 let _ignored = field_text(field).await?;
@@ -397,8 +410,7 @@ async fn stage_batch_multipart_upload(
             "tag" | "tags" => tags.push(field_text(field).await?),
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
             "folder" | "folder_path" => {
-                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?)
-                    .map_err(|message| HttpUploadError::InvalidRequest { message })?;
+                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?);
             }
             "destination" | "destination_hint" => {
                 let _ignored = field_text(field).await?;
@@ -697,6 +709,11 @@ pub struct FileRecordResponse {
     /// Virtual folder path, empty at bucket root.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub folder_path: String,
+    /// Public visibility.
+    pub visibility: String,
+    /// Public download token when visible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_token: Option<String>,
 }
 
 impl FileRecordResponse {
@@ -716,6 +733,8 @@ impl FileRecordResponse {
                 .collect(),
             pinned: record.is_pinned(),
             folder_path: record.folder_path.clone(),
+            visibility: record.visibility.as_str().to_owned(),
+            public_token: record.public_token.clone(),
         }
     }
 }
@@ -871,6 +890,7 @@ mod tests {
             tags: Vec::new(),
             pinned: false,
             folder_path: String::new(),
+            owner_id: None,
             source: Box::new(Cursor::new(Vec::<u8>::new())),
         };
 
@@ -1063,7 +1083,10 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: vec![tag_value("Docs")],
             pinned_at: Some(1),
-        folder_path: String::new(),
+            folder_path: String::new(),
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
         }
     }
 

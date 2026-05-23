@@ -190,8 +190,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let path = temp.path().join("tssp.toml");
         std::fs::write(&path, "port = 9001\n").expect("write");
-        let settings =
-            DaemonSettings::load(temp.path(), &CliOverrides::default()).expect("load");
+        let settings = DaemonSettings::load(temp.path(), &CliOverrides::default()).expect("load");
         assert_eq!(settings.port, 9001);
     }
 

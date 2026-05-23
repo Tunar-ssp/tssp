@@ -25,11 +25,7 @@ fn is_link_local_ipv6(addr: Ipv6Addr) -> bool {
 
 /// Resolves the client IP from the TCP peer and optional `X-Forwarded-For`.
 #[must_use]
-pub fn client_ip(
-    peer: IpAddr,
-    forwarded_for: Option<&str>,
-    trust_forwarded: bool,
-) -> IpAddr {
+pub fn client_ip(peer: IpAddr, forwarded_for: Option<&str>, trust_forwarded: bool) -> IpAddr {
     if !trust_forwarded {
         return peer;
     }
@@ -40,17 +36,13 @@ pub fn client_ip(
 }
 
 fn parse_forwarded_for(header: &str) -> Option<IpAddr> {
-    header
-        .split(',')
-        .next()
-        .map(str::trim)
-        .and_then(|value| {
-            if let Some(stripped) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
-                stripped.parse().ok()
-            } else {
-                value.parse().ok()
-            }
-        })
+    header.split(',').next().map(str::trim).and_then(|value| {
+        if let Some(stripped) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
+            stripped.parse().ok()
+        } else {
+            value.parse().ok()
+        }
+    })
 }
 
 #[cfg(test)]

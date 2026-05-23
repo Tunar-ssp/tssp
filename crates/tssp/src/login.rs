@@ -13,21 +13,27 @@ use crate::config::{load_config, save_config};
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
     token: String,
+    name: String,
+    role: String,
 }
 
 /// Runs `tssp login`.
 pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
     let address = BackendAddress::from_connection_args(&cli.connection)?;
-    let password = read_password("Password: ")?;
+    let name = read_line("Name: ")?;
+    let code = read_password("Access code: ")?;
     let client = build_client()?;
     let response = api_post(&client, &address.url("/api/v1/auth/token"))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
-        .json(&serde_json::json!({ "password": password }))
+        .json(&serde_json::json!({
+            "name": name,
+            "code": code,
+        }))
         .send()
-    .map_err(|error| format!("could not reach daemon at {}: {error}", address.base_url()))?;
+        .map_err(|error| format!("could not reach daemon at {}: {error}", address.base_url()))?;
 
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        eprintln!("error: invalid password");
+        eprintln!("error: invalid name or code");
         return Ok(CliExitCode::Generic);
     }
     if !response.status().is_success() {
@@ -48,10 +54,34 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
     save_config(&config)?;
 
     if !cli.output.quiet {
-        println!("Logged in to {}", address.base_url());
-        println!("Token saved to {}", crate::config::resolve_config_path()?.display());
+        println!(
+            "Logged in to {} as {} ({})",
+            address.base_url(),
+            body.name,
+            body.role
+        );
+        println!(
+            "Token saved to {}",
+            crate::config::resolve_config_path()?.display()
+        );
     }
     Ok(CliExitCode::Success)
+}
+
+fn read_line(prompt: &str) -> Result<String, String> {
+    eprint!("{prompt}");
+    io::stdout()
+        .flush()
+        .map_err(|error| format!("stdout flush failed: {error}"))?;
+    let mut line = String::new();
+    io::stdin()
+        .read_line(&mut line)
+        .map_err(|error| format!("could not read input: {error}"))?;
+    let value = line.trim().to_owned();
+    if value.is_empty() {
+        return Err("value must not be empty".to_owned());
+    }
+    Ok(value)
 }
 
 fn read_password(prompt: &str) -> Result<String, String> {
@@ -83,7 +113,9 @@ mod tests {
     #[test]
     fn token_response_deserializes() {
         let body: TokenResponse =
-            serde_json::from_str(r#"{"token":"abc123"}"#).expect("deserialize");
+            serde_json::from_str(r#"{"token":"abc123","name":"Tunar","role":"admin"}"#)
+                .expect("deserialize");
         assert_eq!(body.token, "abc123");
+        assert_eq!(body.name, "Tunar");
     }
 }

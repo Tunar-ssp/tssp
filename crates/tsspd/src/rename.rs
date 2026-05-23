@@ -163,6 +163,27 @@ mod tests {
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
             Ok(vec![(self.record.folder_path.clone(), 1)])
         }
+
+        fn set_file_visibility(
+            &self,
+            _: &FileId,
+            _: tssp_domain::Visibility,
+            _: Option<&str>,
+        ) -> Result<Option<FileRecord>, String> {
+            Ok(Some(self.record.clone()))
+        }
+
+        fn find_file_by_public_token(&self, _: &str) -> Result<Option<FileRecord>, String> {
+            Ok(None)
+        }
+
+        fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+            Ok(1)
+        }
+
+        fn set_file_folder_path(&self, _: &FileId, _: &str) -> Result<Option<FileRecord>, String> {
+            Ok(Some(self.record.clone()))
+        }
     }
 
     struct NotFoundStatsProvider;
@@ -212,6 +233,27 @@ mod tests {
 
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
             Ok(Vec::new())
+        }
+
+        fn set_file_visibility(
+            &self,
+            _: &FileId,
+            _: tssp_domain::Visibility,
+            _: Option<&str>,
+        ) -> Result<Option<FileRecord>, String> {
+            Ok(None)
+        }
+
+        fn find_file_by_public_token(&self, _: &str) -> Result<Option<FileRecord>, String> {
+            Ok(None)
+        }
+
+        fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+            Ok(0)
+        }
+
+        fn set_file_folder_path(&self, _: &FileId, _: &str) -> Result<Option<FileRecord>, String> {
+            Ok(None)
         }
     }
 
@@ -263,6 +305,27 @@ mod tests {
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
             Ok(Vec::new())
         }
+
+        fn set_file_visibility(
+            &self,
+            _: &FileId,
+            _: tssp_domain::Visibility,
+            _: Option<&str>,
+        ) -> Result<Option<FileRecord>, String> {
+            Err("database locked".to_owned())
+        }
+
+        fn find_file_by_public_token(&self, _: &str) -> Result<Option<FileRecord>, String> {
+            Err("database locked".to_owned())
+        }
+
+        fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+            Err("database locked".to_owned())
+        }
+
+        fn set_file_folder_path(&self, _: &FileId, _: &str) -> Result<Option<FileRecord>, String> {
+            Err("database locked".to_owned())
+        }
     }
 
     fn test_record() -> FileRecord {
@@ -283,12 +346,15 @@ mod tests {
                 "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
             )
             .expect("valid storage handle"),
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
         }
     }
 
     #[tokio::test]
     async fn rename_file_returns_ok_with_renamed_record() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(SuccessfulStatsProvider {
                 record: test_record(),
             }));
@@ -316,7 +382,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_id() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"));
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
@@ -337,7 +403,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_filename() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"));
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
@@ -358,7 +424,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_not_found_when_file_missing() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(NotFoundStatsProvider));
 
         let response = rename_file(
@@ -380,7 +446,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_internal_error_on_stats_provider_error() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(ErrorStatsProvider));
 
         let response = rename_file(

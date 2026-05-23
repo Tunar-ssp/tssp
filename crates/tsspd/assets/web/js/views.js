@@ -97,6 +97,7 @@ window.Tssp = window.Tssp || {};
             <td>${T.escapeHtml(T.formatDate(f.uploaded_at))}</td>
             <td class="col-actions">
               <button type="button" class="btn btn-text btn-sm" data-pin-file="${id}" data-pinned="${f.pinned ? "1" : "0"}">${f.pinned ? "Unpin" : "Pin"}</button>
+              <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="${f.visibility === "public" ? "private" : "public"}">${f.visibility === "public" ? "Private" : "Public"}</button>
               <a class="btn btn-text btn-sm" href="${download}" download>Download</a>
               <button type="button" class="btn btn-text btn-sm btn-danger" data-delete-file="${id}">Delete</button>
             </td>
@@ -215,15 +216,164 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.setFileVisibility = async function setFileVisibility(id, visibility) {
+    try {
+      await T.api("/files/" + encodeURIComponent(id) + "/visibility", {
+        method: "PATCH",
+        body: JSON.stringify({ visibility }),
+      });
+      T.showBanner(visibility === "public" ? "Object is now public" : "Object is now private", "success");
+      T.refreshCurrentView();
+    } catch (e) {
+      T.showBanner(e.message, "error");
+    }
+  };
+
+  T.loadPublic = async function loadPublic() {
+    const body = T.$("#public-body");
+    body.innerHTML = '<tr><td colspan="4" class="table-empty">Loading…</td></tr>';
+    try {
+      const data = await fetch(T.API + "/public/files").then((r) => r.json());
+      const files = data.files || [];
+      if (!files.length) {
+        body.innerHTML = '<tr><td colspan="4" class="table-empty">No public files yet.</td></tr>';
+        return;
+      }
+      body.innerHTML = files
+        .map((f) => {
+          const id = T.escapeHtml(f.id);
+          const link = f.public_token
+            ? `<a class="mono" href="/p/${T.escapeHtml(f.public_token)}">/p/${T.escapeHtml(f.public_token)}</a>`
+            : "—";
+          return `<tr>
+            <td>${T.escapeHtml(f.name)}</td>
+            <td class="mono">${T.formatBytes(f.size_bytes)}</td>
+            <td>${link}</td>
+            <td class="col-actions">
+              <a class="btn btn-text btn-sm" href="/api/v1/files/${id}/content" download>Download</a>
+              <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="private">Make private</button>
+            </td>
+          </tr>`;
+        })
+        .join("");
+      body.querySelectorAll("[data-vis]").forEach((btn) => {
+        btn.addEventListener("click", () => T.setFileVisibility(btn.dataset.vis, btn.dataset.v));
+      });
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="4" class="table-empty">${T.escapeHtml(e.message)}</td></tr>`;
+    }
+  };
+
+  T.loadTypedFiles = async function loadTypedFiles(mimePrefix, bodyId) {
+    const body = T.$(`#${bodyId}`);
+    body.innerHTML = '<tr><td colspan="4" class="table-empty">Loading…</td></tr>';
+    const params = new URLSearchParams({ limit: "200", type: mimePrefix + "/" });
+    try {
+      const data = await T.api("/files?" + params.toString());
+      const files = data.files || [];
+      if (!files.length) {
+        body.innerHTML = '<tr><td colspan="4" class="table-empty">No matching objects.</td></tr>';
+        return;
+      }
+      body.innerHTML = files
+        .map((f) => {
+          const id = T.escapeHtml(f.id);
+          const inline = `/api/v1/files/${id}/content?disposition=inline`;
+          return `<tr>
+            <td>${T.escapeHtml(f.name)}</td>
+            <td class="mono">${T.formatBytes(f.size_bytes)}</td>
+            <td>${T.formatDate(f.uploaded_at)}</td>
+            <td class="col-actions">
+              <a class="btn btn-text btn-sm" href="${inline}" target="_blank" rel="noopener">Open</a>
+              <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="${f.visibility === "public" ? "private" : "public"}">${f.visibility === "public" ? "Private" : "Public"}</button>
+            </td>
+          </tr>`;
+        })
+        .join("");
+      body.querySelectorAll("[data-vis]").forEach((btn) => {
+        btn.addEventListener("click", () => T.setFileVisibility(btn.dataset.vis, btn.dataset.v));
+      });
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="4" class="table-empty">${T.escapeHtml(e.message)}</td></tr>`;
+    }
+  };
+
+  T.loadDocuments = async function loadDocuments() {
+    const body = T.$("#documents-body");
+    body.innerHTML = '<tr><td colspan="5" class="table-empty">Loading…</td></tr>';
+    try {
+      const data = await T.api("/files?limit=200");
+      const files = (data.files || []).filter(
+        (f) =>
+          f.mime_type &&
+          (f.mime_type.startsWith("application/") ||
+            f.mime_type.startsWith("text/")) &&
+          !f.mime_type.startsWith("image/") &&
+          !f.mime_type.startsWith("video/")
+      );
+      if (!files.length) {
+        body.innerHTML = '<tr><td colspan="5" class="table-empty">No documents.</td></tr>';
+        return;
+      }
+      body.innerHTML = files
+        .map(
+          (f) => `<tr>
+            <td>${T.escapeHtml(f.name)}</td>
+            <td class="mono">${T.escapeHtml(f.mime_type)}</td>
+            <td class="mono">${T.formatBytes(f.size_bytes)}</td>
+            <td>${T.escapeHtml(f.folder_path || "—")}</td>
+            <td>${T.formatDate(f.uploaded_at)}</td>
+          </tr>`
+        )
+        .join("");
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="5" class="table-empty">${T.escapeHtml(e.message)}</td></tr>`;
+    }
+  };
+
+  T.loadWorkspaces = async function loadWorkspaces() {
+    const body = T.$("#workspaces-body");
+    body.innerHTML = '<tr><td colspan="4" class="table-empty">Loading…</td></tr>';
+    try {
+      const data = await T.api("/workspaces");
+      const items = data.workspaces || [];
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="4" class="table-empty">No workspaces yet.</td></tr>';
+        return;
+      }
+      body.innerHTML = items
+        .map(
+          (w) => `<tr>
+            <td>${T.escapeHtml(w.name)}</td>
+            <td class="mono">${T.escapeHtml(w.language)}</td>
+            <td>${T.formatDate(w.updated_at)}</td>
+            <td class="col-actions">
+              <button type="button" class="btn btn-text btn-sm" data-ws-edit="${T.escapeHtml(w.id)}">Edit</button>
+              <button type="button" class="btn btn-text btn-sm" data-ws-del="${T.escapeHtml(w.id)}">Delete</button>
+            </td>
+          </tr>`
+        )
+        .join("");
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="4" class="table-empty">${T.escapeHtml(e.message)}</td></tr>`;
+    }
+  };
+
   T.loadAdmin = async function loadAdmin() {
     const overview = T.$("#admin-overview");
     const system = T.$("#admin-system");
+    const usersEl = T.$("#admin-users");
+    const devicesEl = T.$("#admin-devices");
     overview.innerHTML = "Loading…";
     system.innerHTML = "Loading…";
+    usersEl.innerHTML = "Loading…";
+    devicesEl.innerHTML = "Loading…";
     try {
-      const [ov, sys] = await Promise.all([
+      const [ov, sys, users, devices] = await Promise.all([
         T.api("/admin/overview"),
         T.api("/admin/system"),
+        T.api("/admin/users").catch(() => ({ users: [] })),
+        T.api("/admin/devices").catch(() => ({ devices: [] })),
       ]);
       overview.innerHTML = `
         <dl class="admin-dl">
@@ -243,6 +393,20 @@ window.Tssp = window.Tssp || {};
           <dt>Memory</dt><dd>${T.formatBytes(sys.available_memory_bytes)} free / ${T.formatBytes(sys.total_memory_bytes)}</dd>
           <dt>Data disk</dt><dd>${T.formatBytes(sys.data_dir_free_bytes)} free / ${T.formatBytes(sys.data_dir_total_bytes)}</dd>
         </dl>`;
+      usersEl.innerHTML =
+        (users.users || [])
+          .map(
+            (u) =>
+              `<div class="admin-row"><strong>${T.escapeHtml(u.name)}</strong> <span class="tag">${T.escapeHtml(u.role)}</span></div>`
+          )
+          .join("") || "<p>No users</p>";
+      devicesEl.innerHTML =
+        (devices.devices || [])
+          .map(
+            (d) =>
+              `<div class="admin-row"><strong>${T.escapeHtml(d.device_name || d.device_token?.slice(0, 8) || "device")}</strong> <span class="mono">${T.escapeHtml(d.user_name || "")}</span></div>`
+          )
+          .join("") || "<p>No trusted devices</p>";
     } catch (e) {
       overview.textContent = e.message;
     }

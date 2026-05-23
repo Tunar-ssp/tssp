@@ -10,6 +10,7 @@ mod info;
 mod init;
 mod list;
 mod login;
+mod logout;
 mod note;
 mod paste;
 mod pins;
@@ -22,6 +23,7 @@ mod sessions_helper;
 mod status;
 mod tags;
 mod upload;
+mod whoami;
 
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -51,6 +53,12 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if matches!(cli.command, Some(Command::Login)) {
         return login::run(cli);
+    }
+    if matches!(cli.command, Some(Command::Logout)) {
+        return logout::run(cli);
+    }
+    if matches!(cli.command, Some(Command::Whoami)) {
+        return whoami::run(cli);
     }
     if let Some(Command::Send(args)) = cli.command.as_ref() {
         return send::run(cli, args);

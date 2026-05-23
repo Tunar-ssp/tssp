@@ -11,8 +11,8 @@ use std::sync::Arc;
 use thiserror::Error;
 use tssp_domain::{
     ContentHash, Cursor, FileId, FileName, FileRecord, FileSize, MimeType, NoteBody, NoteId,
-    NoteRecord, NoteTitle, SessionKind, SessionToken, StorageHandle, Tag, TagKey,
-    TransferSession, UnixTimestamp,
+    NoteRecord, NoteTitle, SessionKind, SessionToken, StorageHandle, Tag, TagKey, TransferSession,
+    UnixTimestamp,
 };
 
 /// Sort order for file listing queries.
@@ -74,6 +74,10 @@ pub struct ListQuery {
     pub after_cursor: Option<Cursor>,
     /// When set, only files under this folder prefix (e.g. `photos/`).
     pub folder_prefix: Option<String>,
+    /// When set, only files with this visibility.
+    pub visibility: Option<tssp_domain::Visibility>,
+    /// When set, only files owned by this user.
+    pub owner_id: Option<tssp_domain::UserId>,
 }
 
 impl Default for ListQuery {
@@ -89,6 +93,8 @@ impl Default for ListQuery {
             sort: ListSort::UploadedDesc,
             after_cursor: None,
             folder_prefix: None,
+            visibility: None,
+            owner_id: None,
         }
     }
 }
@@ -376,6 +382,48 @@ pub trait FileRepository {
     ///
     /// Returns [`RepositoryError`] when the aggregation query fails.
     fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError>;
+
+    /// Updates visibility and optional public link token for one file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the file does not exist.
+    fn set_file_visibility(
+        &self,
+        id: &FileId,
+        visibility: tssp_domain::Visibility,
+        public_token: Option<&str>,
+    ) -> Result<Option<FileRecord>, RepositoryError>;
+
+    /// Returns a public file by its link token.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when lookup fails.
+    fn find_file_by_public_token(&self, token: &str)
+        -> Result<Option<FileRecord>, RepositoryError>;
+
+    /// Renames or moves a logical folder by rewriting `folder_path` prefixes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the update fails.
+    fn update_folder_path_prefix(
+        &self,
+        from_prefix: &str,
+        to_prefix: &str,
+    ) -> Result<u64, RepositoryError>;
+
+    /// Sets `folder_path` for one file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the file does not exist.
+    fn set_file_folder_path(
+        &self,
+        id: &FileId,
+        folder_path: &str,
+    ) -> Result<Option<FileRecord>, RepositoryError>;
 }
 
 /// Persists and queries Markdown notes.
@@ -606,6 +654,40 @@ where
 
     fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
         self.as_ref().list_folder_counts()
+    }
+
+    fn set_file_visibility(
+        &self,
+        id: &FileId,
+        visibility: tssp_domain::Visibility,
+        public_token: Option<&str>,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref()
+            .set_file_visibility(id, visibility, public_token)
+    }
+
+    fn find_file_by_public_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref().find_file_by_public_token(token)
+    }
+
+    fn update_folder_path_prefix(
+        &self,
+        from_prefix: &str,
+        to_prefix: &str,
+    ) -> Result<u64, RepositoryError> {
+        self.as_ref()
+            .update_folder_path_prefix(from_prefix, to_prefix)
+    }
+
+    fn set_file_folder_path(
+        &self,
+        id: &FileId,
+        folder_path: &str,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref().set_file_folder_path(id, folder_path)
     }
 }
 
@@ -1103,7 +1185,10 @@ mod tests {
                 uploaded_at: ts,
                 tags: vec![],
                 pinned_at: None,
-            folder_path: String::new(),
+                folder_path: String::new(),
+                owner_id: None,
+                visibility: tssp_domain::Visibility::Private,
+                public_token: None,
             },
             remaining_content_references: 0,
         };

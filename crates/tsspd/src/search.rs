@@ -158,15 +158,15 @@ pub(crate) async fn search_files(
 mod tests {
     use super::*;
     use axum::body::to_bytes;
-    use tssp_ports::FileRepository;
     use axum::http::Request;
     use axum::routing::get;
     use axum::Router;
     use std::sync::Arc;
     use tower::ServiceExt;
+    use tssp_ports::FileRepository;
 
     fn build_test_router(provider: Arc<dyn FileSearchProvider>) -> Router {
-        let mut state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"));
+        let mut state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"));
         state = state.with_search_provider(provider);
         Router::new()
             .route("/search", get(search_files))
@@ -317,10 +317,40 @@ mod tests {
             unimplemented!()
         }
 
-        fn list_folder_counts(
-            &self,
-        ) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
             Ok(Vec::new())
+        }
+
+        fn set_file_visibility(
+            &self,
+            _id: &tssp_domain::FileId,
+            _visibility: tssp_domain::Visibility,
+            _public_token: Option<&str>,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+
+        fn find_file_by_public_token(
+            &self,
+            _token: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+
+        fn update_folder_path_prefix(
+            &self,
+            _from_prefix: &str,
+            _to_prefix: &str,
+        ) -> Result<u64, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+
+        fn set_file_folder_path(
+            &self,
+            _id: &tssp_domain::FileId,
+            _folder_path: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
         }
     }
 
@@ -391,7 +421,10 @@ mod tests {
         ) -> Result<Vec<tssp_domain::NoteRecord>, tssp_ports::RepositoryError> {
             Ok(vec![])
         }
-        fn search_all(&self, _query: &str) -> Result<Vec<tssp_ports::SearchHit>, tssp_ports::RepositoryError> {
+        fn search_all(
+            &self,
+            _query: &str,
+        ) -> Result<Vec<tssp_ports::SearchHit>, tssp_ports::RepositoryError> {
             Ok(vec![])
         }
     }
@@ -515,10 +548,40 @@ mod tests {
             unimplemented!()
         }
 
-        fn list_folder_counts(
-            &self,
-        ) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
             Ok(Vec::new())
+        }
+
+        fn set_file_visibility(
+            &self,
+            _id: &tssp_domain::FileId,
+            _visibility: tssp_domain::Visibility,
+            _public_token: Option<&str>,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+
+        fn find_file_by_public_token(
+            &self,
+            _token: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+
+        fn update_folder_path_prefix(
+            &self,
+            _from_prefix: &str,
+            _to_prefix: &str,
+        ) -> Result<u64, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+
+        fn set_file_folder_path(
+            &self,
+            _id: &tssp_domain::FileId,
+            _folder_path: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
         }
     }
 

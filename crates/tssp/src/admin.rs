@@ -16,23 +16,25 @@ pub(crate) fn run(cli: &Cli, command: &AdminCommand) -> Result<CliExitCode, Stri
         AdminAction::Delete(args) => admin_delete(cli, &args.id),
         AdminAction::Corrupt => get_json(cli, "/api/v1/admin/corrupt", "corrupt"),
         AdminAction::CleanupTemp => post_json(cli, "/api/v1/admin/cleanup/temp", "cleanup"),
-        AdminAction::CleanupSessions => {
-            post_json(cli, "/api/v1/admin/cleanup/sessions", "cleanup")
-        }
+        AdminAction::CleanupSessions => post_json(cli, "/api/v1/admin/cleanup/sessions", "cleanup"),
     }
 }
 
 fn get_json(cli: &Cli, path: &str, label: &str) -> Result<CliExitCode, String> {
-    let body = fetch(cli, |client, url| {
-        api_get(client, url).header(ACCEPT, "application/json")
-    }, path)?;
+    let body = fetch(
+        cli,
+        |client, url| api_get(client, url).header(ACCEPT, "application/json"),
+        path,
+    )?;
     print_body(cli, &body, label)
 }
 
 fn post_json(cli: &Cli, path: &str, label: &str) -> Result<CliExitCode, String> {
-    let body = fetch(cli, |client, url| {
-        api_post(client, url).header(ACCEPT, "application/json")
-    }, path)?;
+    let body = fetch(
+        cli,
+        |client, url| api_post(client, url).header(ACCEPT, "application/json"),
+        path,
+    )?;
     print_body(cli, &body, label)
 }
 
@@ -46,15 +48,17 @@ fn admin_files(cli: &Cli, args: &AdminFilesArgs) -> Result<CliExitCode, String> 
         path.push_str("&type=");
         path.push_str(&encode_query_component(mime));
     }
-    let body = fetch(cli, |client, url| {
-        api_get(client, url).header(ACCEPT, "application/json")
-    }, &path)?;
+    let body = fetch(
+        cli,
+        |client, url| api_get(client, url).header(ACCEPT, "application/json"),
+        &path,
+    )?;
     if cli.output.json {
         println!("{body}");
         return Ok(CliExitCode::Success);
     }
-    let parsed: AdminFilesResponse = serde_json::from_str(&body)
-        .map_err(|e| format!("invalid admin files response: {e}"))?;
+    let parsed: AdminFilesResponse =
+        serde_json::from_str(&body).map_err(|e| format!("invalid admin files response: {e}"))?;
     if parsed.files.is_empty() {
         if !cli.output.quiet {
             println!("No files.");
@@ -81,9 +85,11 @@ fn admin_files(cli: &Cli, args: &AdminFilesArgs) -> Result<CliExitCode, String> 
 
 fn admin_delete(cli: &Cli, id: &str) -> Result<CliExitCode, String> {
     let path = format!("/api/v1/admin/files/{id}");
-    let body = fetch(cli, |client, url| {
-        api_delete(client, url).header(ACCEPT, "application/json")
-    }, &path)?;
+    let body = fetch(
+        cli,
+        |client, url| api_delete(client, url).header(ACCEPT, "application/json"),
+        &path,
+    )?;
     print_body(cli, &body, "delete")
 }
 

@@ -4,32 +4,35 @@
 //! HTTP handlers stay thin and delegate storage behavior to application
 //! services.
 
+mod admin;
+pub mod auth;
 mod config;
 mod content;
-#[allow(dead_code)]
-mod integrity;
-#[allow(dead_code)]
-mod mdns;
-mod settings;
-mod urls;
 mod delete;
 mod file;
+mod folders;
+#[allow(dead_code)]
+mod integrity;
 mod list;
+#[allow(dead_code)]
+mod mdns;
 mod metrics;
 mod notes;
 mod pins;
+mod public_api;
 mod public_sessions;
 mod rename;
 mod search;
 mod sessions;
+mod settings;
 mod startup;
 mod status;
 mod tags;
 mod upload;
+mod urls;
+mod visibility;
 mod web;
-mod folders;
-mod admin;
-pub mod auth;
+pub mod workspaces;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -44,17 +47,16 @@ use serde::Serialize;
 use tssp_ports::BlobReader;
 
 pub use config::bind_error_message;
-pub use settings::{CliOverrides, DaemonSettings};
-pub use urls::PublicUrlBuilder;
-pub use integrity::run_startup_integrity_scan;
-pub use mdns::spawn_advertisement;
 pub use delete::{
     ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
 };
+pub use integrity::run_startup_integrity_scan;
+pub use mdns::spawn_advertisement;
+pub use notes::{ApplicationNoteProvider, NoteProvider};
 pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};
 pub use search::{FileSearchProvider, RepositoryFileSearchProvider};
-pub use notes::{ApplicationNoteProvider, NoteProvider};
 pub use sessions::{ApplicationSessionProvider, SessionProvider, SessionResponse};
+pub use settings::{CliOverrides, DaemonSettings};
 pub use startup::StartupService;
 pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
 pub use tags::{ApplicationFileTagProvider, FileTagProvider, HttpTagError, HttpTagMutation};
@@ -62,11 +64,12 @@ pub use upload::{
     ApplicationFileUploadProvider, FileRecordResponse, FileUploadProvider, HttpUploadError,
     HttpUploadOutcome, HttpUploadRequest,
 };
+pub use urls::PublicUrlBuilder;
 
 use content::StaticBlobReader;
 use delete::StaticFileDeleteProvider;
-use pins::StaticFilePinProvider;
 use notes::StaticNoteProvider;
+use pins::StaticFilePinProvider;
 use search::StaticFileSearchProvider;
 use sessions::StaticSessionProvider;
 use status::StaticMetadataStatsProvider;
@@ -89,6 +92,7 @@ pub struct HttpState {
     upload_temp_dir: PathBuf,
     storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
     auth: AuthService,
+    pub(crate) workspaces: Option<Arc<workspaces::WorkspaceStore>>,
     settings: Arc<DaemonSettings>,
     public_urls: PublicUrlBuilder,
     corrupt_file_count: u64,
@@ -118,10 +122,18 @@ impl HttpState {
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
             auth: AuthService::disabled(),
+            workspaces: None,
             settings,
             public_urls,
             corrupt_file_count,
         }
+    }
+
+    /// Attaches the workspace store.
+    #[must_use]
+    pub fn with_workspaces(mut self, store: Arc<workspaces::WorkspaceStore>) -> Self {
+        self.workspaces = Some(store);
+        self
     }
 
     /// Effective daemon settings.
@@ -280,6 +292,18 @@ pub fn build_router(state: HttpState) -> Router {
                 .options(options_response),
         )
         .route(
+            "/api/v1/files/{id}/visibility",
+            axum::routing::patch(visibility::patch_file_visibility).options(options_response),
+        )
+        .route(
+            "/api/v1/files/visibility/bulk",
+            post(visibility::bulk_file_visibility).options(options_response),
+        )
+        .route(
+            "/api/v1/folders/move",
+            post(folders::move_folder).options(options_response),
+        )
+        .route(
             "/api/v1/search",
             get(search::search_files).options(options_response),
         )
@@ -396,6 +420,54 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/admin/cleanup/sessions",
             post(admin::admin_cleanup_sessions).options(options_response),
         )
+        .route(
+            "/api/v1/admin/users",
+            get(admin::admin_list_users)
+                .post(admin::admin_create_user)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/admin/users/{id}",
+            axum::routing::delete(admin::admin_delete_user).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/reset-code",
+            post(admin::admin_reset_code).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/role",
+            axum::routing::put(admin::admin_set_role).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/devices",
+            axum::routing::delete(admin::admin_revoke_user_devices).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/devices",
+            get(admin::admin_list_devices).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/devices/{token}",
+            axum::routing::delete(admin::admin_revoke_device).options(options_response),
+        )
+        .route(
+            "/api/v1/public/files",
+            get(public_api::list_public_files).options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces",
+            get(workspaces::list_workspaces)
+                .post(workspaces::create_workspace)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{id}",
+            get(workspaces::get_workspace)
+                .put(workspaces::update_workspace)
+                .delete(workspaces::delete_workspace)
+                .options(options_response),
+        )
+        .route("/p/{token}", get(public_api::public_download))
         .route("/assets/{*path}", get(web::serve_asset))
         .fallback(web::web_fallback)
         .layer(middleware::from_fn_with_state(
@@ -416,12 +488,12 @@ pub fn build_router(state: HttpState) -> Router {
 }
 
 #[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: ErrorBody,
+pub(crate) struct ErrorResponse {
+    pub(crate) error: ErrorBody,
 }
 
 #[derive(Debug, Serialize)]
-struct ErrorBody {
+pub(crate) struct ErrorBody {
     code: &'static str,
     message: String,
 }
@@ -462,7 +534,7 @@ mod tests {
 
     #[tokio::test]
     async fn health_endpoint_returns_plain_ok() {
-        let app = build_router(HttpState::test_http_state( std::env::temp_dir()));
+        let app = build_router(HttpState::test_http_state(std::env::temp_dir()));
         let response = app
             .oneshot(
                 Request::builder()
@@ -483,7 +555,7 @@ mod tests {
     #[tokio::test]
     async fn status_endpoint_returns_schema_version() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -510,7 +582,7 @@ mod tests {
     #[tokio::test]
     async fn status_endpoint_reports_metadata_failure() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FailingStatsProvider)),
         );
         let response = app
@@ -536,7 +608,7 @@ mod tests {
     async fn upload_endpoint_accepts_single_multipart_file() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::test_http_state( temp.path().to_path_buf())
+            HttpState::test_http_state(temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider {
                     deduplicated: false,
@@ -584,7 +656,7 @@ mod tests {
     async fn upload_endpoint_returns_ok_for_deduplicated_content() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::test_http_state( temp.path().to_path_buf())
+            HttpState::test_http_state(temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider { deduplicated: true })),
         );
@@ -614,7 +686,7 @@ mod tests {
     async fn upload_endpoint_rejects_missing_file_field() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::test_http_state( temp.path().to_path_buf())
+            HttpState::test_http_state(temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider {
                     deduplicated: false,
@@ -643,7 +715,7 @@ mod tests {
     async fn batch_upload_endpoint_returns_per_file_outcomes() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::test_http_state( temp.path().to_path_buf())
+            HttpState::test_http_state(temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(BatchEchoUploadProvider)),
         );
@@ -697,7 +769,7 @@ mod tests {
     async fn batch_upload_endpoint_rejects_empty_batch() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::test_http_state( temp.path().to_path_buf())
+            HttpState::test_http_state(temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(BatchEchoUploadProvider)),
         );
@@ -738,7 +810,7 @@ mod tests {
             SystemClock,
         );
         let app = build_router(
-            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state(temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_blob_reader(storage),
@@ -794,7 +866,7 @@ mod tests {
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository);
         let app = build_router(
-            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state(temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
@@ -881,7 +953,7 @@ mod tests {
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository);
         let app = build_router(
-            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state(temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
@@ -961,7 +1033,7 @@ mod tests {
         let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
         let tag_service = TagService::new(repository);
         let app = build_router(
-            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state(temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
@@ -1024,7 +1096,7 @@ mod tests {
         );
         let pin_service = PinService::new(repository);
         let app = build_router(
-            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state(temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
@@ -1172,7 +1244,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
         );
         let app = build_router(
-            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state(temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(SingleRecordStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider {
                     deduplicated: false,
@@ -1193,7 +1265,7 @@ mod tests {
     #[tokio::test]
     async fn list_endpoint_rejects_zero_limit() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1209,7 +1281,7 @@ mod tests {
     #[tokio::test]
     async fn list_endpoint_rejects_limit_above_maximum() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1228,7 +1300,7 @@ mod tests {
     #[tokio::test]
     async fn list_endpoint_reports_metadata_failure() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FailingStatsProvider)),
         );
         let response = app
@@ -1244,7 +1316,7 @@ mod tests {
     #[tokio::test]
     async fn file_endpoint_rejects_invalid_id() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1260,7 +1332,7 @@ mod tests {
     #[tokio::test]
     async fn file_endpoint_returns_not_found() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1276,7 +1348,7 @@ mod tests {
     #[tokio::test]
     async fn file_endpoint_reports_metadata_failure() {
         let app = build_router(
-            HttpState::test_http_state( std::env::temp_dir())
+            HttpState::test_http_state(std::env::temp_dir())
                 .with_stats_provider(Arc::new(FailingStatsProvider)),
         );
         let response = app
@@ -1356,6 +1428,34 @@ mod tests {
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
             Ok(Vec::new())
         }
+
+        fn set_file_visibility(
+            &self,
+            _: &tssp_domain::FileId,
+            _: tssp_domain::Visibility,
+            _: Option<&str>,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(None)
+        }
+
+        fn find_file_by_public_token(
+            &self,
+            _: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(None)
+        }
+
+        fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+            Ok(0)
+        }
+
+        fn set_file_folder_path(
+            &self,
+            _: &tssp_domain::FileId,
+            _: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(None)
+        }
     }
 
     struct FailingStatsProvider;
@@ -1400,6 +1500,34 @@ mod tests {
         }
 
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn set_file_visibility(
+            &self,
+            _: &tssp_domain::FileId,
+            _: tssp_domain::Visibility,
+            _: Option<&str>,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn find_file_by_public_token(
+            &self,
+            _: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn set_file_folder_path(
+            &self,
+            _: &tssp_domain::FileId,
+            _: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
             Err("metadata database is unavailable".to_owned())
         }
     }
@@ -1457,6 +1585,34 @@ mod tests {
 
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
             Ok(vec![(String::new(), 1)])
+        }
+
+        fn set_file_visibility(
+            &self,
+            id: &tssp_domain::FileId,
+            _: tssp_domain::Visibility,
+            _: Option<&str>,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            self.find_file(id)
+        }
+
+        fn find_file_by_public_token(
+            &self,
+            _: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(None)
+        }
+
+        fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+            Ok(1)
+        }
+
+        fn set_file_folder_path(
+            &self,
+            id: &tssp_domain::FileId,
+            _: &str,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            self.find_file(id)
         }
     }
 
@@ -1697,7 +1853,10 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: request.tags.iter().map(|tag| tag_value(tag)).collect(),
             pinned_at: request.pinned.then_some(1),
-        folder_path: String::new(),
+            folder_path: String::new(),
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
         }
     }
 
@@ -1712,7 +1871,10 @@ mod tests {
             uploaded_at: timestamp(1_700_000_000),
             tags: Vec::new(),
             pinned_at: None,
-        folder_path: String::new(),
+            folder_path: String::new(),
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
         }
     }
 

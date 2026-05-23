@@ -48,13 +48,12 @@ impl BackendAddress {
             return Err("host must not be empty".to_owned());
         }
         if host.contains('/') {
-            return Err("host must not contain a URL path; use config url for full URLs".to_owned());
+            return Err(
+                "host must not contain a URL path; use config url for full URLs".to_owned(),
+            );
         }
 
-        if host == DEFAULT_HOST
-            && args.host.is_none()
-            && config.host.is_none()
-            && discovery_enabled
+        if host == DEFAULT_HOST && args.host.is_none() && config.host.is_none() && discovery_enabled
         {
             if let Some(discovered) = crate::discovery::discover_daemon(true) {
                 host = discovered.host;
@@ -232,5 +231,4 @@ mod tests {
 
         assert_eq!(address.base_url(), "http://tsspd.local:9000");
     }
-
 }

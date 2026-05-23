@@ -46,10 +46,14 @@ impl HttpNoteError {
             Self::InvalidRequest { message } => {
                 (StatusCode::BAD_REQUEST, "invalid_request", message.clone())
             }
-            Self::PayloadTooLarge { message } => {
-                (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large", message.clone())
+            Self::PayloadTooLarge { message } => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "payload_too_large",
+                message.clone(),
+            ),
+            Self::NotFound { message } => {
+                (StatusCode::NOT_FOUND, "note_not_found", message.clone())
             }
-            Self::NotFound { message } => (StatusCode::NOT_FOUND, "note_not_found", message.clone()),
             Self::Unavailable { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "note_unavailable",

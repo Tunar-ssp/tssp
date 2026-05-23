@@ -1,9 +1,7 @@
 //! Note lifecycle use cases.
 
 use thiserror::Error;
-use tssp_domain::{
-    derive_note_title, DomainError, NoteBody, NoteId, NoteRecord, NoteTitle, Tag,
-};
+use tssp_domain::{derive_note_title, DomainError, NoteBody, NoteId, NoteRecord, NoteTitle, Tag};
 use tssp_ports::{
     Clock, IdGenerator, NewNoteRecord, NoteListQuery, NoteRepository, PagedNotes, PinOutcome,
     RepositoryError, TagMutationOutcome,
@@ -96,9 +94,7 @@ where
     ///
     /// Returns [`NoteError`] when lookup fails.
     pub fn get_note(&self, id: &NoteId) -> Result<Option<NoteRecord>, NoteError> {
-        self.repository
-            .find_note(id)
-            .map_err(NoteError::Repository)
+        self.repository.find_note(id).map_err(NoteError::Repository)
     }
 
     /// Replaces a note body and optional title.
@@ -309,7 +305,8 @@ mod tests {
             .insert_note(NewNoteRecord {
                 id,
                 title: NoteTitle::new("Rust notes").unwrap_or_else(|error| panic!("{error}")),
-                body: NoteBody::new("ownership and borrowing").unwrap_or_else(|error| panic!("{error}")),
+                body: NoteBody::new("ownership and borrowing")
+                    .unwrap_or_else(|error| panic!("{error}")),
                 created_at: now,
                 updated_at: now,
                 tags: vec![],
@@ -320,7 +317,9 @@ mod tests {
         let hits = repository
             .search_all("ownership")
             .unwrap_or_else(|error| panic!("search failed: {error}"));
-        assert!(hits.iter().any(|hit| matches!(hit, tssp_ports::SearchHit::Note(_))));
+        assert!(hits
+            .iter()
+            .any(|hit| matches!(hit, tssp_ports::SearchHit::Note(_))));
     }
 
     #[test]

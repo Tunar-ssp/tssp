@@ -35,8 +35,8 @@ pub fn discover_daemon(enabled: bool) -> Option<DiscoveredDaemon> {
 }
 
 fn discover_blocking() -> Result<DiscoveredDaemon, String> {
-    let daemon = mdns_sd::ServiceDaemon::new()
-        .map_err(|error| format!("mDNS unavailable: {error}"))?;
+    let daemon =
+        mdns_sd::ServiceDaemon::new().map_err(|error| format!("mDNS unavailable: {error}"))?;
     let receiver = daemon
         .browse(SERVICE_TYPE)
         .map_err(|error| format!("mDNS browse failed: {error}"))?;
@@ -44,10 +44,7 @@ fn discover_blocking() -> Result<DiscoveredDaemon, String> {
     while std::time::Instant::now() < deadline {
         if let Ok(event) = receiver.recv_timeout(Duration::from_millis(250)) {
             if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
-                let host = info
-                    .get_hostname()
-                    .trim_end_matches('.')
-                    .to_owned();
+                let host = info.get_hostname().trim_end_matches('.').to_owned();
                 let port = info.get_port();
                 if !host.is_empty() && port > 0 {
                     let _ = daemon.shutdown();

@@ -143,10 +143,7 @@ impl NoteRepository for SqliteFileRepository {
             parameters.push(Value::Integer(until.seconds()));
         }
         if let Some(substring) = &query.title_substring {
-            where_clauses.push(format!(
-                "LOWER(n.title) LIKE ?{}",
-                parameters.len() + 1
-            ));
+            where_clauses.push(format!("LOWER(n.title) LIKE ?{}", parameters.len() + 1));
             parameters.push(Value::Text(format!("%{}%", substring.to_lowercase())));
         }
         if query.pinned_only {
@@ -161,11 +158,11 @@ impl NoteRepository for SqliteFileRepository {
         sql.push_str(" ORDER BY ");
         sql.push_str(note_order_by_clause(query.sort));
         sql.push_str(&format!(" LIMIT ?{}", parameters.len() + 1));
-        parameters.push(Value::Integer(i64::try_from(query.limit).map_err(|error| {
-            RepositoryError::OperationFailed {
+        parameters.push(Value::Integer(i64::try_from(query.limit).map_err(
+            |error| RepositoryError::OperationFailed {
                 message: format!("list limit overflow: {error}"),
-            }
-        })?));
+            },
+        )?));
 
         let mut statement = connection
             .prepare(&sql)
@@ -471,7 +468,10 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
     })
 }
 
-pub(crate) fn load_note_tags(connection: &Connection, id: &NoteId) -> Result<Vec<Tag>, RepositoryError> {
+pub(crate) fn load_note_tags(
+    connection: &Connection,
+    id: &NoteId,
+) -> Result<Vec<Tag>, RepositoryError> {
     let mut statement = connection
         .prepare(
             "SELECT tags.display
@@ -607,8 +607,8 @@ mod tests {
             .unwrap_or_else(|error| panic!("open failed: {error}"));
         let now = timestamp(1_700_000_000);
         let body = NoteBody::new("Body text").unwrap_or_else(|error| panic!("{error}"));
-        let title =
-            NoteTitle::new(derive_note_title(body.as_str())).unwrap_or_else(|error| panic!("{error}"));
+        let title = NoteTitle::new(derive_note_title(body.as_str()))
+            .unwrap_or_else(|error| panic!("{error}"));
         let id = NoteId::new("note-test-1").unwrap_or_else(|error| panic!("{error}"));
 
         let created = repository

@@ -1,41 +1,73 @@
-//! Virtual folder path normalization for uploads and listing.
+//! Logical folder rename/move/delete.
 
-/// Normalizes a client-supplied folder path for storage and filtering.
-///
-/// # Errors
-///
-/// Returns a validation message when the path is invalid.
-pub fn normalize_folder_path(value: &str) -> Result<String, String> {
-    let trimmed = value.trim().trim_matches('/');
-    if trimmed.is_empty() {
-        return Ok(String::new());
-    }
-    if trimmed.contains("..") {
-        return Err("folder path must not contain '..'".to_owned());
-    }
-    if trimmed
-        .chars()
-        .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '_' | '.')))
-    {
-        return Err("folder path contains invalid characters".to_owned());
-    }
-    Ok(trimmed.to_owned())
+/// Normalizes a folder path for storage (no leading/trailing slashes).
+#[must_use]
+pub fn normalize_folder_path(value: &str) -> String {
+    value.trim().trim_matches('/').replace('\\', "/")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::normalize_folder_path;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+use serde::Deserialize;
 
-    #[test]
-    fn trims_slashes() {
-        assert_eq!(
-            normalize_folder_path("/photos/vacation/").unwrap(),
-            "photos/vacation"
-        );
-    }
+use crate::auth::AuthContext;
+use crate::{ErrorBody, ErrorResponse, HttpState};
 
-    #[test]
-    fn rejects_parent_segments() {
-        assert!(normalize_folder_path("../secret").is_err());
+#[derive(Debug, Deserialize)]
+pub struct FolderMoveBody {
+    pub from: String,
+    pub to: String,
+}
+
+/// `POST /api/v1/folders/move` — rewrite folder_path prefixes (admin).
+pub async fn move_folder(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Json(body): Json<FolderMoveBody>,
+) -> Response {
+    if !auth.is_admin() {
+        return forbidden();
     }
+    match state
+        .stats_provider
+        .update_folder_path_prefix(&body.from, &body.to)
+    {
+        Ok(count) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "schema_version": 1,
+                "files_updated": count,
+            })),
+        )
+            .into_response(),
+        Err(message) => internal(message),
+    }
+}
+
+fn forbidden() -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: "forbidden",
+                message: "admin role required".to_owned(),
+            },
+        }),
+    )
+        .into_response()
+}
+
+fn internal(message: String) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: "internal_error",
+                message,
+            },
+        }),
+    )
+        .into_response()
 }

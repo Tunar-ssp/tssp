@@ -313,7 +313,10 @@ mod tests {
                 uploaded_at: new_file.uploaded_at,
                 tags: new_file.tags,
                 pinned_at: new_file.pinned_at,
-            folder_path: String::new(),
+                folder_path: String::new(),
+                owner_id: None,
+                visibility: tssp_domain::Visibility::Private,
+                public_token: None,
             })
         }
 
@@ -433,6 +436,38 @@ mod tests {
         fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
             Ok(Vec::new())
         }
+
+        fn set_file_visibility(
+            &self,
+            _id: &FileId,
+            _visibility: tssp_domain::Visibility,
+            _public_token: Option<&str>,
+        ) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
+        }
+
+        fn find_file_by_public_token(
+            &self,
+            _token: &str,
+        ) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
+        }
+
+        fn update_folder_path_prefix(
+            &self,
+            _from_prefix: &str,
+            _to_prefix: &str,
+        ) -> Result<u64, RepositoryError> {
+            Ok(0)
+        }
+
+        fn set_file_folder_path(
+            &self,
+            _id: &FileId,
+            _folder_path: &str,
+        ) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
+        }
     }
 
     fn clone_repository_error(error: &RepositoryError) -> RepositoryError {
@@ -511,6 +546,9 @@ mod tests {
             tags: &["Family", " family "],
             pinned_at: Some(1),
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -543,6 +581,9 @@ mod tests {
             tags: &["ignored"],
             pinned_at: Some(1),
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -572,6 +613,9 @@ mod tests {
             tags: &[],
             pinned_at: None,
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -605,6 +649,9 @@ mod tests {
             tags: &[],
             pinned_at: None,
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -629,6 +676,9 @@ mod tests {
             tags: &[],
             pinned_at: None,
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -652,6 +702,9 @@ mod tests {
             tags: &[],
             pinned_at: None,
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -680,6 +733,9 @@ mod tests {
             tags: &[],
             pinned_at: None,
             folder_path: "",
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
             source: &mut source,
         };
 
@@ -704,7 +760,10 @@ mod tests {
             uploaded_at: FixedClock.now(),
             tags: Vec::new(),
             pinned_at: None,
-        folder_path: String::new(),
+            folder_path: String::new(),
+            owner_id: None,
+            visibility: tssp_domain::Visibility::Private,
+            public_token: None,
         }
     }
 

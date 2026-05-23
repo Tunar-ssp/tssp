@@ -13,7 +13,7 @@ use tssp_domain::{UserId, UserName, UserRole};
 use super::devices::{DeviceStore, DeviceStoreError, TrustedDevice};
 use super::local_network::{client_ip, is_local_client};
 use super::store::{AuthStore, AuthStoreError};
-use super::users::{UserRecord, UserStore, UserStoreError};
+use super::users::{UserStore, UserStoreError};
 
 const WEB_SESSION_DAYS: i64 = 30;
 const API_TOKEN_DAYS: i64 = 365;
@@ -132,11 +132,13 @@ impl AuthService {
         if self.global_auth_required {
             return Ok(true);
         }
-        if !self.legacy_password_enabled()? && !self.users_enabled().map_err(|e| {
-            AuthStoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(
-                std::io::Error::other(e.to_string()),
-            )))
-        })? {
+        if !self.legacy_password_enabled()?
+            && !self.users_enabled().map_err(|e| {
+                AuthStoreError::Database(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                    std::io::Error::other(e.to_string()),
+                )))
+            })?
+        {
             return Ok(false);
         }
         Ok(!is_local_client(client))
@@ -151,11 +153,7 @@ impl AuthService {
 
     /// Resolves the effective client IP.
     #[must_use]
-    pub fn resolve_client(
-        &self,
-        peer: IpAddr,
-        forwarded_for: Option<&str>,
-    ) -> IpAddr {
+    pub fn resolve_client(&self, peer: IpAddr, forwarded_for: Option<&str>) -> IpAddr {
         client_ip(peer, forwarded_for, self.trust_forwarded)
     }
 
@@ -207,14 +205,7 @@ impl AuthService {
         let user = users.verify_credentials(name, code)?;
         let token = generate_token()?;
         let expires_at = now + token_ttl_days(kind) * 86_400;
-        store.insert_token(
-            &token,
-            kind,
-            Some(user.id.as_str()),
-            None,
-            now,
-            expires_at,
-        )?;
+        store.insert_token(&token, kind, Some(user.id.as_str()), None, now, expires_at)?;
 
         let device_token = if remember_device {
             let device_token = generate_token()?;
@@ -333,7 +324,10 @@ impl AuthService {
     ///
     /// Returns an error when the hash cannot be stored.
     pub fn set_password_hash(&self, hash: &str) -> Result<(), AuthStoreError> {
-        let store = self.store.as_deref().ok_or(AuthStoreError::InvalidPasswordHash)?;
+        let store = self
+            .store
+            .as_deref()
+            .ok_or(AuthStoreError::InvalidPasswordHash)?;
         store.set_password_hash(hash)
     }
 
@@ -386,6 +380,12 @@ impl AuthService {
     pub(crate) const fn trusted_device_max_age() -> Duration {
         Duration::from_secs((TRUSTED_DEVICE_DAYS * 86_400) as u64)
     }
+
+    /// True when `public_url` forces authentication for all clients.
+    #[must_use]
+    pub const fn global_auth_required(&self) -> bool {
+        self.global_auth_required
+    }
 }
 
 fn token_ttl_days(kind: &str) -> i64 {
@@ -432,10 +432,7 @@ mod tests {
         users
             .create_user(&id, &name, UserRole::Admin, "secret-code", 1_000)
             .expect("user");
-        (
-            temp,
-            AuthService::new(store, users, devices, false, false),
-        )
+        (temp, AuthService::new(store, users, devices, false, false))
     }
 
     #[test]
@@ -454,10 +451,11 @@ mod tests {
     #[test]
     fn global_mode_requires_auth_even_on_lan() {
         let (_temp, auth) = temp_service();
+        let path = _temp.path().join("db.sqlite3");
         let global = AuthService::new(
-            auth.store.clone(),
-            Arc::new(UserStore::open(_temp.path().join("db.sqlite3")).expect("users")),
-            Arc::new(DeviceStore::open(_temp.path().join("db.sqlite3")).expect("devices")),
+            auth.store.clone().expect("store"),
+            Arc::new(UserStore::open(&path).expect("users")),
+            Arc::new(DeviceStore::open(&path).expect("devices")),
             false,
             true,
         );

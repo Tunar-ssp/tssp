@@ -35,6 +35,7 @@ window.Tssp = window.Tssp || {};
           T.showLogin();
           return;
         }
+        T.$("#logout-btn")?.removeAttribute("hidden");
       }
       T.showApp();
     } catch {
@@ -60,10 +61,16 @@ window.Tssp = window.Tssp || {};
   };
 
   T.refreshView = function refreshView(view) {
-    if (view === "objects") T.loadFiles();
-    else if (view === "notes") T.loadNotes();
+    if (view === "objects") {
+      T.loadFolderTree();
+      T.loadFiles();
+    } else if (view === "notes") T.loadNotes();
     else if (view === "overview") T.loadOverview();
     else if (view === "images") T.loadImages();
+    else if (view === "videos") T.loadTypedFiles("video", "videos-body");
+    else if (view === "documents") T.loadDocuments();
+    else if (view === "public") T.loadPublic();
+    else if (view === "workspaces") T.loadWorkspaces();
     else if (view === "admin") T.loadAdmin();
   };
 })(window.Tssp);

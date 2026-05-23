@@ -63,6 +63,9 @@ mod tests {
     fn validate_note_body_rejects_oversized_payload() {
         let body = "x".repeat(MAX_NOTE_BODY_BYTES + 1);
         let error = validate_note_body(&body).unwrap_err();
-        assert!(matches!(error, crate::notes::error::HttpNoteError::PayloadTooLarge { .. }));
+        assert!(matches!(
+            error,
+            crate::notes::error::HttpNoteError::PayloadTooLarge { .. }
+        ));
     }
 }

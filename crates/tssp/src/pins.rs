@@ -19,8 +19,7 @@ pub(crate) fn run_pin(cli: &Cli, args: &PinArgs) -> Result<CliExitCode, String> 
     let client = build_client()?;
     let url = format!("{}/api/v1/files/{}/pin", address.base_url(), args.id);
 
-    let mut request = api_put(&client, &url)
-        .header(ACCEPT, "application/vnd.tssp.v1+json");
+    let mut request = api_put(&client, &url).header(ACCEPT, "application/vnd.tssp.v1+json");
     if let Some(pos) = args.position {
         request = request.json(&serde_json::json!({ "position": pos }));
     }

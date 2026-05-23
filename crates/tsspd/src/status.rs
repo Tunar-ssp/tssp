@@ -71,6 +71,27 @@ pub trait MetadataStatsProvider: Send + Sync {
     ///
     /// Returns a short diagnostic when the query fails.
     fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String>;
+
+    /// Updates file visibility and public link token.
+    fn set_file_visibility(
+        &self,
+        id: &FileId,
+        visibility: tssp_domain::Visibility,
+        public_token: Option<&str>,
+    ) -> Result<Option<FileRecord>, String>;
+
+    /// Finds a public file by link token.
+    fn find_file_by_public_token(&self, token: &str) -> Result<Option<FileRecord>, String>;
+
+    /// Moves or renames a folder prefix across files.
+    fn update_folder_path_prefix(&self, from_prefix: &str, to_prefix: &str) -> Result<u64, String>;
+
+    /// Sets folder path for one file.
+    fn set_file_folder_path(
+        &self,
+        id: &FileId,
+        folder_path: &str,
+    ) -> Result<Option<FileRecord>, String>;
 }
 
 #[derive(Debug)]
@@ -121,6 +142,31 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
 
     fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
         Ok(Vec::new())
+    }
+
+    fn set_file_visibility(
+        &self,
+        _id: &FileId,
+        _visibility: tssp_domain::Visibility,
+        _public_token: Option<&str>,
+    ) -> Result<Option<FileRecord>, String> {
+        Err("metadata store unavailable".to_owned())
+    }
+
+    fn find_file_by_public_token(&self, _token: &str) -> Result<Option<FileRecord>, String> {
+        Ok(None)
+    }
+
+    fn update_folder_path_prefix(&self, _from: &str, _to: &str) -> Result<u64, String> {
+        Err("metadata store unavailable".to_owned())
+    }
+
+    fn set_file_folder_path(
+        &self,
+        _id: &FileId,
+        _folder_path: &str,
+    ) -> Result<Option<FileRecord>, String> {
+        Err("metadata store unavailable".to_owned())
     }
 }
 
@@ -196,6 +242,39 @@ where
             .list_folder_counts()
             .map_err(|error| error.to_string())
     }
+
+    fn set_file_visibility(
+        &self,
+        id: &FileId,
+        visibility: tssp_domain::Visibility,
+        public_token: Option<&str>,
+    ) -> Result<Option<FileRecord>, String> {
+        self.repository
+            .set_file_visibility(id, visibility, public_token)
+            .map_err(|error| error.to_string())
+    }
+
+    fn find_file_by_public_token(&self, token: &str) -> Result<Option<FileRecord>, String> {
+        self.repository
+            .find_file_by_public_token(token)
+            .map_err(|error| error.to_string())
+    }
+
+    fn update_folder_path_prefix(&self, from_prefix: &str, to_prefix: &str) -> Result<u64, String> {
+        self.repository
+            .update_folder_path_prefix(from_prefix, to_prefix)
+            .map_err(|error| error.to_string())
+    }
+
+    fn set_file_folder_path(
+        &self,
+        id: &FileId,
+        folder_path: &str,
+    ) -> Result<Option<FileRecord>, String> {
+        self.repository
+            .set_file_folder_path(id, folder_path)
+            .map_err(|error| error.to_string())
+    }
 }
 
 /// Minimal status response consumed by `tssp status`.
@@ -246,11 +325,10 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
                 .unwrap_or_else(|| state.upload_temp_dir.clone());
             let public_url = state.public_urls().base().to_owned();
             let corrupt_file_count = state.corrupt_file_count;
-            let storage_bytes_used = tokio::task::spawn_blocking(move || {
-                calculate_directory_size(&data_root)
-            })
-            .await
-            .unwrap_or(0);
+            let storage_bytes_used =
+                tokio::task::spawn_blocking(move || calculate_directory_size(&data_root))
+                    .await
+                    .unwrap_or(0);
 
             Json(StatusResponse {
                 schema_version: 1,
@@ -365,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_endpoint_returns_ok_with_stats() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(StaticMetadataStatsProvider));
 
         let response = status(State(state)).await;
@@ -416,9 +494,34 @@ mod tests {
             fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
                 Ok(Vec::new())
             }
+
+            fn set_file_visibility(
+                &self,
+                _: &FileId,
+                _: tssp_domain::Visibility,
+                _: Option<&str>,
+            ) -> Result<Option<FileRecord>, String> {
+                Ok(None)
+            }
+
+            fn find_file_by_public_token(&self, _: &str) -> Result<Option<FileRecord>, String> {
+                Ok(None)
+            }
+
+            fn update_folder_path_prefix(&self, _: &str, _: &str) -> Result<u64, String> {
+                Ok(0)
+            }
+
+            fn set_file_folder_path(
+                &self,
+                _: &FileId,
+                _: &str,
+            ) -> Result<Option<FileRecord>, String> {
+                Ok(None)
+            }
         }
 
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(ErrorStatsProvider));
 
         let response = status(State(state)).await;
@@ -432,15 +535,7 @@ mod tests {
         let provider = StaticMetadataStatsProvider;
         let query = RepositoryListQuery {
             limit: 10,
-            tags: vec![],
-            mime_prefix: None,
-            name_substring: None,
-            since: None,
-            until: None,
-            pinned_only: false,
-            sort: tssp_ports::ListSort::default(),
-            after_cursor: None,
-        folder_prefix: None,
+            ..RepositoryListQuery::default()
         };
         let result = provider
             .list_files(&query)
@@ -482,7 +577,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_response_includes_uptime() {
-        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(StaticMetadataStatsProvider));
         let response = status(State(state)).await;
 

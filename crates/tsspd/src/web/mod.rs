@@ -8,26 +8,54 @@ use axum::http::header::{
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 
-const INDEX_HTML: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/index.html"));
-const MANIFEST: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/manifest.webmanifest"));
+const INDEX_HTML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/index.html"
+));
+const MANIFEST: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/manifest.webmanifest"
+));
 const SERVICE_WORKER: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/sw.js"));
 
-const CSS_TOKENS: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/css/tokens.css"));
-const CSS_BASE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/css/base.css"));
-const CSS_LAYOUT: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/css/layout.css"));
-const CSS_COMPONENTS: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/css/components.css"));
-const CSS_VIEWS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/css/views.css"));
-const CSS_MOBILE: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/css/mobile.css"));
+const CSS_TOKENS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/tokens.css"
+));
+const CSS_BASE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/base.css"
+));
+const CSS_LAYOUT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/layout.css"
+));
+const CSS_COMPONENTS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/components.css"
+));
+const CSS_VIEWS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/views.css"
+));
+const CSS_MOBILE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/mobile.css"
+));
 
 const JS_API: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/api.js"));
-const JS_STATE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/state.js"));
-const JS_UPLOAD: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/upload.js"));
-const JS_VIEWS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/views.js"));
+const JS_STATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/state.js"
+));
+const JS_UPLOAD: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/upload.js"
+));
+const JS_VIEWS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/views.js"
+));
 const JS_APP: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
 
 const HTML_CSP: &str =
@@ -121,10 +149,7 @@ async fn serve_index_html() -> Response<Body> {
         HeaderValue::from_static("text/html; charset=utf-8"),
     );
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-    headers.insert(
-        CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static(HTML_CSP),
-    );
+    headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(HTML_CSP));
     response
 }
 
@@ -156,15 +181,11 @@ mod tests {
     #[tokio::test]
     async fn web_fallback_serves_index_with_security_headers() {
         let state = crate::HttpState::test_http_state(std::env::temp_dir());
-        let app = axum::Router::new()
-            .fallback(web_fallback)
-            .with_state(state);
-        let response = tower::util::ServiceExt::oneshot(
-            app,
-            Request::get("/").body(Body::empty()).unwrap(),
-        )
-        .await
-        .unwrap_or_else(|e| panic!("request failed: {e}"));
+        let app = axum::Router::new().fallback(web_fallback).with_state(state);
+        let response =
+            tower::util::ServiceExt::oneshot(app, Request::get("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap_or_else(|e| panic!("request failed: {e}"));
         assert_eq!(response.status(), StatusCode::OK);
         let headers = response.headers();
         assert!(headers.get(CONTENT_SECURITY_POLICY).is_some());

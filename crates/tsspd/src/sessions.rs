@@ -370,12 +370,7 @@ pub async fn create_send_session(
     state
         .session_provider
         .create_send_session(&payload.file_id, payload.ttl_seconds)
-        .map(|response| {
-            (
-                StatusCode::CREATED,
-                Json(response.with_public_urls(&urls)),
-            )
-        })
+        .map(|response| (StatusCode::CREATED, Json(response.with_public_urls(&urls))))
         .map_err(|_| HttpSessionError::InternalError("Failed to create session".to_string()))
 }
 
@@ -388,12 +383,7 @@ pub async fn create_receive_session(
     state
         .session_provider
         .create_receive_session(payload.ttl_seconds)
-        .map(|response| {
-            (
-                StatusCode::CREATED,
-                Json(response.with_public_urls(&urls)),
-            )
-        })
+        .map(|response| (StatusCode::CREATED, Json(response.with_public_urls(&urls))))
         .map_err(|_| HttpSessionError::InternalError("Failed to create session".to_string()))
 }
 
