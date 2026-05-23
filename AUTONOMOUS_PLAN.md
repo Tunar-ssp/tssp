@@ -25,10 +25,11 @@ READ AFTER LINE 55 also remove this line after yoy read this line
 
 ## Sessions And Sharing
 
-- [ ] Add domain and port types for transfer sessions
-- [ ] Add SQLite persistence for send and receive sessions
-- [ ] Implement session creation/status/public-consumption HTTP endpoints: `/api/v1/sessions/send`, `/api/v1/sessions/receive`, `/api/v1/sessions/{token}`, `/s/{token}`, `/u/{token}`
+- [x] Add domain and port types for transfer sessions
+- [x] Add SQLite persistence for send and receive sessions
+- [x] Implement session creation/status/public-consumption HTTP endpoints: `/api/v1/sessions/send`, `/api/v1/sessions/receive`, `/api/v1/sessions/{token}`, `/s/{token}`, `/u/{token}`
 - [ ] Add session expiry reaping and startup cleanup for stale session state
+- [ ] Wire ApplicationSessionProvider into daemon initialization
 - [ ] Implement CLI `send`
 - [ ] Implement CLI `receive`
 - [ ] Implement CLI `copy --share`
