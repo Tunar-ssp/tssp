@@ -14,6 +14,7 @@ clap_complete.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+time.workspace = true
 tssp-cli-core = { path = "../tssp-cli-core" }
 
 [dev-dependencies]
