@@ -50,8 +50,18 @@ pub(crate) const JS_VIEWS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/views.js"
 ));
-pub(crate) const JS_PRO: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/pro.js"));
+pub(crate) const JS_FILES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/files.js"
+));
+pub(crate) const JS_NOTES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/notes.js"
+));
+pub(crate) const JS_ADMIN: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/admin.js"
+));
 pub(crate) const JS_APP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
 
@@ -75,7 +85,9 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "js/state.js" => Some((JS_STATE, "application/javascript; charset=utf-8")),
         "js/upload.js" => Some((JS_UPLOAD, "application/javascript; charset=utf-8")),
         "js/views.js" => Some((JS_VIEWS, "application/javascript; charset=utf-8")),
-        "js/pro.js" => Some((JS_PRO, "application/javascript; charset=utf-8")),
+        "js/files.js" => Some((JS_FILES, "application/javascript; charset=utf-8")),
+        "js/notes.js" => Some((JS_NOTES, "application/javascript; charset=utf-8")),
+        "js/admin.js" => Some((JS_ADMIN, "application/javascript; charset=utf-8")),
         "js/app.js" => Some((JS_APP, "application/javascript; charset=utf-8")),
         _ => None,
     }
