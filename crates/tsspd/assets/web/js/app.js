@@ -129,6 +129,15 @@
       T.adminCleanup("sessions")
     );
     T.$("#admin-refresh-files")?.addEventListener("click", () => T.loadAdminFiles());
+    T.$("#console-clear-history")?.addEventListener("click", () => {
+      T.$$("#console-history button").forEach((b) => b.remove());
+      const h = T.$("#console-history");
+      if (h) h.innerHTML = '<span class="console-hint">No commands run yet</span>';
+    });
+    document.addEventListener("click", (ev) => {
+      const consoleBtn = ev.target.closest("[data-console-cmd]");
+      if (consoleBtn) T.runConsoleCommand(consoleBtn.dataset.consoleCmd);
+    });
     T.$("#admin-create-user-form")?.addEventListener("submit", (ev) => {
       ev.preventDefault();
       T.createAdminUser();
@@ -245,6 +254,11 @@
     T.bindUpload();
   }
 
-  bindEvents();
-  T.probeAuth().then(() => T.loadFolderTree());
+  try {
+    bindEvents();
+  } catch (err) {
+    document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#08080b;color:#ececf1;font-family:system-ui;padding:24px"><div style="max-width:480px;text-align:center"><h2 style="color:#f87171;margin-bottom:12px">Dashboard failed to load</h2><p style="color:#9b9ba6;margin-bottom:16px">A JavaScript initialisation error prevented the app from starting.</p><pre style="background:#15151b;border:1px solid #282832;border-radius:8px;padding:14px;text-align:left;overflow:auto;font-size:12px;color:#fbbf24">${err?.stack || err?.message || String(err)}</pre><button onclick="location.reload()" style="margin-top:18px;padding:10px 20px;background:#a855f7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">Reload</button></div></div>`;
+    return;
+  }
+  T.probeAuth();
 })();

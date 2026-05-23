@@ -248,6 +248,14 @@ pub fn build_router(state: HttpState) -> Router {
             axum::routing::delete(crate::admin::admin_revoke_device).options(options_response),
         )
         .route(
+            "/api/v1/admin/console/commands",
+            get(crate::admin::list_commands).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/console/run",
+            post(crate::admin::run_command).options(options_response),
+        )
+        .route(
             "/api/v1/public/files",
             get(crate::public_api::list_public_files).options(options_response),
         )

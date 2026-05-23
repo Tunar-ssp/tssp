@@ -433,6 +433,23 @@
                 <button type="button" class="btn btn-secondary" id="admin-cleanup-sessions">Session cleanup info</button>
               </div>
             </div>
+            <div class="admin-card admin-card-wide">
+              <div class="admin-card-head">
+                <h3>Console</h3>
+                <p class="page-subtitle" style="margin:0;font-size:12px">Safe allowlisted operations — no shell execution</p>
+              </div>
+              <div class="console-layout">
+                <div id="console-commands" class="console-commands">Loading commands…</div>
+                <div class="console-right">
+                  <div id="console-output" class="console-output"><span class="console-hint">Select a command to run</span></div>
+                  <div class="console-history-row">
+                    <span class="muted" style="font-size:12px">History</span>
+                    <button type="button" class="btn btn-text btn-sm" id="console-clear-history">Clear</button>
+                  </div>
+                  <div id="console-history" class="console-history"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>

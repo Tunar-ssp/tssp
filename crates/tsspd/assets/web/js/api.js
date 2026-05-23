@@ -113,35 +113,68 @@ window.Tssp = window.Tssp || {};
     const lines = String(markdown || "").split(/\r?\n/);
     const html = [];
     let inList = false;
-    const closeList = () => {
-      if (inList) {
-        html.push("</ul>");
-        inList = false;
-      }
-    };
+    let inOrderedList = false;
+    let inCodeBlock = false;
+    let codeLines = [];
+
+    function closeList() {
+      if (inList) { html.push("</ul>"); inList = false; }
+      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
+    }
+
+    function inlineFormat(text) {
+      return T.escapeHtml(text)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+        .replace(/_([^_]+)_/g, "<em>$1</em>")
+        .replace(/~~([^~]+)~~/g, "<del>$1</del>")
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer" target="_blank">$1</a>');
+    }
+
     for (const line of lines) {
-      if (/^\s*[-*]\s+/.test(line)) {
-        if (!inList) {
-          html.push("<ul>");
-          inList = true;
+      if (line.startsWith("```")) {
+        if (inCodeBlock) {
+          html.push(`<pre><code>${T.escapeHtml(codeLines.join("\n"))}</code></pre>`);
+          codeLines = [];
+          inCodeBlock = false;
+        } else {
+          closeList();
+          inCodeBlock = true;
         }
-        html.push(`<li>${T.escapeHtml(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
+        continue;
+      }
+      if (inCodeBlock) { codeLines.push(line); continue; }
+
+      if (line.startsWith("> ")) {
+        closeList();
+        html.push(`<blockquote>${inlineFormat(line.slice(2))}</blockquote>`);
+      } else if (/^\s*[-*]\s+/.test(line)) {
+        if (!inList) { closeList(); html.push("<ul>"); inList = true; }
+        html.push(`<li>${inlineFormat(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
+      } else if (/^\s*\d+\.\s+/.test(line)) {
+        if (!inOrderedList) { closeList(); html.push("<ol>"); inOrderedList = true; }
+        html.push(`<li>${inlineFormat(line.replace(/^\s*\d+\.\s+/, ""))}</li>`);
+      } else if (/^#{4,6}\s/.test(line)) {
+        closeList();
+        const level = line.match(/^(#+)\s/)[1].length;
+        html.push(`<h${level}>${inlineFormat(line.replace(/^#+\s/, ""))}</h${level}>`);
       } else if (line.startsWith("### ")) {
-        closeList();
-        html.push(`<h4>${T.escapeHtml(line.slice(4))}</h4>`);
+        closeList(); html.push(`<h4>${inlineFormat(line.slice(4))}</h4>`);
       } else if (line.startsWith("## ")) {
-        closeList();
-        html.push(`<h3>${T.escapeHtml(line.slice(3))}</h3>`);
+        closeList(); html.push(`<h3>${inlineFormat(line.slice(3))}</h3>`);
       } else if (line.startsWith("# ")) {
-        closeList();
-        html.push(`<h2>${T.escapeHtml(line.slice(2))}</h2>`);
+        closeList(); html.push(`<h2>${inlineFormat(line.slice(2))}</h2>`);
+      } else if (/^---+$/.test(line.trim())) {
+        closeList(); html.push("<hr>");
       } else if (line.trim()) {
         closeList();
-        html.push(`<p>${T.escapeHtml(line)}</p>`);
+        html.push(`<p>${inlineFormat(line)}</p>`);
       } else {
         closeList();
       }
     }
+    if (inCodeBlock) html.push(`<pre><code>${T.escapeHtml(codeLines.join("\n"))}</code></pre>`);
     closeList();
     return html.join("");
   };

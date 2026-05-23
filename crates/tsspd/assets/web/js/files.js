@@ -304,20 +304,54 @@ window.Tssp = window.Tssp || {};
     const content = T.$("#preview-content");
     title.textContent = file.name || file.id;
     const inline = T.fileInlineUrl(file.id);
-    if ((file.mime_type || "").startsWith("image/")) {
+    const mime = file.mime_type || "";
+    const name = (file.name || "").toLowerCase();
+
+    if (mime.startsWith("image/")) {
       content.innerHTML = `<img class="preview-media" src="${inline}" alt="${T.escapeHtml(file.name)}">`;
-    } else if ((file.mime_type || "").startsWith("video/")) {
+    } else if (mime.startsWith("video/")) {
       content.innerHTML = `<video class="preview-media" src="${inline}" controls preload="metadata"></video>`;
+    } else if (mime.startsWith("audio/")) {
+      content.innerHTML = `<div class="preview-audio-wrap"><audio controls src="${inline}" style="width:100%;margin-top:24px"></audio><p class="muted" style="text-align:center;margin-top:12px">${T.escapeHtml(file.name)}</p></div>`;
+    } else if (mime === "application/pdf" || name.endsWith(".pdf")) {
+      content.innerHTML = `<iframe class="preview-iframe" src="${inline}" title="${T.escapeHtml(file.name)}"></iframe>`;
+    } else if (mime.startsWith("text/") || isTextLike(name, mime)) {
+      content.innerHTML = `<div class="preview-text-loading">Loading text…</div>`;
+      T.$("#preview-dialog").showModal();
+      try {
+        const resp = await fetch(inline, { credentials: "same-origin" });
+        const text = await resp.text();
+        const isMarkdown = name.endsWith(".md") || name.endsWith(".markdown");
+        if (isMarkdown) {
+          content.innerHTML = `<article class="markdown-preview preview-md">${T.simpleMarkdown(text)}</article>`;
+        } else {
+          content.innerHTML = `<pre class="preview-code">${T.escapeHtml(text.slice(0, 60000))}</pre>`;
+        }
+      } catch {
+        content.innerHTML = buildFallback(T.fileKind(file), inline, T.fileDownloadUrl(file.id), file.name);
+      }
+      return;
     } else {
-      content.innerHTML = `<div class="empty-state compact">
-        <strong>${T.escapeHtml(T.fileKind(file))} preview unavailable</strong>
-        <p>Open or download the object using the actions below.</p>
-        <div class="empty-actions">
-          <a class="btn btn-secondary" href="${inline}" target="_blank" rel="noopener">Open</a>
-          <a class="btn btn-primary" href="${T.fileDownloadUrl(file.id)}" download>Download</a>
-        </div>
-      </div>`;
+      content.innerHTML = buildFallback(T.fileKind(file), inline, T.fileDownloadUrl(file.id), file.name);
     }
     T.$("#preview-dialog").showModal();
   };
+
+  function isTextLike(name, mime) {
+    const textExts = [".rs", ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".json",
+      ".toml", ".yaml", ".yml", ".xml", ".sh", ".bash", ".txt", ".csv", ".log", ".md",
+      ".markdown", ".ini", ".env", ".gitignore", ".dockerfile"];
+    return textExts.some((ext) => name.endsWith(ext)) || mime === "application/json";
+  }
+
+  function buildFallback(kind, inlineUrl, downloadUrl, name) {
+    return `<div class="empty-state compact">
+      <strong>${T.escapeHtml(kind)} preview unavailable</strong>
+      <p>Open or download the object to view its contents.</p>
+      <div class="empty-actions">
+        <a class="btn btn-secondary" href="${inlineUrl}" target="_blank" rel="noopener">Open</a>
+        <a class="btn btn-primary" href="${downloadUrl}" download>Download</a>
+      </div>
+    </div>`;
+  }
 })(window.Tssp);

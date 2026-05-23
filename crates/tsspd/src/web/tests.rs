@@ -58,3 +58,47 @@ async fn embedded_index_matches_runtime_fallback() {
     assert!(INDEX_HTML.contains("view-admin"));
     assert!(INDEX_HTML.contains("view-note-editor"));
 }
+
+#[tokio::test]
+async fn serve_asset_returns_new_js_modules() {
+    for path in ["js/files.js", "js/notes.js", "js/admin.js", "js/views.js"] {
+        let response = serve_asset(axum::extract::Path(path.to_owned())).await;
+        assert_eq!(response.status(), StatusCode::OK, "expected 200 for {path}");
+        let ct = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            ct.contains("javascript"),
+            "expected JS content-type for {path}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn index_does_not_load_pro_js() {
+    // pro.js was replaced by the four focused modules; it must no longer be referenced
+    assert!(
+        !INDEX_HTML.contains("pro.js"),
+        "index.html must not load the removed pro.js"
+    );
+    assert!(INDEX_HTML.contains("files.js"));
+    assert!(INDEX_HTML.contains("notes.js"));
+    assert!(INDEX_HTML.contains("admin.js"));
+}
+
+#[tokio::test]
+async fn serve_asset_returns_console_css_via_views() {
+    // Console CSS ships inside views.css — verify the stylesheet is served correctly
+    let response = serve_asset(axum::extract::Path("css/views.css".to_owned())).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 256_000)
+        .await
+        .unwrap_or_else(|e| panic!("body read: {e}"));
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains("console-layout"),
+        "views.css must include console panel styles"
+    );
+}

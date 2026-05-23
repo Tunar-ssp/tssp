@@ -113,6 +113,7 @@ window.Tssp = window.Tssp || {};
       usersEl.innerHTML = renderAdminUsers(users.users || []);
       devicesEl.innerHTML = renderAdminDevices(devices.devices || []);
       T.loadAdminFiles();
+      T.loadConsoleCommands();
     } catch (error) {
       overview.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;
       system.innerHTML = "";
@@ -232,4 +233,79 @@ window.Tssp = window.Tssp || {};
       T.showBanner(error.message, "error");
     }
   };
+
+  // Admin console
+
+  const consoleHistory = [];
+
+  T.loadConsoleCommands = async function loadConsoleCommands() {
+    const el = T.$("#console-commands");
+    if (!el) return;
+    try {
+      const data = await T.api("/admin/console/commands");
+      const commands = data.commands || [];
+      const byCategory = new Map();
+      for (const cmd of commands) {
+        if (!byCategory.has(cmd.category)) byCategory.set(cmd.category, []);
+        byCategory.get(cmd.category).push(cmd);
+      }
+      let html = "";
+      for (const [cat, cmds] of byCategory) {
+        html += `<div class="console-category">${T.escapeHtml(cat)}</div>`;
+        for (const cmd of cmds) {
+          html += `<button type="button" class="console-cmd-btn" data-console-cmd="${T.escapeHtml(cmd.name)}">
+            <span class="console-cmd-name">${T.escapeHtml(cmd.name)}</span>
+            <span class="console-cmd-desc">${T.escapeHtml(cmd.description)}</span>
+          </button>`;
+        }
+      }
+      el.innerHTML = html || "No commands available.";
+    } catch (error) {
+      el.innerHTML = `<span class="muted">${T.escapeHtml(error.message)}</span>`;
+    }
+  };
+
+  T.runConsoleCommand = async function runConsoleCommand(command) {
+    const outputEl = T.$("#console-output");
+    if (!outputEl) return;
+    outputEl.innerHTML = `<span class="console-hint">Running <strong>${T.escapeHtml(command)}</strong>…</span>`;
+    try {
+      const result = await T.api("/admin/console/run", {
+        method: "POST",
+        body: JSON.stringify({ command }),
+      });
+      const ts = new Date(result.ran_at_ms).toLocaleTimeString();
+      const json = JSON.stringify(result.output, null, 2);
+      const statusClass = result.success ? "console-ok" : "console-err";
+      outputEl.innerHTML = `<div class="console-result-header ${statusClass}">
+        <strong>${T.escapeHtml(command)}</strong>
+        <span>${ts}</span>
+        <span class="${statusClass}">${result.success ? "✓ ok" : "✗ failed"}</span>
+      </div>
+      <pre class="console-json">${T.escapeHtml(json)}</pre>`;
+      consoleHistory.unshift({ command, ts, success: result.success });
+      renderConsoleHistory();
+    } catch (error) {
+      outputEl.innerHTML = `<div class="console-result-header console-err"><strong>${T.escapeHtml(command)}</strong><span class="console-err">${T.escapeHtml(error.message)}</span></div>`;
+    }
+  };
+
+  function renderConsoleHistory() {
+    const el = T.$("#console-history");
+    if (!el) return;
+    if (!consoleHistory.length) {
+      el.innerHTML = '<span class="console-hint">No commands run yet</span>';
+      return;
+    }
+    el.innerHTML = consoleHistory
+      .slice(0, 20)
+      .map(
+        (item) =>
+          `<button type="button" class="console-history-item ${item.success ? "" : "console-err"}" data-console-cmd="${T.escapeHtml(item.command)}">
+            <span>${T.escapeHtml(item.command)}</span>
+            <span class="muted">${T.escapeHtml(item.ts)}</span>
+          </button>`
+      )
+      .join("");
+  }
 })(window.Tssp);

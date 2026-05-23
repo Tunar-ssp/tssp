@@ -254,3 +254,181 @@
   font-size: 13px;
   color: var(--text-dim);
 }
+
+/* File preview extras */
+.preview-iframe {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 160px);
+  border: none;
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.preview-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: var(--bg-root);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  margin: 0;
+}
+
+.preview-md {
+  padding: 20px 24px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.preview-audio-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 16px;
+}
+
+/* Admin console */
+.console-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 260px;
+}
+
+.console-commands {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 420px;
+}
+
+.console-category {
+  padding: 8px 6px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.console-cmd-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.console-cmd-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.console-cmd-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-hover);
+}
+
+.console-cmd-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.console-right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.console-output {
+  flex: 1;
+  min-height: 160px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-root);
+  overflow-y: auto;
+}
+
+.console-hint {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.console-result-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.console-result-header strong {
+  font-family: var(--font-mono);
+  color: var(--accent-hover);
+}
+
+.console-ok {
+  color: var(--success);
+}
+
+.console-err {
+  color: var(--danger);
+}
+
+.console-json {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.console-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.console-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.console-history-item {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.console-history-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}

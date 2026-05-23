@@ -32,7 +32,10 @@ window.Tssp = window.Tssp || {};
       const res = await fetch(T.API + "/auth/required", {
         credentials: "same-origin",
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        T.showApp();
+        return;
+      }
       const data = await res.json();
       T.authRequired = Boolean(data.required);
       if (T.authRequired) {

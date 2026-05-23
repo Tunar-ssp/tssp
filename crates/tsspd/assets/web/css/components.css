@@ -496,6 +496,59 @@
   margin: 8px 0;
 }
 
+.markdown-preview blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.markdown-preview pre {
+  margin: 10px 0;
+  padding: 12px;
+  background: var(--bg-root);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.markdown-preview code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-root);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.markdown-preview pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+.markdown-preview a {
+  color: var(--accent-hover);
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.markdown-preview li {
+  margin: 4px 0;
+}
+
 .inline-form {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) 110px auto;
