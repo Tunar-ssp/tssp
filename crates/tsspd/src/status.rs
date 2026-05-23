@@ -204,6 +204,11 @@ pub struct StatusResponse {
     pub recent_upload_count_24h: u64,
     /// Storage used in bytes.
     pub storage_bytes_used: u64,
+    /// Indexed files whose blob is missing on disk.
+    pub corrupt_file_count: u64,
+    /// Public base URL used for session links.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_url: Option<String>,
 }
 
 pub(crate) async fn healthz() -> impl IntoResponse {
@@ -217,13 +222,15 @@ pub(crate) async fn readyz() -> impl IntoResponse {
 pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     match state.stats_provider.stats() {
         Ok(repository_stats) => {
+            let data_root = state
+                .upload_temp_dir
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| state.upload_temp_dir.clone());
+            let public_url = state.public_urls().base().to_owned();
+            let corrupt_file_count = state.corrupt_file_count;
             let storage_bytes_used = tokio::task::spawn_blocking(move || {
-                calculate_directory_size(
-                    state
-                        .upload_temp_dir
-                        .parent()
-                        .unwrap_or(state.upload_temp_dir.as_path()),
-                )
+                calculate_directory_size(&data_root)
             })
             .await
             .unwrap_or(0);
@@ -239,6 +246,8 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
                 pinned_count: repository_stats.pinned_count,
                 recent_upload_count_24h: repository_stats.recent_upload_count,
                 storage_bytes_used,
+                corrupt_file_count,
+                public_url: Some(public_url),
             })
             .into_response()
         }
@@ -339,7 +348,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_endpoint_returns_ok_with_stats() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(StaticMetadataStatsProvider));
 
         let response = status(State(state)).await;
@@ -388,7 +397,7 @@ mod tests {
             }
         }
 
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(ErrorStatsProvider));
 
         let response = status(State(state)).await;
@@ -451,7 +460,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_response_includes_uptime() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(StaticMetadataStatsProvider));
         let response = status(State(state)).await;
 

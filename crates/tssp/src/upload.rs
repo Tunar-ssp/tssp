@@ -12,7 +12,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_post, build_client, BackendAddress};
 use tssp::{Cli, UploadArgs};
 
 const MULTIPART_BOUNDARY_PREFIX: &str = "tssp-upload";
@@ -185,8 +185,7 @@ fn upload_batch(
     }
     form_data.extend(format!("--{boundary}--\r\n").as_bytes());
 
-    let response = client
-        .post(address.url("/api/v1/files/batch"))
+    let response = api_post(&client, &address.url("/api/v1/files/batch"))
         .header(
             CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
@@ -403,8 +402,7 @@ fn upload_one(
     })?;
     let boundary = multipart_boundary();
     let body = MultipartUploadBody::new(&boundary, item, file);
-    let response = client
-        .post(address.url(UPLOAD_ENDPOINT))
+    let response = api_post(&client, &address.url(UPLOAD_ENDPOINT))
         .header(
             CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),

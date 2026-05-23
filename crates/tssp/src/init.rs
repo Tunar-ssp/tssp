@@ -24,6 +24,10 @@ pub fn run(_cli: &Cli) -> Result<CliExitCode, String> {
             Some(hostname.clone())
         },
         port: if port == 8421 { None } else { Some(port) },
+        token: None,
+        url: None,
+        scheme: None,
+        discovery: Some(true),
     };
 
     save_config(&config)?;

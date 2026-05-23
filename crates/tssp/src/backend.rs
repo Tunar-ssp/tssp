@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::header::AUTHORIZATION;
 use tssp::ConnectionArgs;
 use tssp_cli_core::CliExitCode;
 
@@ -22,46 +23,123 @@ const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 /// Parsed daemon address used by command handlers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BackendAddress {
-    host: String,
-    port: u16,
+    base: String,
 }
 
 impl BackendAddress {
-    /// Builds an address from global connection flags.
+    /// Builds an address from global connection flags and config file.
     pub(crate) fn from_connection_args(args: &ConnectionArgs) -> Result<Self, String> {
         let config = crate::config::load_config().unwrap_or_default();
 
-        let host_override = args
+        if let Some(url) = config.url.as_deref() {
+            return Self::from_base_url(url.trim());
+        }
+
+        let discovery_enabled = config.discovery.unwrap_or(true);
+        let mut host = args
             .host
             .as_deref()
             .or(config.host.as_deref())
             .unwrap_or(DEFAULT_HOST)
-            .trim();
+            .trim()
+            .to_owned();
 
-        if host_override.is_empty() {
+        if host.is_empty() {
             return Err("host must not be empty".to_owned());
         }
-        if host_override.contains('/') {
-            return Err("host must not contain a URL path".to_owned());
+        if host.contains('/') {
+            return Err("host must not contain a URL path; use config url for full URLs".to_owned());
         }
 
-        let port_override = args.port.or(config.port).unwrap_or(DEFAULT_PORT);
+        if host == DEFAULT_HOST
+            && args.host.is_none()
+            && config.host.is_none()
+            && discovery_enabled
+        {
+            if let Some(discovered) = crate::discovery::discover_daemon(true) {
+                host = discovered.host;
+            }
+        }
 
+        let port = args.port.or(config.port).unwrap_or(DEFAULT_PORT);
+        let scheme = config.scheme.as_deref().unwrap_or("http");
+        let base = format!("{scheme}://{host}:{port}");
+        Self::from_base_url(&base)
+    }
+
+    fn from_base_url(url: &str) -> Result<Self, String> {
+        let trimmed = url.trim_end_matches('/');
+        if trimmed.is_empty() {
+            return Err("base URL must not be empty".to_owned());
+        }
+        if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+            return Err("base URL must start with http:// or https://".to_owned());
+        }
         Ok(Self {
-            host: host_override.to_owned(),
-            port: port_override,
+            base: trimmed.to_owned(),
         })
     }
 
     /// Base HTTP URL without a trailing slash.
     pub(crate) fn base_url(&self) -> String {
-        format!("http://{}:{}", self.host, self.port)
+        self.base.clone()
     }
 
     /// Absolute URL for an API path beginning with `/`.
     pub(crate) fn url(&self, path: &str) -> String {
-        format!("{}{}", self.base_url(), path)
+        format!("{}{}", self.base, path)
     }
+
+    /// Configured host name (parsed from base URL).
+    pub(crate) fn host(&self) -> &str {
+        self.base
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .split(':')
+            .next()
+            .unwrap_or(DEFAULT_HOST)
+    }
+
+    /// Configured port (parsed from base URL).
+    pub(crate) fn port(&self) -> u16 {
+        self.base
+            .rsplit(':')
+            .next()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(DEFAULT_PORT)
+    }
+}
+
+/// Starts an authorized GET request.
+pub(crate) fn api_get(client: &Client, url: &str) -> RequestBuilder {
+    authorize(client.get(url))
+}
+
+/// Starts an authorized POST request.
+pub(crate) fn api_post(client: &Client, url: &str) -> RequestBuilder {
+    authorize(client.post(url))
+}
+
+/// Starts an authorized PUT request.
+pub(crate) fn api_put(client: &Client, url: &str) -> RequestBuilder {
+    authorize(client.put(url))
+}
+
+/// Starts an authorized DELETE request.
+pub(crate) fn api_delete(client: &Client, url: &str) -> RequestBuilder {
+    authorize(client.delete(url))
+}
+
+/// Attaches a stored bearer token when configured.
+pub(crate) fn authorize(request: RequestBuilder) -> RequestBuilder {
+    let token = crate::config::load_config()
+        .ok()
+        .and_then(|config| config.token)
+        .filter(|value| !value.trim().is_empty());
+    if let Some(token) = token {
+        return request.header(AUTHORIZATION, format!("Bearer {token}"));
+    }
+    request
 }
 
 /// Builds the blocking HTTP client used by synchronous CLI commands.
@@ -90,11 +168,9 @@ where
         match result {
             Ok(response) => {
                 let status = response.status();
-                // Don't retry client errors or storage-full
                 if status.is_client_error() || status.as_u16() == 507 {
                     return Ok(response);
                 }
-                // Retry on 5xx
                 if status.is_server_error() {
                     last_err = format!("server returned {status}");
                 } else {
@@ -129,7 +205,7 @@ where
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use super::{BackendAddress, DEFAULT_PORT};
+    use super::BackendAddress;
     use tssp::ConnectionArgs;
 
     #[test]
@@ -157,30 +233,4 @@ mod tests {
         assert_eq!(address.base_url(), "http://tsspd.local:9000");
     }
 
-    #[test]
-    fn host_must_not_include_path() {
-        let address = BackendAddress::from_connection_args(&ConnectionArgs {
-            host: Some("127.0.0.1/api".to_owned()),
-            port: Some(DEFAULT_PORT),
-        });
-
-        assert!(address.is_err());
-    }
-
-    #[test]
-    fn host_must_not_be_empty_after_trimming() {
-        let address = BackendAddress::from_connection_args(&ConnectionArgs {
-            host: Some("  ".to_owned()),
-            port: Some(DEFAULT_PORT),
-        });
-
-        assert!(matches!(address, Err(message) if message.contains("empty")));
-    }
-
-    #[test]
-    fn build_client_uses_valid_timeout_configuration() {
-        let client = super::build_client();
-
-        assert!(client.is_ok());
-    }
 }

@@ -20,6 +20,7 @@ serde_json.workspace = true
 tempfile.workspace = true
 time.workspace = true
 tssp-cli-core = { path = "../tssp-cli-core" }
+mdns-sd.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

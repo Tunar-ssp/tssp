@@ -2,8 +2,9 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-/// Server configuration required to bind the daemon.
+/// Legacy socket config (prefer [`DaemonSettings`](crate::DaemonSettings)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub struct DaemonConfig {
     /// IP address to bind.
     pub bind: IpAddr,
@@ -14,6 +15,7 @@ pub struct DaemonConfig {
 impl DaemonConfig {
     /// Returns the socket address represented by the config.
     #[must_use]
+    #[allow(dead_code)]
     pub const fn socket_addr(&self) -> SocketAddr {
         SocketAddr::new(self.bind, self.port)
     }

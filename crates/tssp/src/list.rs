@@ -8,7 +8,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_get, build_client, BackendAddress};
 use tssp::{Cli, LastArgs, ListArgs};
 
 const LIST_ENDPOINT: &str = "/api/v1/files";
@@ -64,7 +64,7 @@ fn run_list_request(cli: &Cli, query: &[(String, String)]) -> Result<CliExitCode
     };
 
     let client = build_client()?;
-    let mut request = client.get(address.url(LIST_ENDPOINT));
+    let mut request = api_get(&client, &address.url(LIST_ENDPOINT));
     for (name, value) in query {
         request = request.query(&[(name.as_str(), value.as_str())]);
     }

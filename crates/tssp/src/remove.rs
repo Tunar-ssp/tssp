@@ -6,7 +6,7 @@ use reqwest::{header::ACCEPT, StatusCode};
 use tssp::RemoveArgs;
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_delete, build_client, BackendAddress};
 use tssp::Cli;
 
 /// Runs `tssp remove <id>`.
@@ -33,8 +33,7 @@ pub(crate) fn run(cli: &Cli, args: &RemoveArgs) -> Result<CliExitCode, String> {
         }
     };
     let client = build_client()?;
-    let response = client
-        .delete(remove_url(&address, &args.id))
+    let response = api_delete(&client, &remove_url(&address, &args.id))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {

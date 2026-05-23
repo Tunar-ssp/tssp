@@ -6,7 +6,7 @@ use serde_json::json;
 use tssp::{Cli, ReceiveArgs};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_post, build_client, BackendAddress};
 use crate::sessions_helper::generate_qr_code;
 
 pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
@@ -26,8 +26,7 @@ pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
         "ttl_seconds": ttl
     });
 
-    let response = client
-        .post(address.url("/api/v1/sessions/receive"))
+    let response = api_post(&client, &address.url("/api/v1/sessions/receive"))
         .json(&req)
         .send()
         .map_err(|e| format!("failed to create receive session: {e}"))?;

@@ -6,7 +6,7 @@ use reqwest::header::ACCEPT;
 use tssp::{Cli, CpArgs};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_post, build_client, BackendAddress};
 
 /// Runs `tssp cp`.
 pub fn run(cli: &Cli, args: &CpArgs) -> Result<CliExitCode, String> {
@@ -26,8 +26,7 @@ pub fn run(cli: &Cli, args: &CpArgs) -> Result<CliExitCode, String> {
     });
 
     let client = build_client()?;
-    let response = client
-        .post(address.url("/api/v1/notes"))
+    let response = api_post(&client, &address.url("/api/v1/notes"))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .json(&payload)
         .send()

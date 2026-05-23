@@ -4,9 +4,11 @@ mod backend;
 mod config;
 mod copy;
 mod cp;
+mod discovery;
 mod info;
 mod init;
 mod list;
+mod login;
 mod note;
 mod paste;
 mod pins;
@@ -45,6 +47,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
 
     if matches!(cli.command, Some(Command::Status)) {
         return status::run(cli);
+    }
+    if matches!(cli.command, Some(Command::Login)) {
+        return login::run(cli);
     }
     if let Some(Command::Send(args)) = cli.command.as_ref() {
         return send::run(cli, args);

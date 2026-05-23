@@ -275,7 +275,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_ok_with_renamed_record() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(SuccessfulStatsProvider {
                 record: test_record(),
             }));
@@ -303,7 +303,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_id() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"));
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
@@ -324,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_filename() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"));
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
@@ -345,7 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_not_found_when_file_missing() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(NotFoundStatsProvider));
 
         let response = rename_file(
@@ -367,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_internal_error_on_stats_provider_error() {
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(ErrorStatsProvider));
 
         let response = rename_file(

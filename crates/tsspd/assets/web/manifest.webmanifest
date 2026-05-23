@@ -1,0 +1,8 @@
+{
+  "name": "TSSP Storage",
+  "short_name": "TSSP",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#7c3aed",
+  "start_url": "/"
+}

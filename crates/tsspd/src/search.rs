@@ -163,11 +163,10 @@ mod tests {
     use axum::routing::get;
     use axum::Router;
     use std::sync::Arc;
-    use std::time::Instant;
     use tower::ServiceExt;
 
     fn build_test_router(provider: Arc<dyn FileSearchProvider>) -> Router {
-        let mut state = HttpState::new(Instant::now(), std::path::PathBuf::from("/tmp"));
+        let mut state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"));
         state = state.with_search_provider(provider);
         Router::new()
             .route("/search", get(search_files))

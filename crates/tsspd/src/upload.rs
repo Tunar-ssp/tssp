@@ -177,7 +177,7 @@ where
 }
 
 pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multipart) -> Response {
-    if let Err(error) = check_free_space(&state.upload_temp_dir).await {
+    if let Err(error) = check_free_space(&state, &state.upload_temp_dir).await {
         return error.response();
     }
 
@@ -197,7 +197,7 @@ pub(crate) async fn upload_files_batch(
     State(state): State<HttpState>,
     multipart: Multipart,
 ) -> Response {
-    if let Err(error) = check_free_space(&state.upload_temp_dir).await {
+    if let Err(error) = check_free_space(&state, &state.upload_temp_dir).await {
         return error.response();
     }
 
@@ -219,19 +219,16 @@ pub(crate) async fn upload_files_batch(
     Json(BatchUploadResponse::from_results(results)).into_response()
 }
 
-/// Minimum free bytes required before accepting an upload (500 MiB or 1% of total).
-const MIN_FREE_BYTES_ABSOLUTE: u64 = 500 * 1024 * 1024;
-const MIN_FREE_PERCENT: u64 = 1;
-
-async fn check_free_space(path: &Path) -> Result<(), HttpUploadError> {
+async fn check_free_space(state: &HttpState, path: &Path) -> Result<(), HttpUploadError> {
+    let settings = state.settings().clone();
     let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         let stat = nix_statvfs(&path)?;
         let free_bytes = stat.free_bytes;
         let total_bytes = stat.total_bytes;
         let threshold = std::cmp::max(
-            MIN_FREE_BYTES_ABSOLUTE,
-            total_bytes * MIN_FREE_PERCENT / 100,
+            settings.storage_reserve_bytes,
+            total_bytes * settings.storage_reserve_percent / 100,
         );
         if free_bytes < threshold {
             Err(HttpUploadError::InsufficientStorage {

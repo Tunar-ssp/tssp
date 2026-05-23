@@ -521,7 +521,7 @@ mod tests {
         use std::sync::Arc;
 
         let provider = Arc::new(ErrorPinProvider);
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_pin_provider(provider);
 
         let response = super::list_pins(State(state)).await;
@@ -535,7 +535,7 @@ mod tests {
         use std::sync::Arc;
 
         let provider = Arc::new(ErrorPinProvider);
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_pin_provider(provider);
 
         let response = super::pin(
@@ -554,7 +554,7 @@ mod tests {
         use std::sync::Arc;
 
         let provider = Arc::new(ErrorPinProvider);
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_pin_provider(provider);
 
         let response = super::unpin(State(state), axum::extract::Path("file-1".to_string())).await;
@@ -568,7 +568,7 @@ mod tests {
         use axum::Json;
         use std::sync::Arc;
 
-        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+        let state = HttpState::test_http_state( std::path::PathBuf::from("/tmp"))
             .with_pin_provider(Arc::new(StaticFilePinProvider));
 
         let response =

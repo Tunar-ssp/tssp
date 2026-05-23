@@ -7,8 +7,8 @@ designed for an Orange Pi class device and ships as:
 - `tssp`: the command-line client.
 - `tssp-web`: an embedded static web dashboard.
 
-The v1 trust model is local-network only. There is no authentication yet, so do
-not expose the daemon to the public internet.
+On your LAN, access is open by default. When you expose the daemon on the
+internet, set a password so remote clients must authenticate (see below).
 
 ## Current Status
 
@@ -34,7 +34,8 @@ The foundation currently includes:
   `GET /api/v1/tags`, `POST /api/v1/files/{id}/tags`,
   `DELETE /api/v1/files/{id}/tags/{tag}`, `GET /api/v1/pins`,
   `PUT`/`DELETE /api/v1/files/{id}/pin`, `POST /api/v1/pins/reorder`,
-  `GET /api/v1/search`, and an embedded placeholder web shell, backed by real
+  `GET /api/v1/search`, notes APIs, dual-mode auth (`/api/v1/auth/*`), and a
+  lightweight GCS-style web dashboard at `/`, backed by real
   metadata status counts, tag mutation, pin mutation, search, and
   upload/download/delete storage when started from the binary.
 - A filesystem blob adapter that streams uploads into content-addressed BLAKE3
@@ -69,6 +70,7 @@ Then check:
 
 ```sh
 curl http://127.0.0.1:8421/healthz
+open http://127.0.0.1:8421/
 curl http://127.0.0.1:8421/api/v1/status
 curl -F 'tag=Docs' -F 'file=@README.md;type=text/markdown' \
   http://127.0.0.1:8421/api/v1/files
@@ -78,6 +80,30 @@ curl -H 'Content-Type: application/json' -d '["Docs"]' \
 curl http://127.0.0.1:8421/api/v1/tags
 curl -X DELETE http://127.0.0.1:8421/api/v1/files/<file-id>
 ```
+
+## Remote authentication
+
+Enable a shared password for clients outside your LAN:
+
+```sh
+export TSSPD_AUTH_PASSWORD='your-secret'
+cargo run -p tsspd -- --data-dir data
+```
+
+Or store a bcrypt hash:
+
+```sh
+export TSSPD_AUTH_PASSWORD_HASH='$2b$12$...'
+```
+
+CLI login for remote hosts:
+
+```sh
+cargo run -p tssp -- --host cloud.example.com login
+```
+
+Behind a reverse proxy, pass `--trust-forwarded` (or `TSSPD_TRUST_FORWARDED=1`) so
+client IP detection uses `X-Forwarded-For`.
 
 ## CLI
 

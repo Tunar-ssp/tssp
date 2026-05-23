@@ -6,6 +6,12 @@
 
 mod config;
 mod content;
+#[allow(dead_code)]
+mod integrity;
+#[allow(dead_code)]
+mod mdns;
+mod settings;
+mod urls;
 mod delete;
 mod file;
 mod list;
@@ -21,18 +27,25 @@ mod status;
 mod tags;
 mod upload;
 mod web;
+pub mod auth;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use auth::AuthService;
 use axum::extract::DefaultBodyLimit;
+use axum::middleware;
 use axum::routing::{get, post};
 use axum::Router;
 use serde::Serialize;
 use tssp_ports::BlobReader;
 
-pub use config::{bind_error_message, DaemonConfig};
+pub use config::bind_error_message;
+pub use settings::{CliOverrides, DaemonSettings};
+pub use urls::PublicUrlBuilder;
+pub use integrity::run_startup_integrity_scan;
+pub use mdns::spawn_advertisement;
 pub use delete::{
     ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
 };
@@ -73,12 +86,22 @@ pub struct HttpState {
     blob_reader: Arc<dyn BlobReader + Send + Sync>,
     upload_temp_dir: PathBuf,
     storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
+    auth: AuthService,
+    settings: Arc<DaemonSettings>,
+    public_urls: PublicUrlBuilder,
+    corrupt_file_count: u64,
 }
 
 impl HttpState {
     /// Creates a base HTTP state with static/placeholder providers.
     #[must_use]
-    pub fn new(started_at: Instant, upload_temp_dir: PathBuf) -> Self {
+    pub fn new(
+        started_at: Instant,
+        upload_temp_dir: PathBuf,
+        settings: Arc<DaemonSettings>,
+        public_urls: PublicUrlBuilder,
+        corrupt_file_count: u64,
+    ) -> Self {
         Self {
             started_at,
             stats_provider: Arc::new(StaticMetadataStatsProvider),
@@ -92,7 +115,32 @@ impl HttpState {
             blob_reader: Arc::new(StaticBlobReader),
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
+            auth: AuthService::disabled(),
+            settings,
+            public_urls,
+            corrupt_file_count,
         }
+    }
+
+    /// Effective daemon settings.
+    #[must_use]
+    pub fn settings(&self) -> &DaemonSettings {
+        &self.settings
+    }
+
+    /// URL builder for public links.
+    #[must_use]
+    pub fn public_urls(&self) -> &PublicUrlBuilder {
+        &self.public_urls
+    }
+
+    /// Builds HTTP state for integration tests.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn test_http_state(upload_temp_dir: PathBuf) -> Self {
+        let settings = Arc::new(DaemonSettings::default());
+        let urls = PublicUrlBuilder::from_settings(&settings);
+        Self::new(Instant::now(), upload_temp_dir, settings, urls, 0)
     }
 
     /// Sets the metadata stats provider.
@@ -155,6 +203,13 @@ impl HttpState {
     #[must_use]
     pub fn with_note_provider(mut self, provider: Arc<dyn notes::NoteProvider>) -> Self {
         self.note_provider = provider;
+        self
+    }
+
+    /// Sets the authentication service.
+    #[must_use]
+    pub fn with_auth(mut self, auth: AuthService) -> Self {
+        self.auth = auth;
         self
     }
 }
@@ -287,13 +342,34 @@ pub fn build_router(state: HttpState) -> Router {
             get(status::status).options(options_response),
         )
         .route("/metrics", get(metrics::get_metrics))
+        .route(
+            "/api/v1/auth/required",
+            get(auth::auth_required).options(options_response),
+        )
+        .route(
+            "/api/v1/auth/me",
+            get(auth::auth_me).options(options_response),
+        )
+        .route(
+            "/api/v1/auth/login",
+            post(auth::auth_login).options(options_response),
+        )
+        .route(
+            "/api/v1/auth/token",
+            post(auth::auth_token).options(options_response),
+        )
+        .route(
+            "/api/v1/auth/logout",
+            post(auth::auth_logout).options(options_response),
+        )
+        .route("/assets/{*path}", get(web::serve_asset))
         .fallback(web::web_fallback)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::auth_middleware,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::very_permissive())
-        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-            axum::http::header::CONTENT_SECURITY_POLICY,
-            axum::http::HeaderValue::from_static("default-src 'self'"),
-        ))
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             axum::http::header::X_CONTENT_TYPE_OPTIONS,
             axum::http::HeaderValue::from_static("nosniff"),
@@ -319,9 +395,7 @@ struct ErrorBody {
 #[cfg(test)]
 mod tests {
     use std::io::Read;
-    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
-    use std::time::Instant;
 
     use axum::body::{to_bytes, Body};
     use axum::http::header::{CONTENT_RANGE, CONTENT_TYPE};
@@ -341,24 +415,20 @@ mod tests {
     use super::{
         bind_error_message, build_router, ApplicationFileDeleteProvider,
         ApplicationFilePinProvider, ApplicationFileTagProvider, ApplicationFileUploadProvider,
-        DaemonConfig, FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome,
+        DaemonSettings, FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome,
         HttpUploadRequest, MetadataStatsProvider, RepositoryMetadataStatsProvider,
     };
     use tssp_ports::RepositoryStats;
 
     #[test]
     fn config_builds_socket_address() {
-        let config = DaemonConfig {
-            bind: IpAddr::V4(Ipv4Addr::LOCALHOST),
-            port: 8421,
-        };
-
-        assert_eq!(config.socket_addr().to_string(), "127.0.0.1:8421");
+        let settings = DaemonSettings::default();
+        assert_eq!(settings.socket_addr().to_string(), "127.0.0.1:8421");
     }
 
     #[tokio::test]
     async fn health_endpoint_returns_plain_ok() {
-        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir()));
+        let app = build_router(HttpState::test_http_state( std::env::temp_dir()));
         let response = app
             .oneshot(
                 Request::builder()
@@ -379,7 +449,7 @@ mod tests {
     #[tokio::test]
     async fn status_endpoint_returns_schema_version() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -406,7 +476,7 @@ mod tests {
     #[tokio::test]
     async fn status_endpoint_reports_metadata_failure() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FailingStatsProvider)),
         );
         let response = app
@@ -432,7 +502,7 @@ mod tests {
     async fn upload_endpoint_accepts_single_multipart_file() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().to_path_buf())
+            HttpState::test_http_state( temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider {
                     deduplicated: false,
@@ -480,7 +550,7 @@ mod tests {
     async fn upload_endpoint_returns_ok_for_deduplicated_content() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().to_path_buf())
+            HttpState::test_http_state( temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider { deduplicated: true })),
         );
@@ -510,7 +580,7 @@ mod tests {
     async fn upload_endpoint_rejects_missing_file_field() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().to_path_buf())
+            HttpState::test_http_state( temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider {
                     deduplicated: false,
@@ -539,7 +609,7 @@ mod tests {
     async fn batch_upload_endpoint_returns_per_file_outcomes() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().to_path_buf())
+            HttpState::test_http_state( temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(BatchEchoUploadProvider)),
         );
@@ -593,7 +663,7 @@ mod tests {
     async fn batch_upload_endpoint_rejects_empty_batch() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().to_path_buf())
+            HttpState::test_http_state( temp.path().to_path_buf())
                 .with_stats_provider(Arc::new(FixedStatsProvider))
                 .with_upload_provider(Arc::new(BatchEchoUploadProvider)),
         );
@@ -634,7 +704,7 @@ mod tests {
             SystemClock,
         );
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_blob_reader(storage),
@@ -690,7 +760,7 @@ mod tests {
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository);
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
@@ -777,7 +847,7 @@ mod tests {
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository);
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
@@ -857,7 +927,7 @@ mod tests {
         let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
         let tag_service = TagService::new(repository);
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
@@ -920,7 +990,7 @@ mod tests {
         );
         let pin_service = PinService::new(repository);
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(stats_provider))
                 .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
                 .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
@@ -1068,7 +1138,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
         );
         let app = build_router(
-            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            HttpState::test_http_state( temp.path().join("http-upload-tmp"))
                 .with_stats_provider(Arc::new(SingleRecordStatsProvider))
                 .with_upload_provider(Arc::new(EchoUploadProvider {
                     deduplicated: false,
@@ -1089,7 +1159,7 @@ mod tests {
     #[tokio::test]
     async fn list_endpoint_rejects_zero_limit() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1105,7 +1175,7 @@ mod tests {
     #[tokio::test]
     async fn list_endpoint_rejects_limit_above_maximum() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1124,7 +1194,7 @@ mod tests {
     #[tokio::test]
     async fn list_endpoint_reports_metadata_failure() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FailingStatsProvider)),
         );
         let response = app
@@ -1140,7 +1210,7 @@ mod tests {
     #[tokio::test]
     async fn file_endpoint_rejects_invalid_id() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1156,7 +1226,7 @@ mod tests {
     #[tokio::test]
     async fn file_endpoint_returns_not_found() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FixedStatsProvider)),
         );
         let response = app
@@ -1172,7 +1242,7 @@ mod tests {
     #[tokio::test]
     async fn file_endpoint_reports_metadata_failure() {
         let app = build_router(
-            HttpState::new(Instant::now(), std::env::temp_dir())
+            HttpState::test_http_state( std::env::temp_dir())
                 .with_stats_provider(Arc::new(FailingStatsProvider)),
         );
         let response = app

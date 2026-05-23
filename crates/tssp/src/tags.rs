@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tssp::{Cli, TagArgs};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_delete, api_post, build_client, BackendAddress};
 
 /// Runs `tssp tag <id> <tag>...`.
 pub(crate) fn run_tag(cli: &Cli, args: &TagArgs) -> Result<CliExitCode, String> {
@@ -21,8 +21,7 @@ pub(crate) fn run_tag(cli: &Cli, args: &TagArgs) -> Result<CliExitCode, String> 
         }
     };
     let client = build_client()?;
-    let response = client
-        .post(tags_url(&address, &args.id))
+    let response = api_post(&client, &tags_url(&address, &args.id))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .json(&args.tags)
         .send()
@@ -61,8 +60,7 @@ pub(crate) fn run_untag(cli: &Cli, args: &TagArgs) -> Result<CliExitCode, String
     let client = build_client()?;
     let mut changed_count = 0_u64;
     for tag in &args.tags {
-        let response = client
-            .delete(tag_url(&address, &args.id, tag))
+        let response = api_delete(&client, &tag_url(&address, &args.id, tag))
             .header(ACCEPT, "application/vnd.tssp.v1+json")
             .send()
             .map_err(|error| {

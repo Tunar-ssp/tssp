@@ -4,7 +4,7 @@ use reqwest::{header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_get, build_client, BackendAddress};
 use tssp::{Cli, SearchArgs};
 
 const SEARCH_ENDPOINT: &str = "/api/v1/search";
@@ -29,8 +29,7 @@ pub(crate) fn run_search(cli: &Cli, args: &SearchArgs) -> Result<CliExitCode, St
     // Assuming reqwest can handle it if we construct the URL properly.
     // To avoid adding a dependency, we will just pass it to `reqwest` via query params.
 
-    let response = client
-        .get(address.url(SEARCH_ENDPOINT))
+    let response = api_get(&client, &address.url(SEARCH_ENDPOINT))
         .query(&[("q", &args.query)])
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()

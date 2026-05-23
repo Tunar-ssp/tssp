@@ -6,7 +6,7 @@ use reqwest::{header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_get, build_client, BackendAddress};
 use tssp::{Cli, IdArgs};
 
 /// Runs `tssp info <id>`.
@@ -19,8 +19,7 @@ pub(crate) fn run(cli: &Cli, args: &IdArgs) -> Result<CliExitCode, String> {
         }
     };
     let client = build_client()?;
-    let response = client
-        .get(info_url(&address, &args.id))
+    let response = api_get(&client, &info_url(&address, &args.id))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {

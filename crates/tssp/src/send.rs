@@ -8,7 +8,7 @@ use serde_json::json;
 use tssp::{Cli, SendArgs};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_post, build_client, BackendAddress};
 use crate::sessions_helper::generate_qr_code;
 
 pub fn run(cli: &Cli, args: &SendArgs) -> Result<CliExitCode, String> {
@@ -25,8 +25,7 @@ pub fn run(cli: &Cli, args: &SendArgs) -> Result<CliExitCode, String> {
     let client = build_client()?;
     let req = json!({ "file_id": file_id, "ttl_seconds": 86_400 });
 
-    let response = client
-        .post(address.url("/api/v1/sessions/send"))
+    let response = api_post(&client, &address.url("/api/v1/sessions/send"))
         .json(&req)
         .send()
         .map_err(|e| format!("failed to create send session: {e}"))?;
@@ -90,8 +89,7 @@ fn upload_file_get_id(
         form = form.text("tag", tag.clone());
     }
 
-    let response = client
-        .post(address.url("/api/v1/files"))
+    let response = api_post(&client, &address.url("/api/v1/files"))
         .multipart(form)
         .send()
         .map_err(|e| format!("upload failed: {e}"))?;

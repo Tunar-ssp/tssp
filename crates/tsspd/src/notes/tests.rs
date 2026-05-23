@@ -1,7 +1,6 @@
 //! Integration tests for note HTTP handlers.
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use axum::body::to_bytes;
 use axum::http::{Request, StatusCode};
@@ -19,7 +18,7 @@ fn note_router(repository: SqliteFileRepository) -> Router {
     let service = NoteService::new(repository, SystemClock, UuidV7FileIdGenerator);
     let provider = ApplicationNoteProvider::new(service);
     build_router(
-        HttpState::new(Instant::now(), std::env::temp_dir())
+        HttpState::test_http_state( std::env::temp_dir())
             .with_note_provider(Arc::new(provider)),
     )
 }

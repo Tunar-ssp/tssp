@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#7c3aed">
+  <title>TSSP Storage</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="manifest" href="/assets/manifest.webmanifest">
+</head>
+<body>
+  <div id="login-screen" class="login-screen hidden" aria-hidden="true">
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1>TSSP</h1>
+          <p>Sign in to continue</p>
+        </div>
+      </div>
+      <form id="login-form">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <p id="login-error" class="form-error hidden" role="alert"></p>
+        <button type="submit" class="btn btn-primary">Sign in</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="top-bar">
+      <div class="top-bar-start">
+        <button type="button" class="icon-btn" id="nav-toggle" aria-label="Toggle navigation">
+          <span class="icon-menu"></span>
+        </button>
+        <div class="product-lockup">
+          <span class="brand-mark sm" aria-hidden="true"></span>
+          <span class="product-name">TSSP</span>
+          <span class="product-divider">/</span>
+          <span class="product-context">Storage</span>
+        </div>
+      </div>
+      <div class="top-bar-search">
+        <span class="search-icon" aria-hidden="true"></span>
+        <input id="global-search" type="search" placeholder="Search files and notes" autocomplete="off">
+      </div>
+      <div class="top-bar-actions">
+        <button type="button" class="btn btn-text" id="refresh-btn">Refresh</button>
+        <button type="button" class="btn btn-primary" id="upload-btn">Upload</button>
+        <input type="file" id="upload-input" hidden multiple>
+      </div>
+    </header>
+
+    <div class="shell">
+      <nav class="side-nav" id="side-nav" aria-label="Primary">
+        <a href="#objects" class="nav-item active" data-view="objects">
+          <span class="nav-icon nav-icon-bucket"></span>
+          <span>Objects</span>
+        </a>
+        <a href="#notes" class="nav-item" data-view="notes">
+          <span class="nav-icon nav-icon-doc"></span>
+          <span>Notes</span>
+        </a>
+        <a href="#search" class="nav-item" data-view="search">
+          <span class="nav-icon nav-icon-search"></span>
+          <span>Search results</span>
+        </a>
+        <div class="nav-section">Monitoring</div>
+        <a href="#overview" class="nav-item" data-view="overview">
+          <span class="nav-icon nav-icon-chart"></span>
+          <span>Overview</span>
+        </a>
+      </nav>
+
+      <main class="main" id="main">
+        <div id="banner" class="banner hidden" role="status"></div>
+
+        <section id="view-overview" class="view hidden">
+          <div class="page-header">
+            <h2>Overview</h2>
+            <p class="page-subtitle">Local object storage on this device</p>
+          </div>
+          <div class="metric-grid" id="metric-grid"></div>
+        </section>
+
+        <section id="view-objects" class="view">
+          <div class="page-header">
+            <div>
+              <nav class="breadcrumb" aria-label="Breadcrumb">
+                <span>tssp</span>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">default</span>
+              </nav>
+              <h2>Objects</h2>
+            </div>
+            <div class="page-actions">
+              <label class="chip-toggle">
+                <input type="checkbox" id="pinned-only">
+                Pinned only
+              </label>
+            </div>
+          </div>
+          <div class="drop-zone" id="drop-zone">
+            <p>Drop files to upload</p>
+          </div>
+          <div class="table-card">
+            <table class="data-table" id="files-table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col" class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="files-body">
+                <tr><td colspan="5" class="table-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="view-notes" class="view hidden">
+          <div class="page-header">
+            <div>
+              <nav class="breadcrumb" aria-label="Breadcrumb">
+                <span>tssp</span>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">notes</span>
+              </nav>
+              <h2>Notes</h2>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" id="new-note-btn">New note</button>
+            </div>
+          </div>
+          <div class="table-card">
+            <table class="data-table" id="notes-table">
+              <thead>
+                <tr>
+                  <th scope="col">Title</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col">Tags</th>
+                  <th scope="col" class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="notes-body">
+                <tr><td colspan="4" class="table-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="view-search" class="view hidden">
+          <div class="page-header">
+            <h2>Search</h2>
+            <p class="page-subtitle" id="search-subtitle">Type in the search bar above</p>
+          </div>
+          <div class="table-card">
+            <table class="data-table" id="search-table">
+              <thead>
+                <tr>
+                  <th scope="col">Type</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Details</th>
+                  <th scope="col" class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="search-body">
+                <tr><td colspan="4" class="table-empty">Enter a query to search</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="note-dialog" class="note-dialog">
+    <form method="dialog" id="note-form" class="note-form">
+      <header>
+        <h3 id="note-dialog-title">New note</h3>
+        <button type="button" class="icon-btn" id="note-close" aria-label="Close">×</button>
+      </header>
+      <label for="note-title-input">Title</label>
+      <input id="note-title-input" type="text" placeholder="Optional">
+      <label for="note-body-input">Body</label>
+      <textarea id="note-body-input" rows="12" required></textarea>
+      <footer>
+        <button type="button" class="btn btn-text" id="note-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="note-save">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="/assets/app.js" defer></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/assets/sw.js").catch(() => {});
+    }
+  </script>
+</body>
+</html>

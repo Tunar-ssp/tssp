@@ -8,6 +8,9 @@ use crate::HttpState;
 
 /// Metrics output in Prometheus text format.
 pub async fn get_metrics(State(state): State<HttpState>) -> Response {
+    if !state.settings().metrics {
+        return (StatusCode::NOT_FOUND, "metrics endpoint is disabled").into_response();
+    }
     if let Ok(stats) = state.stats_provider.stats() {
         let uptime_secs = state.started_at.elapsed().as_secs();
 

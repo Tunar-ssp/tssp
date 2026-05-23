@@ -7,7 +7,7 @@ use tssp::{
 };
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_delete, api_get, api_post, api_put, build_client, BackendAddress};
 
 const NOTES_ENDPOINT: &str = "/api/v1/notes";
 
@@ -39,8 +39,7 @@ fn run_create(cli: &Cli, args: &NoteCreateArgs) -> Result<CliExitCode, String> {
     };
 
     let client = build_client()?;
-    let response = client
-        .post(address.url(NOTES_ENDPOINT))
+    let response = api_post(&client, &address.url(NOTES_ENDPOINT))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .json(&payload)
         .send()
@@ -64,8 +63,7 @@ fn run_list(cli: &Cli, args: &NoteListArgs) -> Result<CliExitCode, String> {
         query.push(("sort", sort.clone()));
     }
 
-    let response = client
-        .get(address.url(NOTES_ENDPOINT))
+    let response = api_get(&client, &address.url(NOTES_ENDPOINT))
         .query(&query)
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
@@ -103,8 +101,7 @@ fn run_show(cli: &Cli, args: &NoteShowArgs) -> Result<CliExitCode, String> {
     let address = BackendAddress::from_connection_args(&cli.connection)
         .map_err(|message| format!("invalid backend address: {message}"))?;
     let client = build_client()?;
-    let response = client
-        .get(address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
+    let response = api_get(&client, &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| format!("could not reach daemon: {error}"))?;
@@ -146,8 +143,7 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
         body,
     };
     let client = build_client()?;
-    let response = client
-        .put(address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
+    let response = api_put(&client, &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .json(&payload)
         .send()
@@ -160,8 +156,7 @@ fn run_delete(cli: &Cli, args: &NoteDeleteArgs) -> Result<CliExitCode, String> {
     let address = BackendAddress::from_connection_args(&cli.connection)
         .map_err(|message| format!("invalid backend address: {message}"))?;
     let client = build_client()?;
-    let response = client
-        .delete(address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
+    let response = api_delete(&client, &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| format!("could not reach daemon: {error}"))?;

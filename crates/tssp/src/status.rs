@@ -4,7 +4,7 @@ use reqwest::{header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_get, build_client, BackendAddress};
 use tssp::Cli;
 
 pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
@@ -16,8 +16,7 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
         }
     };
     let client = build_client()?;
-    let response = client
-        .get(address.url("/api/v1/status"))
+    let response = api_get(&client, &address.url("/api/v1/status"))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {

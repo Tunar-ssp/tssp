@@ -17,6 +17,14 @@ pub struct ConfigFile {
     pub host: Option<String>,
     /// Port override.
     pub port: Option<u16>,
+    /// Bearer token for remote daemon access.
+    pub token: Option<String>,
+    /// Full base URL override (`https://cloud.example.com`).
+    pub url: Option<String>,
+    /// URL scheme when not using `url`.
+    pub scheme: Option<String>,
+    /// Discover daemon via mDNS when host is not configured.
+    pub discovery: Option<bool>,
 }
 
 /// Resolves the standard configuration file path for the current OS.
@@ -90,6 +98,11 @@ pub(crate) fn run_config(cli: &Cli, command: &ConfigCommand) -> Result<CliExitCo
                             println!("{port}");
                         }
                     }
+                    "token" => {
+                        if let Some(token) = config.token {
+                            println!("{token}");
+                        }
+                    }
                     other => {
                         eprintln!("error: unknown configuration key '{other}'");
                         return Ok(CliExitCode::Usage);
@@ -105,6 +118,9 @@ pub(crate) fn run_config(cli: &Cli, command: &ConfigCommand) -> Result<CliExitCo
                 }
                 if let Some(port) = config.port {
                     println!("port = {port}");
+                }
+                if config.token.is_some() {
+                    println!("token = (set)");
                 }
             }
             Ok(CliExitCode::Success)
@@ -125,6 +141,13 @@ pub(crate) fn run_config(cli: &Cli, command: &ConfigCommand) -> Result<CliExitCo
                         .parse::<u16>()
                         .map_err(|_| "port must be a valid 16-bit unsigned integer".to_owned())?;
                     config.port = Some(port);
+                }
+                "token" => {
+                    let token = args.value.trim();
+                    if token.is_empty() {
+                        return Err("token cannot be empty".to_owned());
+                    }
+                    config.token = Some(token.to_owned());
                 }
                 other => {
                     eprintln!("error: unknown configuration key '{other}'");
@@ -150,6 +173,12 @@ pub(crate) fn run_config(cli: &Cli, command: &ConfigCommand) -> Result<CliExitCo
                 "port" => {
                     if config.port.is_some() {
                         config.port = None;
+                        found = true;
+                    }
+                }
+                "token" => {
+                    if config.token.is_some() {
+                        config.token = None;
                         found = true;
                     }
                 }
@@ -180,6 +209,10 @@ mod tests {
         let config = ConfigFile {
             host: Some("192.168.1.5".to_owned()),
             port: Some(9999),
+            token: Some("secret-token".to_owned()),
+            url: None,
+            scheme: None,
+            discovery: Some(true),
         };
         let serialized = serde_json::to_string(&config)?;
         let deserialized: ConfigFile = serde_json::from_str(&serialized)?;

@@ -141,6 +141,8 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
                 .as_ref()
                 .map(|n| n.original().to_string()),
             used_at: None,
+            download_url: None,
+            upload_url: None,
         })
     }
 
@@ -171,6 +173,8 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
                 .as_ref()
                 .map(|n| n.original().to_string()),
             used_at: None,
+            download_url: None,
+            upload_url: None,
         })
     }
 
@@ -199,6 +203,8 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
                 .as_ref()
                 .map(|n| n.original().to_string()),
             used_at: None,
+            download_url: None,
+            upload_url: None,
         })
     }
 
@@ -241,6 +247,27 @@ pub struct SessionResponse {
     /// When this session was last used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used_at: Option<i64>,
+    /// Public download URL for send sessions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_url: Option<String>,
+    /// Public upload URL for receive sessions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upload_url: Option<String>,
+}
+
+impl SessionResponse {
+    fn with_public_urls(mut self, urls: &crate::PublicUrlBuilder) -> Self {
+        match self.kind.as_str() {
+            "send" => {
+                self.download_url = Some(urls.send_download_url(&self.token));
+            }
+            "receive" => {
+                self.upload_url = Some(urls.receive_upload_url(&self.token));
+            }
+            _ => {}
+        }
+        self
+    }
 }
 
 /// Request to create a send session.
@@ -339,10 +366,16 @@ pub async fn create_send_session(
     State(state): State<HttpState>,
     Json(payload): Json<CreateSendSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionResponse>), HttpSessionError> {
+    let urls = state.public_urls().clone();
     state
         .session_provider
         .create_send_session(&payload.file_id, payload.ttl_seconds)
-        .map(|response| (StatusCode::CREATED, Json(response)))
+        .map(|response| {
+            (
+                StatusCode::CREATED,
+                Json(response.with_public_urls(&urls)),
+            )
+        })
         .map_err(|_| HttpSessionError::InternalError("Failed to create session".to_string()))
 }
 
@@ -351,10 +384,16 @@ pub async fn create_receive_session(
     State(state): State<HttpState>,
     Json(payload): Json<CreateReceiveSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionResponse>), HttpSessionError> {
+    let urls = state.public_urls().clone();
     state
         .session_provider
         .create_receive_session(payload.ttl_seconds)
-        .map(|response| (StatusCode::CREATED, Json(response)))
+        .map(|response| {
+            (
+                StatusCode::CREATED,
+                Json(response.with_public_urls(&urls)),
+            )
+        })
         .map_err(|_| HttpSessionError::InternalError("Failed to create session".to_string()))
 }
 
@@ -439,6 +478,8 @@ mod tests {
             received_file: None,
             expected_name: None,
             used_at: None,
+            download_url: None,
+            upload_url: None,
         };
 
         let json = serde_json::to_string(&response).expect("serialize failed");
@@ -459,6 +500,8 @@ mod tests {
             received_file: None,
             expected_name: None,
             used_at: None,
+            download_url: None,
+            upload_url: None,
         };
 
         let json = serde_json::to_string(&response).expect("serialize failed");

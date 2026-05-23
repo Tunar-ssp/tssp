@@ -140,6 +140,8 @@ pub enum Command {
     Status,
     /// Run the first-use setup wizard.
     Init,
+    /// Authenticate against a remote daemon and store an API token.
+    Login,
     /// Manage CLI configuration.
     Config(ConfigCommand),
     /// Manage Markdown notes.

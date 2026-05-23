@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tssp::PullArgs;
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_get, build_client, BackendAddress};
 use tssp::Cli;
 
 /// Runs `tssp pull <id|name>`.
@@ -95,8 +95,7 @@ fn fetch_file_metadata(
     address: &BackendAddress,
     id: &str,
 ) -> Result<Result<Option<FileRecordResponse>, CliExitCode>, String> {
-    let response = client
-        .get(crate::info::info_url(address, id))
+    let response = api_get(&client, &crate::info::info_url(address, id))
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {
@@ -139,7 +138,7 @@ fn fetch_filename_matches(
     let mut matches = Vec::new();
 
     loop {
-        let mut request = client.get(address.url("/api/v1/files")).query(&[
+        let mut request = api_get(&client, &address.url("/api/v1/files")).query(&[
             ("limit", "500"),
             ("sort", "-uploaded"),
             ("name", name),
@@ -194,8 +193,7 @@ fn download_target(
     destination: PathBuf,
     overwrite: bool,
 ) -> Result<PathBuf, CliExitCode> {
-    let response = client
-        .get(content_url(address, &target.id))
+    let response = api_get(&client, &content_url(address, &target.id))
         .send()
         .map_err(|error| {
             eprintln!(

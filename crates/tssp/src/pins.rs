@@ -4,7 +4,7 @@ use reqwest::{header::ACCEPT, StatusCode};
 use tssp::{IdArgs, PinArgs, PinsAction, PinsCommand};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_delete, api_get, api_post, api_put, build_client, BackendAddress};
 use tssp::Cli;
 
 /// Runs `tssp pin <id> [--position <n>]`.
@@ -19,8 +19,7 @@ pub(crate) fn run_pin(cli: &Cli, args: &PinArgs) -> Result<CliExitCode, String> 
     let client = build_client()?;
     let url = format!("{}/api/v1/files/{}/pin", address.base_url(), args.id);
 
-    let mut request = client
-        .put(url)
+    let mut request = api_put(&client, &url)
         .header(ACCEPT, "application/vnd.tssp.v1+json");
     if let Some(pos) = args.position {
         request = request.json(&serde_json::json!({ "position": pos }));
@@ -62,8 +61,7 @@ pub(crate) fn run_unpin(cli: &Cli, args: &IdArgs) -> Result<CliExitCode, String>
     let client = build_client()?;
     let url = format!("{}/api/v1/files/{}/pin", address.base_url(), args.id);
 
-    let response = client
-        .delete(url)
+    let response = api_delete(&client, &url)
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {
@@ -109,8 +107,7 @@ fn run_pins_list(cli: &Cli) -> Result<CliExitCode, String> {
     let client = build_client()?;
     let url = format!("{}/api/v1/pins", address.base_url());
 
-    let response = client
-        .get(url)
+    let response = api_get(&client, &url)
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {
@@ -173,8 +170,7 @@ fn run_pins_reorder(cli: &Cli, args: &tssp::ReorderArgs) -> Result<CliExitCode, 
         "ids": args.ids
     });
 
-    let response = client
-        .post(url)
+    let response = api_post(&client, &url)
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .json(&payload)
         .send()

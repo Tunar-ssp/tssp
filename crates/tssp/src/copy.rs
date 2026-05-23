@@ -4,7 +4,7 @@ use serde_json::json;
 use tssp::{Cli, CopyArgs};
 use tssp_cli_core::CliExitCode;
 
-use crate::backend::{build_client, BackendAddress};
+use crate::backend::{api_post, build_client, BackendAddress};
 
 pub fn run(cli: &Cli, args: &CopyArgs) -> Result<CliExitCode, String> {
     let address = BackendAddress::from_connection_args(&cli.connection)
@@ -19,8 +19,7 @@ pub fn run(cli: &Cli, args: &CopyArgs) -> Result<CliExitCode, String> {
             "ttl_seconds": 86_400
         });
 
-        let response = client
-            .post(address.url("/api/v1/sessions/send"))
+        let response = api_post(&client, &address.url("/api/v1/sessions/send"))
             .json(&req)
             .send()
             .map_err(|e| format!("failed to create send session: {e}"))?;
