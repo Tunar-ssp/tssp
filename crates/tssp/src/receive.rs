@@ -31,3 +31,33 @@ fn parse_timeout(timeout_str: &Option<String>) -> Result<Duration, String> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_timeout;
+    use std::time::Duration;
+
+    #[test]
+    fn parse_timeout_defaults_to_300_seconds() {
+        let result = parse_timeout(&None);
+        assert_eq!(result, Ok(Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn parse_timeout_parses_valid_duration() {
+        let result = parse_timeout(&Some("600".to_string()));
+        assert_eq!(result, Ok(Duration::from_secs(600)));
+    }
+
+    #[test]
+    fn parse_timeout_rejects_invalid_duration() {
+        let result = parse_timeout(&Some("invalid".to_string()));
+        assert!(matches!(result, Err(e) if e.contains("invalid timeout")));
+    }
+
+    #[test]
+    fn parse_timeout_rejects_negative_duration() {
+        let result = parse_timeout(&Some("-100".to_string()));
+        assert!(matches!(result, Err(e) if e.contains("invalid timeout")));
+    }
+}

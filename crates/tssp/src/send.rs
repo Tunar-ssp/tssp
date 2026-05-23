@@ -32,3 +32,34 @@ fn validate_file_exists(path: &PathBuf) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::validate_file_exists;
+    use std::path::PathBuf;
+
+    #[test]
+    fn validate_file_exists_rejects_nonexistent_path() {
+        let path = PathBuf::from("/nonexistent/file.txt");
+        let result = validate_file_exists(&path);
+        assert!(matches!(result, Err(e) if e.contains("not found")));
+    }
+
+    #[test]
+    fn validate_file_exists_rejects_directory() {
+        let temp = tempfile::tempdir().unwrap_or_else(|e| panic!("tempdir failed: {e}"));
+        let result = validate_file_exists(&temp.path().to_path_buf());
+        assert!(matches!(result, Err(e) if e.contains("not a file")));
+    }
+
+    #[test]
+    fn validate_file_exists_accepts_regular_file() {
+        let temp = tempfile::tempdir().unwrap_or_else(|e| panic!("tempdir failed: {e}"));
+        let file_path = temp.path().join("test.txt");
+        std::fs::write(&file_path, b"test content")
+            .unwrap_or_else(|e| panic!("write failed: {e}"));
+
+        let result = validate_file_exists(&file_path);
+        assert!(result.is_ok());
+    }
+}
