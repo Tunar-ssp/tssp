@@ -96,10 +96,11 @@ tssp search report --tag Docs
 ```
 
 Calls `/api/v1/search` with server-side `q`, `limit`, and `tag` query
-parameters. The daemon ranks exact matches first, then prefix matches, then a
-bounded fuzzy fallback over indexed candidates. The CLI keeps a final local
-filtering pass for compatibility with older daemons. Empty queries, empty tag
-filters, and `--limit 0` return exit code `2`.
+parameters. The daemon returns file, note, and workspace matches; files and
+notes are ranked exact-first, then prefix, then bounded fuzzy candidates.
+Workspace matches are owner-scoped by the daemon. The CLI keeps a final local
+tag-filtering pass for compatibility with older daemons. Empty queries, empty
+tag filters, and `--limit 0` return exit code `2`.
 
 ## `tssp info`
 

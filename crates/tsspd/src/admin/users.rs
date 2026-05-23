@@ -103,7 +103,7 @@ pub async fn admin_create_user(
         "user" => UserRole::User,
         _ => return admin_error("role must be admin or user".to_owned()).into_response(),
     };
-    let id = match UserId::new(format!("user-{}", uuid_simple())) {
+    let id = match UserId::new(format!("user-{}", uuid::Uuid::now_v7().as_simple())) {
         Ok(value) => value,
         Err(error) => return admin_error(error.to_string()).into_response(),
     };
@@ -179,16 +179,4 @@ pub async fn admin_set_role(
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => admin_error(error.to_string()).into_response(),
     }
-}
-
-fn uuid_simple() -> String {
-    use std::fmt::Write as _;
-
-    let mut bytes = [0_u8; 8];
-    let _ = getrandom::getrandom(&mut bytes);
-    let mut value = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
 }

@@ -67,6 +67,17 @@ struct WorkspaceRecord {
     updated_at: i64,
 }
 
+/// Bounded workspace search result returned to the search API.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspaceSearchRecord {
+    pub(crate) id: String,
+    pub(crate) owner_id: String,
+    pub(crate) name: String,
+    pub(crate) language: String,
+    pub(crate) updated_at: i64,
+    pub(crate) snippet: String,
+}
+
 impl WorkspaceStore {
     /// Opens the workspace store at the metadata database path.
     ///
@@ -191,7 +202,73 @@ impl WorkspaceStore {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(WorkspaceError::Database)
     }
+
+    pub(crate) fn search(
+        &self,
+        query: &str,
+        owner_id: Option<&str>,
+        limit: u64,
+    ) -> Result<Vec<WorkspaceSearchRecord>, WorkspaceError> {
+        let needle = query.trim().to_ascii_lowercase();
+        if needle.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let limit = i64::try_from(limit.min(50)).unwrap_or(50);
+        let connection = self.lock()?;
+
+        if let Some(owner_id) = owner_id {
+            let mut statement = connection.prepare(SEARCH_WORKSPACES_FOR_OWNER_SQL)?;
+            let rows = statement.query_map(params![needle, owner_id, limit], map_search_row)?;
+            return rows
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(WorkspaceError::Database);
+        }
+
+        let mut statement = connection.prepare(SEARCH_WORKSPACES_SQL)?;
+        let rows = statement.query_map(params![needle, limit], map_search_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(WorkspaceError::Database)
+    }
 }
+
+const SEARCH_WORKSPACES_SQL: &str = "
+    SELECT id, owner_id, name, language, body, updated_at
+    FROM workspaces
+    WHERE instr(lower(name), ?1) > 0
+       OR instr(lower(language), ?1) > 0
+       OR instr(lower(body), ?1) > 0
+    ORDER BY
+      CASE
+        WHEN lower(name) = ?1 THEN 0
+        WHEN substr(lower(name), 1, length(?1)) = ?1 THEN 1
+        WHEN instr(lower(name), ?1) > 0 THEN 2
+        WHEN lower(language) = ?1 THEN 3
+        WHEN instr(lower(language), ?1) > 0 THEN 4
+        ELSE 5
+      END,
+      updated_at DESC
+    LIMIT ?2";
+
+const SEARCH_WORKSPACES_FOR_OWNER_SQL: &str = "
+    SELECT id, owner_id, name, language, body, updated_at
+    FROM workspaces
+    WHERE owner_id = ?2
+      AND (
+        instr(lower(name), ?1) > 0
+        OR instr(lower(language), ?1) > 0
+        OR instr(lower(body), ?1) > 0
+      )
+    ORDER BY
+      CASE
+        WHEN lower(name) = ?1 THEN 0
+        WHEN substr(lower(name), 1, length(?1)) = ?1 THEN 1
+        WHEN instr(lower(name), ?1) > 0 THEN 2
+        WHEN lower(language) = ?1 THEN 3
+        WHEN instr(lower(language), ?1) > 0 THEN 4
+        ELSE 5
+      END,
+      updated_at DESC
+    LIMIT ?3";
 
 fn map_row(row: &rusqlite::Row<'_>) -> Result<WorkspaceRecord, rusqlite::Error> {
     Ok(WorkspaceRecord {
@@ -202,6 +279,18 @@ fn map_row(row: &rusqlite::Row<'_>) -> Result<WorkspaceRecord, rusqlite::Error> 
         body: row.get(4)?,
         created_at: row.get(5)?,
         updated_at: row.get(6)?,
+    })
+}
+
+fn map_search_row(row: &rusqlite::Row<'_>) -> Result<WorkspaceSearchRecord, rusqlite::Error> {
+    let body: String = row.get(4)?;
+    Ok(WorkspaceSearchRecord {
+        id: row.get(0)?,
+        owner_id: row.get(1)?,
+        name: row.get(2)?,
+        language: row.get(3)?,
+        updated_at: row.get(5)?,
+        snippet: body.chars().take(180).collect(),
     })
 }
 
@@ -715,5 +804,44 @@ mod tests {
             .expect("request");
         let response = router.oneshot(request).await.expect("response");
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn workspace_search_is_bounded_ranked_and_owner_scoped() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-alpha", "user-owner");
+        insert_record(&store, "ws-private", "user-other");
+
+        store
+            .update(&WorkspaceRecord {
+                id: "ws-alpha".to_owned(),
+                owner_id: "user-owner".to_owned(),
+                name: "Alpha Plan".to_owned(),
+                language: "markdown".to_owned(),
+                body: "Orange Pi storage notes".to_owned(),
+                created_at: 1,
+                updated_at: 2,
+            })
+            .expect("update alpha");
+        store
+            .update(&WorkspaceRecord {
+                id: "ws-private".to_owned(),
+                owner_id: "user-other".to_owned(),
+                name: "Alpha Secret".to_owned(),
+                language: "text".to_owned(),
+                body: "hidden".to_owned(),
+                created_at: 1,
+                updated_at: 3,
+            })
+            .expect("update private");
+
+        let owner_results = store
+            .search("alpha", Some("user-owner"), 10)
+            .expect("owner search");
+        let admin_results = store.search("alpha", None, 10).expect("admin search");
+
+        assert_eq!(owner_results.len(), 1);
+        assert_eq!(owner_results[0].id, "ws-alpha");
+        assert_eq!(admin_results.len(), 2);
     }
 }

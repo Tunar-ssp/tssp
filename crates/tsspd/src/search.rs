@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::auth::OptionalAuthContext;
 use crate::notes::NoteRecordResponse;
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
@@ -45,6 +46,7 @@ enum SearchKind {
     All,
     File,
     Note,
+    Workspace,
 }
 
 #[derive(Debug)]
@@ -79,7 +81,7 @@ impl SearchQuery {
             .as_deref()
             .map(validate_mime_prefix)
             .transpose()?;
-        if mime_prefix.is_some() && kind == SearchKind::Note {
+        if mime_prefix.is_some() && matches!(kind, SearchKind::Note | SearchKind::Workspace) {
             return Err("type filter can only be used with file or all search".to_owned());
         }
         let visibility = self
@@ -88,7 +90,7 @@ impl SearchQuery {
             .map(Visibility::parse)
             .transpose()
             .map_err(|error| error.to_string())?;
-        if visibility.is_some() && kind == SearchKind::Note {
+        if visibility.is_some() && matches!(kind, SearchKind::Note | SearchKind::Workspace) {
             return Err("visibility filter can only be used with file or all search".to_owned());
         }
 
@@ -108,7 +110,8 @@ fn parse_kind(value: Option<&str>) -> Result<SearchKind, String> {
         "" | "all" => Ok(SearchKind::All),
         "file" | "files" => Ok(SearchKind::File),
         "note" | "notes" => Ok(SearchKind::Note),
-        _ => Err("kind must be one of all, file, or note".to_owned()),
+        "workspace" | "workspaces" => Ok(SearchKind::Workspace),
+        _ => Err("kind must be one of all, file, note, or workspace".to_owned()),
     }
 }
 
@@ -140,6 +143,21 @@ pub(crate) enum SearchResultItem {
         /// Note metadata payload.
         #[serde(flatten)]
         record: NoteRecordResponse,
+    },
+    /// Matching saved workspace.
+    Workspace {
+        /// Workspace id.
+        id: String,
+        /// Workspace owner.
+        owner_id: String,
+        /// Workspace name.
+        name: String,
+        /// Workspace language/type metadata.
+        language: String,
+        /// Last update timestamp.
+        updated_at: i64,
+        /// Lightweight body excerpt.
+        snippet: String,
     },
 }
 
@@ -200,34 +218,15 @@ where
 
 pub(crate) async fn search_files(
     State(state): State<HttpState>,
+    OptionalAuthContext(auth): OptionalAuthContext,
     Query(params): Query<SearchQuery>,
 ) -> Response {
     if params.q.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "invalid_request",
-                    message: "query parameter 'q' must not be empty".to_owned(),
-                },
-            }),
-        )
-            .into_response();
+        return invalid_request("query parameter 'q' must not be empty".to_owned());
     }
     let filters = match params.to_filters() {
         Ok(value) => value,
-        Err(message) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: ErrorBody {
-                        code: "invalid_request",
-                        message,
-                    },
-                }),
-            )
-                .into_response();
-        }
+        Err(message) => return invalid_request(message),
     };
 
     let search_provider = state.search_provider.clone();
@@ -235,19 +234,11 @@ pub(crate) async fn search_files(
 
     match tokio::task::spawn_blocking(move || search_provider.search(&query)).await {
         Ok(Ok(hits)) => {
-            let results = hits
-                .into_iter()
-                .filter(|hit| hit_matches_filters(hit, &filters))
-                .take(usize::try_from(filters.limit).unwrap_or(usize::MAX))
-                .map(|hit| match &hit {
-                    SearchHit::File(file) => SearchResultItem::File {
-                        record: FileRecordResponse::from_record(file),
-                    },
-                    SearchHit::Note(note) => SearchResultItem::Note {
-                        record: NoteRecordResponse::from_record(note),
-                    },
-                })
-                .collect();
+            let results =
+                match build_search_results(&state, auth.as_ref(), &params.q, &filters, hits) {
+                    Ok(results) => results,
+                    Err(error) => return search_error("search_failed", error),
+                };
             let response = SearchResponse {
                 schema_version: 1,
                 limit: filters.limit,
@@ -255,36 +246,113 @@ pub(crate) async fn search_files(
             };
             (StatusCode::OK, Json(response)).into_response()
         }
-        Ok(Err(error)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "search_failed",
-                    message: error,
-                },
-            }),
-        )
-            .into_response(),
-        Err(error) => {
-            let message = format!("search worker failed: {error}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: ErrorBody {
-                        code: "internal_error",
-                        message,
-                    },
-                }),
-            )
-                .into_response()
-        }
+        Ok(Err(error)) => search_error("search_failed", error),
+        Err(error) => search_error("internal_error", format!("search worker failed: {error}")),
     }
+}
+
+fn invalid_request(message: String) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: "invalid_request",
+                message,
+            },
+        }),
+    )
+        .into_response()
+}
+
+fn search_error(code: &'static str, message: String) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: ErrorBody { code, message },
+        }),
+    )
+        .into_response()
+}
+
+fn build_search_results(
+    state: &HttpState,
+    auth: Option<&crate::auth::AuthContext>,
+    query: &str,
+    filters: &SearchFilters,
+    hits: Vec<SearchHit>,
+) -> Result<Vec<SearchResultItem>, String> {
+    let limit = usize::try_from(filters.limit).unwrap_or(usize::MAX);
+    let mut results: Vec<SearchResultItem> = hits
+        .into_iter()
+        .filter(|hit| hit_matches_filters(hit, filters))
+        .take(limit)
+        .map(|hit| match &hit {
+            SearchHit::File(file) => SearchResultItem::File {
+                record: FileRecordResponse::from_record(file),
+            },
+            SearchHit::Note(note) => SearchResultItem::Note {
+                record: NoteRecordResponse::from_record(note),
+            },
+        })
+        .collect();
+    if results.len() < limit {
+        let mut workspace_results =
+            search_workspaces(state, auth, query, filters, limit - results.len())?;
+        results.append(&mut workspace_results);
+    }
+    Ok(results)
+}
+
+fn search_workspaces(
+    state: &HttpState,
+    auth: Option<&crate::auth::AuthContext>,
+    query: &str,
+    filters: &SearchFilters,
+    limit: usize,
+) -> Result<Vec<SearchResultItem>, String> {
+    if !workspace_filters_allow_results(filters) {
+        return Ok(Vec::new());
+    }
+    let Some(auth) = auth else {
+        return Ok(Vec::new());
+    };
+    let Some(store) = state.workspaces.as_deref() else {
+        return Ok(Vec::new());
+    };
+    let owner = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    let matches = store
+        .search(query, owner, u64::try_from(limit).unwrap_or(filters.limit))
+        .map_err(|error| error.to_string())?;
+    Ok(matches
+        .into_iter()
+        .map(|workspace| SearchResultItem::Workspace {
+            id: workspace.id,
+            owner_id: workspace.owner_id,
+            name: workspace.name,
+            language: workspace.language,
+            updated_at: workspace.updated_at,
+            snippet: workspace.snippet,
+        })
+        .take(limit)
+        .collect())
+}
+
+fn workspace_filters_allow_results(filters: &SearchFilters) -> bool {
+    matches!(filters.kind, SearchKind::All | SearchKind::Workspace)
+        && filters.tag.is_none()
+        && filters.mime_prefix.is_none()
+        && filters.visibility.is_none()
+        && !filters.pinned
 }
 
 fn hit_matches_filters(hit: &SearchHit, filters: &SearchFilters) -> bool {
     match hit {
         SearchHit::File(file) => {
-            if filters.kind == SearchKind::Note {
+            if matches!(filters.kind, SearchKind::Note | SearchKind::Workspace) {
                 return false;
             }
             if filters.pinned && !file.is_pinned() {
@@ -308,7 +376,7 @@ fn hit_matches_filters(hit: &SearchHit, filters: &SearchFilters) -> bool {
             true
         }
         SearchHit::Note(note) => {
-            if filters.kind == SearchKind::File
+            if matches!(filters.kind, SearchKind::File | SearchKind::Workspace)
                 || filters.mime_prefix.is_some()
                 || filters.visibility.is_some()
             {

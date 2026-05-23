@@ -89,9 +89,7 @@ pub async fn auth_middleware(
         .and_then(|v| v.to_str().ok());
     let client_ip = Some(client.to_string());
 
-    let auth_ctx = if !required {
-        None
-    } else if let Some(token) = session_token.as_deref() {
+    let auth_ctx = if let Some(token) = session_token.as_deref() {
         state
             .auth
             .resolve_token(token, now)
@@ -103,6 +101,8 @@ pub async fn auth_middleware(
                 session_token: Some(session.token),
                 device_token: session.device_token,
             })
+    } else if !required {
+        None
     } else if !state.auth.global_auth_required() && is_local_client(client) {
         if let Some(device) = device_token.as_deref() {
             state

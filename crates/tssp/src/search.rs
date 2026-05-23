@@ -109,6 +109,7 @@ fn apply_filters(mut response: SearchResponse, args: &SearchArgs) -> SearchRespo
                 .tags
                 .iter()
                 .any(|tag| normalize_tag(tag) == normalized_filter),
+            SearchResultItem::Workspace { .. } => false,
         });
     }
 
@@ -163,6 +164,12 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
                     note.tags.join(",")
                 );
             }
+            SearchResultItem::Workspace { record: workspace } => {
+                println!(
+                    "workspace\t{}\t{}\tupdated={}\t{}",
+                    workspace.id, workspace.name, workspace.updated_at, workspace.language
+                );
+            }
         }
     }
     Ok(())
@@ -185,6 +192,10 @@ enum SearchResultItem {
         #[serde(flatten)]
         record: NoteRecordResponse,
     },
+    Workspace {
+        #[serde(flatten)]
+        record: WorkspaceRecordResponse,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -201,6 +212,15 @@ struct NoteRecordResponse {
     title: String,
     updated_at: i64,
     tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct WorkspaceRecordResponse {
+    id: String,
+    name: String,
+    language: String,
+    updated_at: i64,
+    snippet: String,
 }
 
 #[cfg(test)]
@@ -249,7 +269,37 @@ mod tests {
         assert_eq!(result.results.len(), 1);
         match &result.results[0] {
             SearchResultItem::File { record: file } => assert_eq!(file.id, "file-1"),
-            SearchResultItem::Note { .. } => panic!("expected file result"),
+            SearchResultItem::Note { .. } | SearchResultItem::Workspace { .. } => {
+                panic!("expected file result")
+            }
+        }
+    }
+
+    #[test]
+    fn parse_search_body_handles_workspace_results() {
+        let json = r#"{
+            "schema_version": 1,
+            "results": [
+                {
+                    "type": "workspace",
+                    "id": "ws-1",
+                    "owner_id": "user-tunar",
+                    "name": "Ops",
+                    "language": "markdown",
+                    "updated_at": 1000,
+                    "snippet": "backup notes"
+                }
+            ]
+        }"#;
+
+        let result = parse_search_body(json, "http://localhost")
+            .unwrap_or_else(|error| panic!("parse failed: {error}"));
+
+        match &result.results[0] {
+            SearchResultItem::Workspace { record } => assert_eq!(record.name, "Ops"),
+            SearchResultItem::File { .. } | SearchResultItem::Note { .. } => {
+                panic!("expected workspace result")
+            }
         }
     }
 
@@ -327,7 +377,9 @@ mod tests {
         assert_eq!(filtered.results.len(), 1);
         match &filtered.results[0] {
             SearchResultItem::File { record: file } => assert_eq!(file.id, "id-1"),
-            SearchResultItem::Note { .. } => panic!("expected file"),
+            SearchResultItem::Note { .. } | SearchResultItem::Workspace { .. } => {
+                panic!("expected file")
+            }
         }
     }
 
@@ -353,7 +405,9 @@ mod tests {
         assert_eq!(filtered.results.len(), 1);
         match &filtered.results[0] {
             SearchResultItem::File { record: file } => assert_eq!(file.id, "id-1"),
-            SearchResultItem::Note { .. } => panic!("expected file"),
+            SearchResultItem::Note { .. } | SearchResultItem::Workspace { .. } => {
+                panic!("expected file")
+            }
         }
     }
 
@@ -394,6 +448,15 @@ mod tests {
         let response = SearchResponse {
             schema_version: 1,
             results: vec![file_hit("id1", "test.txt", &["Docs"])],
+        };
+        assert!(print_search_results(&response, false, false).is_ok());
+    }
+
+    #[test]
+    fn print_search_results_with_workspace() {
+        let response = SearchResponse {
+            schema_version: 1,
+            results: vec![workspace_hit("ws-1", "Ops")],
         };
         assert!(print_search_results(&response, false, false).is_ok());
     }
@@ -504,6 +567,18 @@ mod tests {
                 name: name.to_string(),
                 size_bytes: 123,
                 tags: tags.iter().map(|tag| (*tag).to_string()).collect(),
+            },
+        }
+    }
+
+    fn workspace_hit(id: &str, name: &str) -> SearchResultItem {
+        SearchResultItem::Workspace {
+            record: WorkspaceRecordResponse {
+                id: id.to_string(),
+                name: name.to_string(),
+                language: "text".to_string(),
+                updated_at: 1000,
+                snippet: "saved text".to_string(),
             },
         }
     }

@@ -75,24 +75,23 @@ mod tests {
         (status, String::from_utf8_lossy(&bytes).into_owned())
     }
 
-    #[tokio::test]
-    async fn admin_route_rejects_normal_user() {
-        let (_temp, app) = auth_app(true);
-        let (status, body) = json_request(
-            &app,
-            "POST",
-            "/api/v1/auth/token",
-            Some(r#"{"name":"Alice","code":"user-code"}"#),
-            None,
-        )
-        .await;
+    async fn login_token(app: &axum::Router, name: &str, code: &str) -> String {
+        let body = format!(r#"{{"name":"{name}","code":"{code}"}}"#);
+        let (status, body) =
+            json_request(app, "POST", "/api/v1/auth/token", Some(&body), None).await;
         assert_eq!(status, StatusCode::OK);
-        let token = serde_json::from_str::<serde_json::Value>(&body)
+        serde_json::from_str::<serde_json::Value>(&body)
             .expect("json")
             .get("token")
             .and_then(|v| v.as_str())
             .expect("token")
-            .to_owned();
+            .to_owned()
+    }
+
+    #[tokio::test]
+    async fn admin_route_rejects_normal_user() {
+        let (_temp, app) = auth_app(true);
+        let token = login_token(&app, "Alice", "user-code").await;
         let (status, _) =
             json_request(&app, "GET", "/api/v1/admin/users", None, Some(&token)).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
@@ -101,23 +100,21 @@ mod tests {
     #[tokio::test]
     async fn admin_route_allows_admin_user() {
         let (_temp, app) = auth_app(true);
-        let (status, body) = json_request(
-            &app,
-            "POST",
-            "/api/v1/auth/token",
-            Some(r#"{"name":"Tunar","code":"admin-code"}"#),
-            None,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        let token = serde_json::from_str::<serde_json::Value>(&body)
-            .expect("json")
-            .get("token")
-            .and_then(|v| v.as_str())
-            .expect("token")
-            .to_owned();
+        let token = login_token(&app, "Tunar", "admin-code").await;
         let (status, body) =
             json_request(&app, "GET", "/api/v1/admin/users", None, Some(&token)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("Tunar"));
+    }
+
+    #[tokio::test]
+    async fn local_mode_honors_bearer_tokens_for_context_handlers() {
+        let (_temp, app) = auth_app(false);
+        let token = login_token(&app, "Tunar", "admin-code").await;
+
+        let (status, body) =
+            json_request(&app, "GET", "/api/v1/admin/users", None, Some(&token)).await;
+
         assert_eq!(status, StatusCode::OK);
         assert!(body.contains("Tunar"));
     }

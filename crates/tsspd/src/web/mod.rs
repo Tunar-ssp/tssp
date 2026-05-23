@@ -56,6 +56,7 @@ const JS_VIEWS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/views.js"
 ));
+const JS_PRO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/pro.js"));
 const JS_APP: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
 
 const HTML_CSP: &str =
@@ -77,6 +78,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "js/state.js" => Some((JS_STATE, "application/javascript; charset=utf-8")),
         "js/upload.js" => Some((JS_UPLOAD, "application/javascript; charset=utf-8")),
         "js/views.js" => Some((JS_VIEWS, "application/javascript; charset=utf-8")),
+        "js/pro.js" => Some((JS_PRO, "application/javascript; charset=utf-8")),
         "js/app.js" => Some((JS_APP, "application/javascript; charset=utf-8")),
         _ => None,
     }

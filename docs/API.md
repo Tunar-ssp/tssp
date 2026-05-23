@@ -483,16 +483,17 @@ Errors:
 
 ## `GET /api/v1/search`
 
-Runs unified search across indexed files, notes, tags, MIME types, and pin/public
-state. Search uses SQLite FTS5 for exact and prefix matches, then applies a
-bounded fuzzy fallback over indexed prefix candidates so typo handling does not
-scan the full database.
+Runs unified search across indexed files, notes, saved workspaces, tags, MIME
+types, and pin/public state. File and note search uses SQLite FTS5 for exact and
+prefix matches, then applies a bounded fuzzy fallback over indexed prefix
+candidates so typo handling does not scan the full database. Workspace search is
+owner-scoped and bounded in SQLite.
 
 Query parameters:
 
 - `q`: required search string.
 - `limit`: optional result limit. Defaults to `50`; maximum is `100`.
-- `kind`: optional `all`, `file`, or `note`.
+- `kind`: optional `all`, `file`, `note`, or `workspace`.
 - `tag`: optional normalized tag filter.
 - `type`: optional MIME prefix filter for files, such as `image/`.
 - `pinned`: optional `true` to return pinned files and notes only.
@@ -534,6 +535,15 @@ Response:
       "updated_at": 1779494400,
       "tags": ["Docs"],
       "pinned": false
+    },
+    {
+      "type": "workspace",
+      "id": "ws-019b2f12d0b07e9c9b2e48dc6c9ff9f7",
+      "owner_id": "user-tunar",
+      "name": "Ops script notes",
+      "language": "markdown",
+      "updated_at": 1779494500,
+      "snippet": "Review backup script assumptions before adding a sandboxed runner."
     }
   ]
 }

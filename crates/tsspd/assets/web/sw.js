@@ -1,6 +1,20 @@
 /* Minimal offline shell cache for TSSP dashboard */
-const CACHE = "tssp-v1";
-const ASSETS = ["/", "/assets/app.css", "/assets/app.js"];
+const CACHE = "tssp-v2";
+const ASSETS = [
+  "/",
+  "/assets/css/tokens.css",
+  "/assets/css/base.css",
+  "/assets/css/layout.css",
+  "/assets/css/components.css",
+  "/assets/css/views.css",
+  "/assets/css/mobile.css",
+  "/assets/js/api.js",
+  "/assets/js/state.js",
+  "/assets/js/upload.js",
+  "/assets/js/views.js",
+  "/assets/js/pro.js",
+  "/assets/js/app.js",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -9,7 +23,12 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (event) => {

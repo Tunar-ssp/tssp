@@ -52,5 +52,9 @@ The format follows Keep a Changelog, and this project uses Semantic Versioning.
   and web create/edit/delete actions.
 - Unified search improvements with server-side limit/tag/type/kind/pinned/
   visibility filters, deterministic ranking, SQLite indexes for bounded fuzzy
-  candidates, and CLI query parameter forwarding.
+  candidates, owner-scoped workspace matches, and CLI query parameter
+  forwarding.
+- Web dashboard upgraded with object selection, bulk actions, object details,
+  media previews, public-link copy controls, full-page note editing, admin
+  user/device/file controls, and a corrected modular asset cache.
 - Initial project documentation and CI workflow.

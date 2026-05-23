@@ -76,6 +76,8 @@
     });
     T.$("#note-cancel").addEventListener("click", () => T.$("#note-dialog").close());
     T.$("#note-close").addEventListener("click", () => T.$("#note-dialog").close());
+    T.$("#note-preview-refresh")?.addEventListener("click", () => T.refreshNotePreview());
+    T.$("#note-body-input")?.addEventListener("input", () => T.refreshNotePreview());
 
     T.$("#new-workspace-btn")?.addEventListener("click", () =>
       T.openWorkspaceDialog(null)
@@ -95,8 +97,76 @@
     T.$("#admin-cleanup-sessions")?.addEventListener("click", () =>
       T.adminCleanup("sessions")
     );
+    T.$("#admin-refresh-files")?.addEventListener("click", () => T.loadAdminFiles());
+    T.$("#admin-create-user-form")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      T.createAdminUser();
+    });
+    T.$("#select-all-files")?.addEventListener("change", (ev) => {
+      T.setAllVisibleFilesSelected(ev.target.checked);
+    });
+    T.$("#preview-close")?.addEventListener("click", () => T.$("#preview-dialog").close());
+
+    document.addEventListener("change", (ev) => {
+      const fileSelect = ev.target.closest("[data-file-select]");
+      if (fileSelect) {
+        T.setSelectedFile(fileSelect.dataset.fileSelect, fileSelect.checked);
+      }
+    });
 
     document.addEventListener("click", (ev) => {
+      const bulkAction = ev.target.closest("[data-bulk-action]");
+      if (bulkAction) {
+        T.bulkFileAction(bulkAction.dataset.bulkAction);
+        return;
+      }
+      const previewFile = ev.target.closest("[data-preview-file]");
+      if (previewFile) {
+        T.previewFile(previewFile.dataset.previewFile);
+        return;
+      }
+      const renameFile = ev.target.closest("[data-rename-file]");
+      if (renameFile) {
+        T.renameFile(renameFile.dataset.renameFile);
+        return;
+      }
+      const copyLink = ev.target.closest("[data-copy-link]");
+      if (copyLink) {
+        T.copyText(copyLink.dataset.copyLink)
+          .then(() => T.showBanner("Link copied", "success"))
+          .catch((e) => T.showBanner(e.message, "error"));
+        return;
+      }
+      const adminRole = ev.target.closest("[data-admin-role]");
+      if (adminRole) {
+        T.adminSetUserRole(adminRole.dataset.adminRole, adminRole.dataset.role);
+        return;
+      }
+      const adminResetCode = ev.target.closest("[data-admin-reset-code]");
+      if (adminResetCode) {
+        T.adminResetCode(adminResetCode.dataset.adminResetCode);
+        return;
+      }
+      const adminDeleteUser = ev.target.closest("[data-admin-delete-user]");
+      if (adminDeleteUser) {
+        T.adminDeleteUser(adminDeleteUser.dataset.adminDeleteUser);
+        return;
+      }
+      const adminRevokeUserDevices = ev.target.closest("[data-admin-revoke-user-devices]");
+      if (adminRevokeUserDevices) {
+        T.adminRevokeUserDevices(adminRevokeUserDevices.dataset.adminRevokeUserDevices);
+        return;
+      }
+      const adminRevokeDevice = ev.target.closest("[data-admin-revoke-device]");
+      if (adminRevokeDevice) {
+        T.adminRevokeDevice(adminRevokeDevice.dataset.adminRevokeDevice);
+        return;
+      }
+      const adminDeleteFile = ev.target.closest("[data-admin-delete-file]");
+      if (adminDeleteFile) {
+        T.adminDeleteFile(adminDeleteFile.dataset.adminDeleteFile);
+        return;
+      }
       const delFile = ev.target.closest("[data-delete-file]");
       if (delFile) {
         T.deleteFile(delFile.dataset.deleteFile);
@@ -118,6 +188,11 @@
       const editNote = ev.target.closest("[data-edit-note]");
       if (editNote) {
         T.openNote(editNote.dataset.editNote);
+        return;
+      }
+      const pinNote = ev.target.closest("[data-pin-note]");
+      if (pinNote) {
+        T.toggleNotePin(pinNote.dataset.pinNote, pinNote.dataset.pinned === "1");
         return;
       }
       const editWorkspace = ev.target.closest("[data-ws-edit]");

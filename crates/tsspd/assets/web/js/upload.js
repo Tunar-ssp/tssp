@@ -5,6 +5,7 @@ window.Tssp = window.Tssp || {};
 
   T.uploadFiles = async function uploadFiles(fileList) {
     if (!fileList || !fileList.length) return;
+    const progress = T.$("#upload-progress");
     const folder = (T.$("#upload-folder")?.value || "").trim();
     const pinned = T.$("#upload-pin")?.checked || false;
     const tagInput = T.$("#upload-tags")?.value || "";
@@ -14,8 +15,16 @@ window.Tssp = window.Tssp || {};
       .filter(Boolean);
 
     T.showBanner(`Uploading ${fileList.length} file(s)…`, "info");
+    if (progress) {
+      progress.classList.remove("hidden");
+      progress.textContent = `Preparing ${fileList.length} file(s)…`;
+    }
     let ok = 0;
-    for (const file of fileList) {
+    const files = Array.from(fileList);
+    for (const file of files) {
+      if (progress) {
+        progress.textContent = `Uploading ${ok + 1} of ${files.length}: ${file.name}`;
+      }
       const fd = new FormData();
       fd.append("file", file);
       if (folder) fd.append("folder", folder);
@@ -26,10 +35,17 @@ window.Tssp = window.Tssp || {};
         ok++;
       } catch (e) {
         T.showBanner(`Upload failed: ${e.message}`, "error");
+        if (progress) {
+          progress.textContent = `Upload failed: ${e.message}`;
+        }
         return;
       }
     }
     T.showBanner(`Uploaded ${ok} file(s)`, "success");
+    if (progress) {
+      progress.textContent = `Uploaded ${ok} file(s)`;
+      setTimeout(() => progress.classList.add("hidden"), 3500);
+    }
     setTimeout(() => T.showBanner(""), 3000);
     T.loadFiles();
     T.loadFolderTree();
