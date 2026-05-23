@@ -235,14 +235,14 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
 #[cfg(test)]
 mod tests {
     use super::{healthz, readyz, status, MetadataStatsProvider, StaticMetadataStatsProvider};
+    use crate::HttpState;
     use axum::body::to_bytes;
     use axum::extract::State;
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
+    use std::sync::Arc;
     use tssp_domain::{FileId, FileRecord};
     use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};
-    use crate::HttpState;
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn healthz_returns_ok() {
@@ -320,10 +320,7 @@ mod tests {
                 Ok(vec![])
             }
 
-            fn list_files(
-                &self,
-                _query: &ListQuery,
-            ) -> Result<PagedFiles, String> {
+            fn list_files(&self, _query: &ListQuery) -> Result<PagedFiles, String> {
                 Ok(PagedFiles {
                     files: vec![],
                     next_cursor: None,

@@ -149,14 +149,21 @@ pub trait SessionRepository: Send + Sync {
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the query fails.
-    fn find_session(&self, token: &SessionToken) -> Result<Option<TransferSession>, RepositoryError>;
+    fn find_session(
+        &self,
+        token: &SessionToken,
+    ) -> Result<Option<TransferSession>, RepositoryError>;
 
     /// Marks a session as used.
     ///
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the update cannot be committed.
-    fn mark_session_used(&self, token: &SessionToken, used_at: UnixTimestamp) -> Result<(), RepositoryError>;
+    fn mark_session_used(
+        &self,
+        token: &SessionToken,
+        used_at: UnixTimestamp,
+    ) -> Result<(), RepositoryError>;
 
     /// Deletes expired sessions.
     ///
@@ -170,7 +177,10 @@ pub trait SessionRepository: Send + Sync {
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the query fails.
-    fn list_sessions_by_kind(&self, kind: SessionKind) -> Result<Vec<TransferSession>, RepositoryError>;
+    fn list_sessions_by_kind(
+        &self,
+        kind: SessionKind,
+    ) -> Result<Vec<TransferSession>, RepositoryError>;
 }
 
 /// Stores and retrieves content-addressed blob bytes.
@@ -468,11 +478,18 @@ where
         self.as_ref().create_session(session)
     }
 
-    fn find_session(&self, token: &SessionToken) -> Result<Option<TransferSession>, RepositoryError> {
+    fn find_session(
+        &self,
+        token: &SessionToken,
+    ) -> Result<Option<TransferSession>, RepositoryError> {
         self.as_ref().find_session(token)
     }
 
-    fn mark_session_used(&self, token: &SessionToken, used_at: UnixTimestamp) -> Result<(), RepositoryError> {
+    fn mark_session_used(
+        &self,
+        token: &SessionToken,
+        used_at: UnixTimestamp,
+    ) -> Result<(), RepositoryError> {
         self.as_ref().mark_session_used(token, used_at)
     }
 
@@ -480,7 +497,10 @@ where
         self.as_ref().cleanup_expired_sessions(before)
     }
 
-    fn list_sessions_by_kind(&self, kind: SessionKind) -> Result<Vec<TransferSession>, RepositoryError> {
+    fn list_sessions_by_kind(
+        &self,
+        kind: SessionKind,
+    ) -> Result<Vec<TransferSession>, RepositoryError> {
         self.as_ref().list_sessions_by_kind(kind)
     }
 }

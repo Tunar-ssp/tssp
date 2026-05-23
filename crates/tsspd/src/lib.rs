@@ -176,18 +176,12 @@ pub fn build_router(state: HttpState) -> Router {
                 .patch(rename::rename_file),
         )
         .route("/api/v1/search", get(search::search_files))
-        .route(
-            "/api/v1/sessions/send",
-            post(sessions::create_send_session),
-        )
+        .route("/api/v1/sessions/send", post(sessions::create_send_session))
         .route(
             "/api/v1/sessions/receive",
             post(sessions::create_receive_session),
         )
-        .route(
-            "/api/v1/sessions/{token}",
-            get(sessions::get_session),
-        )
+        .route("/api/v1/sessions/{token}", get(sessions::get_session))
         .route(
             "/api/v1/sessions/{token}/use",
             post(sessions::use_session_endpoint),

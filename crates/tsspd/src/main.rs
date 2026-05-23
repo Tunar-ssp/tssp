@@ -213,8 +213,7 @@ mod tests {
     async fn run_reports_upload_temp_directory_creation_failure() {
         let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let data_dir = temp.path().join("data");
-        std::fs::create_dir(&data_dir)
-            .unwrap_or_else(|error| panic!("mkdir failed: {error}"));
+        std::fs::create_dir(&data_dir).unwrap_or_else(|error| panic!("mkdir failed: {error}"));
 
         // Create a file where the upload temp dir would be created
         let upload_temp = data_dir.join("http-upload-tmp");

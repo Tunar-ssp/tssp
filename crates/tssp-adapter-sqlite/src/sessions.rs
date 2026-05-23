@@ -50,14 +50,16 @@ fn map_session_row(row: &Row<'_>) -> Result<TransferSession, RepositoryError> {
     })?;
     let source_file = source_file.as_deref().and_then(|s| FileId::new(s).ok());
 
-    let received_file: Option<String> = row.get(5).map_err(|e| RepositoryError::OperationFailed {
-        message: format!("failed to read session received_file: {e}"),
-    })?;
+    let received_file: Option<String> =
+        row.get(5).map_err(|e| RepositoryError::OperationFailed {
+            message: format!("failed to read session received_file: {e}"),
+        })?;
     let received_file = received_file.as_deref().and_then(|s| FileId::new(s).ok());
 
-    let expected_name: Option<String> = row.get(6).map_err(|e| RepositoryError::OperationFailed {
-        message: format!("failed to read session expected_name: {e}"),
-    })?;
+    let expected_name: Option<String> =
+        row.get(6).map_err(|e| RepositoryError::OperationFailed {
+            message: format!("failed to read session expected_name: {e}"),
+        })?;
     let expected_name = expected_name.as_deref().and_then(|s| FileName::new(s).ok());
 
     let mut session = TransferSession::new(token, kind, created_at, expires_at, source_file)
@@ -176,10 +178,7 @@ impl SessionRepository for SqliteSessionRepository {
         Ok(())
     }
 
-    fn cleanup_expired_sessions(
-        &self,
-        before: UnixTimestamp,
-    ) -> Result<u64, RepositoryError> {
+    fn cleanup_expired_sessions(&self, before: UnixTimestamp) -> Result<u64, RepositoryError> {
         let connection = self
             .connection
             .lock()
@@ -267,8 +266,14 @@ mod tests {
         let expires = UnixTimestamp::new(2000).expect("invalid timestamp");
         let file_id = FileId::new("file-001").expect("invalid file id");
 
-        let session = TransferSession::new(token.clone(), SessionKind::Send, now, expires, Some(file_id))
-            .expect("failed to create session");
+        let session = TransferSession::new(
+            token.clone(),
+            SessionKind::Send,
+            now,
+            expires,
+            Some(file_id),
+        )
+        .expect("failed to create session");
 
         repo.create_session(session).expect("create failed");
         let found = repo
@@ -289,8 +294,14 @@ mod tests {
         let expires = UnixTimestamp::new(2000).expect("invalid timestamp");
         let file_id = FileId::new("file-002").expect("invalid file id");
 
-        let session = TransferSession::new(token.clone(), SessionKind::Send, now, expires, Some(file_id))
-            .expect("failed to create session");
+        let session = TransferSession::new(
+            token.clone(),
+            SessionKind::Send,
+            now,
+            expires,
+            Some(file_id),
+        )
+        .expect("failed to create session");
 
         repo.create_session(session).expect("create failed");
 
@@ -319,10 +330,22 @@ mod tests {
         let file_id1 = FileId::new("file-003").expect("invalid file id");
         let file_id2 = FileId::new("file-004").expect("invalid file id");
 
-        let session1 = TransferSession::new(token1.clone(), SessionKind::Send, now, expires_soon, Some(file_id1))
-            .expect("failed to create session");
-        let session2 = TransferSession::new(token2.clone(), SessionKind::Send, now, expires_later, Some(file_id2))
-            .expect("failed to create session");
+        let session1 = TransferSession::new(
+            token1.clone(),
+            SessionKind::Send,
+            now,
+            expires_soon,
+            Some(file_id1),
+        )
+        .expect("failed to create session");
+        let session2 = TransferSession::new(
+            token2.clone(),
+            SessionKind::Send,
+            now,
+            expires_later,
+            Some(file_id2),
+        )
+        .expect("failed to create session");
 
         repo.create_session(session1).expect("create failed");
         repo.create_session(session2).expect("create failed");
@@ -351,10 +374,12 @@ mod tests {
         let expires = UnixTimestamp::new(2000).expect("invalid timestamp");
         let file_id = FileId::new("file-005").expect("invalid file id");
 
-        let session_send = TransferSession::new(token_send, SessionKind::Send, now, expires, Some(file_id))
-            .expect("failed to create session");
-        let session_recv = TransferSession::new(token_recv, SessionKind::Receive, now, expires, None)
-            .expect("failed to create session");
+        let session_send =
+            TransferSession::new(token_send, SessionKind::Send, now, expires, Some(file_id))
+                .expect("failed to create session");
+        let session_recv =
+            TransferSession::new(token_recv, SessionKind::Receive, now, expires, None)
+                .expect("failed to create session");
 
         repo.create_session(session_send).expect("create failed");
         repo.create_session(session_recv).expect("create failed");

@@ -100,11 +100,13 @@ pub async fn rename_file(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use axum::extract::{Path, State};
     use axum::http::StatusCode;
     use axum::Json;
-    use axum::extract::{Path, State};
-    use tssp_domain::{ContentHash, FileId, FileName, FileRecord, MimeType, StorageHandle, UnixTimestamp};
+    use std::sync::Arc;
+    use tssp_domain::{
+        ContentHash, FileId, FileName, FileRecord, MimeType, StorageHandle, UnixTimestamp,
+    };
     use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};
 
     use super::*;
@@ -294,8 +296,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_id() {
-        let state =
-            HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"));
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
@@ -316,8 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_filename() {
-        let state =
-            HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"));
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),

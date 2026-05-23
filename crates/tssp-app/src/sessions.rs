@@ -31,16 +31,16 @@ impl<R: SessionRepository> SessionService<R> {
                 message: format!("failed to calculate session expiration: {e}"),
             })?;
 
-        let file_id = tssp_domain::FileId::new(file_id).map_err(|e| {
-            RepositoryError::OperationFailed {
+        let file_id =
+            tssp_domain::FileId::new(file_id).map_err(|e| RepositoryError::OperationFailed {
                 message: format!("invalid file id: {e}"),
-            }
-        })?;
-
-        let session = TransferSession::new(token, SessionKind::Send, now, expires_at, Some(file_id))
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("failed to create send session: {e}"),
             })?;
+
+        let session =
+            TransferSession::new(token, SessionKind::Send, now, expires_at, Some(file_id))
+                .map_err(|e| RepositoryError::OperationFailed {
+                    message: format!("failed to create send session: {e}"),
+                })?;
 
         self.repository.create_session(session.clone())?;
         Ok(session)
@@ -62,11 +62,10 @@ impl<R: SessionRepository> SessionService<R> {
                 message: format!("failed to calculate session expiration: {e}"),
             })?;
 
-        let session =
-            TransferSession::new(token, SessionKind::Receive, now, expires_at, None)
-                .map_err(|e| RepositoryError::OperationFailed {
-                    message: format!("failed to create receive session: {e}"),
-                })?;
+        let session = TransferSession::new(token, SessionKind::Receive, now, expires_at, None)
+            .map_err(|e| RepositoryError::OperationFailed {
+                message: format!("failed to create receive session: {e}"),
+            })?;
 
         self.repository.create_session(session.clone())?;
         Ok(session)
@@ -102,10 +101,7 @@ impl<R: SessionRepository> SessionService<R> {
     /// # Errors
     ///
     /// Returns an error when the cleanup cannot be completed.
-    pub fn cleanup_expired_sessions(
-        &self,
-        now: UnixTimestamp,
-    ) -> Result<u64, RepositoryError> {
+    pub fn cleanup_expired_sessions(&self, now: UnixTimestamp) -> Result<u64, RepositoryError> {
         self.repository.cleanup_expired_sessions(now)
     }
 
@@ -162,10 +158,7 @@ mod tests {
             Ok(())
         }
 
-        fn cleanup_expired_sessions(
-            &self,
-            _before: UnixTimestamp,
-        ) -> Result<u64, RepositoryError> {
+        fn cleanup_expired_sessions(&self, _before: UnixTimestamp) -> Result<u64, RepositoryError> {
             Ok(0)
         }
 

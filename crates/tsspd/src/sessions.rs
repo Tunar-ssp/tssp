@@ -56,7 +56,11 @@ pub trait SessionProvider: Send + Sync {
 pub struct StaticSessionProvider;
 
 impl SessionProvider for StaticSessionProvider {
-    fn create_send_session(&self, _file_id: &str, _ttl_seconds: u64) -> Result<SessionResponse, String> {
+    fn create_send_session(
+        &self,
+        _file_id: &str,
+        _ttl_seconds: u64,
+    ) -> Result<SessionResponse, String> {
         Err("session provider not initialized".to_string())
     }
 
@@ -113,8 +117,14 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
-            received_file: session.received_file.as_ref().map(|f| f.as_str().to_string()),
-            expected_name: session.expected_name.as_ref().map(|n| n.original().to_string()),
+            received_file: session
+                .received_file
+                .as_ref()
+                .map(|f| f.as_str().to_string()),
+            expected_name: session
+                .expected_name
+                .as_ref()
+                .map(|n| n.original().to_string()),
             used_at: None,
         })
     }
@@ -137,8 +147,14 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
-            received_file: session.received_file.as_ref().map(|f| f.as_str().to_string()),
-            expected_name: session.expected_name.as_ref().map(|n| n.original().to_string()),
+            received_file: session
+                .received_file
+                .as_ref()
+                .map(|f| f.as_str().to_string()),
+            expected_name: session
+                .expected_name
+                .as_ref()
+                .map(|n| n.original().to_string()),
             used_at: None,
         })
     }
@@ -159,8 +175,14 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
-            received_file: session.received_file.as_ref().map(|f| f.as_str().to_string()),
-            expected_name: session.expected_name.as_ref().map(|n| n.original().to_string()),
+            received_file: session
+                .received_file
+                .as_ref()
+                .map(|f| f.as_str().to_string()),
+            expected_name: session
+                .expected_name
+                .as_ref()
+                .map(|n| n.original().to_string()),
             used_at: None,
         })
     }
@@ -277,18 +299,13 @@ impl IntoResponse for HttpSessionError {
                 "session_expired",
                 "Session has expired".to_string(),
             ),
-            HttpSessionError::InternalError(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "session_error",
-                msg,
-            ),
+            HttpSessionError::InternalError(msg) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "session_error", msg)
+            }
         };
 
         let response = ErrorResponse {
-            error: ErrorBody {
-                code,
-                message,
-            },
+            error: ErrorBody { code, message },
         };
 
         (status, Json(response)).into_response()
@@ -375,14 +392,16 @@ mod tests {
     #[test]
     fn create_receive_session_request_deserializes() {
         let json = r#"{"ttl_seconds": 7200}"#;
-        let req: CreateReceiveSessionRequest = serde_json::from_str(json).expect("deserialize failed");
+        let req: CreateReceiveSessionRequest =
+            serde_json::from_str(json).expect("deserialize failed");
         assert_eq!(req.ttl_seconds, 7200);
     }
 
     #[test]
     fn create_receive_session_request_uses_default_ttl() {
         let json = r#"{}"#;
-        let req: CreateReceiveSessionRequest = serde_json::from_str(json).expect("deserialize failed");
+        let req: CreateReceiveSessionRequest =
+            serde_json::from_str(json).expect("deserialize failed");
         assert_eq!(req.ttl_seconds, 86_400);
     }
 

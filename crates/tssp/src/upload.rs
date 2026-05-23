@@ -605,7 +605,9 @@ mod tests {
         let plan = UploadPlan::from_args(&args);
         std::env::set_current_dir(&current).ok();
 
-        assert!(matches!(plan, Err(error) if error.message.contains("no files") || error.message.contains("no non-hidden")));
+        assert!(
+            matches!(plan, Err(error) if error.message.contains("no files") || error.message.contains("no non-hidden"))
+        );
     }
 
     #[test]
