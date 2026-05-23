@@ -12,11 +12,12 @@ use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::{SqliteFileRepository, SqliteSessionRepository};
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
-use tssp_app::{DeleteFileService, PinService, SessionService, TagService, UploadService};
+use tssp_app::{DeleteFileService, NoteService, PinService, SessionService, TagService, UploadService};
 use tssp_ports::Clock;
 use tsspd::{
-    bind_error_message, build_router, ApplicationFileDeleteProvider, ApplicationFilePinProvider,
-    ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationSessionProvider,
+    bind_error_message, build_router,     ApplicationFileDeleteProvider, ApplicationFilePinProvider,
+    ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationNoteProvider,
+    ApplicationSessionProvider,
     DaemonConfig, HttpState, RepositoryFileSearchProvider, RepositoryMetadataStatsProvider,
 };
 
@@ -196,6 +197,11 @@ async fn run(cli: Cli) -> Result<(), String> {
     let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
     let tag_service = TagService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
+    let note_service = NoteService::new(
+        repository.clone(),
+        SystemClock,
+        UuidV7FileIdGenerator,
+    );
     let session_connection = rusqlite::Connection::open(&metadata_path)
         .map_err(|error| format!("could not open session database connection: {error}"))?;
     let session_repository =
@@ -217,6 +223,7 @@ async fn run(cli: Cli) -> Result<(), String> {
     let tag_provider = ApplicationFileTagProvider::new(tag_service);
     let pin_provider = ApplicationFilePinProvider::new(pin_service);
     let session_provider = ApplicationSessionProvider::new(session_service, SystemClock);
+    let note_provider = ApplicationNoteProvider::new(note_service);
     let search_provider = RepositoryFileSearchProvider::new(repository.clone());
 
     let address = config.socket_addr();
@@ -230,6 +237,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         .with_tag_provider(Arc::new(tag_provider))
         .with_pin_provider(Arc::new(pin_provider))
         .with_session_provider(Arc::new(session_provider))
+        .with_note_provider(Arc::new(note_provider))
         .with_search_provider(Arc::new(search_provider))
         .with_blob_reader(storage);
     let router = build_router(state);

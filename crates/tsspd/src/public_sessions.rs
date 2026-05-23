@@ -225,7 +225,11 @@ pub async fn post_receive_session_upload(
         .session_provider
         .complete_receive_session(&token, &file_id);
 
-    (StatusCode::OK, format!("File '{}' uploaded successfully", outcome.record.name)).into_response()
+    (
+        StatusCode::OK,
+        format!("File '{}' uploaded successfully", outcome.record.name),
+    )
+        .into_response()
 }
 
 fn error_html(status: StatusCode, message: &str) -> Response {

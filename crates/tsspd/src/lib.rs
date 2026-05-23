@@ -10,6 +10,7 @@ mod delete;
 mod file;
 mod list;
 mod metrics;
+mod notes;
 mod pins;
 mod public_sessions;
 mod rename;
@@ -37,6 +38,7 @@ pub use delete::{
 };
 pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};
 pub use search::{FileSearchProvider, RepositoryFileSearchProvider};
+pub use notes::{ApplicationNoteProvider, NoteProvider};
 pub use sessions::{ApplicationSessionProvider, SessionProvider, SessionResponse};
 pub use startup::StartupService;
 pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
@@ -49,6 +51,7 @@ pub use upload::{
 use content::StaticBlobReader;
 use delete::StaticFileDeleteProvider;
 use pins::StaticFilePinProvider;
+use notes::StaticNoteProvider;
 use search::StaticFileSearchProvider;
 use sessions::StaticSessionProvider;
 use status::StaticMetadataStatsProvider;
@@ -66,6 +69,7 @@ pub struct HttpState {
     pin_provider: Arc<dyn FilePinProvider>,
     search_provider: Arc<dyn search::FileSearchProvider>,
     session_provider: Arc<dyn SessionProvider>,
+    note_provider: Arc<dyn notes::NoteProvider>,
     blob_reader: Arc<dyn BlobReader + Send + Sync>,
     upload_temp_dir: PathBuf,
     storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
@@ -84,6 +88,7 @@ impl HttpState {
             pin_provider: Arc::new(StaticFilePinProvider),
             search_provider: Arc::new(StaticFileSearchProvider),
             session_provider: Arc::new(StaticSessionProvider),
+            note_provider: Arc::new(StaticNoteProvider),
             blob_reader: Arc::new(StaticBlobReader),
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -143,6 +148,13 @@ impl HttpState {
     #[must_use]
     pub fn with_session_provider(mut self, provider: Arc<dyn SessionProvider>) -> Self {
         self.session_provider = provider;
+        self
+    }
+
+    /// Sets the note provider.
+    #[must_use]
+    pub fn with_note_provider(mut self, provider: Arc<dyn notes::NoteProvider>) -> Self {
+        self.note_provider = provider;
         self
     }
 }
@@ -213,6 +225,33 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/search",
             get(search::search_files).options(options_response),
+        )
+        .route(
+            "/api/v1/notes",
+            post(notes::create_note)
+                .get(notes::list_notes)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/notes/{id}",
+            get(notes::get_note)
+                .put(notes::update_note)
+                .delete(notes::delete_note)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/notes/{id}/tags",
+            post(notes::add_note_tags).options(options_response),
+        )
+        .route(
+            "/api/v1/notes/{id}/tags/{tag}",
+            axum::routing::delete(notes::remove_note_tag).options(options_response),
+        )
+        .route(
+            "/api/v1/notes/{id}/pin",
+            axum::routing::put(notes::pin_note)
+                .delete(notes::unpin_note)
+                .options(options_response),
         )
         .route(
             "/api/v1/sessions/send",
@@ -1165,9 +1204,11 @@ mod tests {
         fn stats(&self) -> Result<RepositoryStats, String> {
             Ok(RepositoryStats {
                 file_count: 7,
+                note_count: 0,
                 tag_count: 3,
                 pinned_count: 2,
                 recent_upload_count: 1,
+                recent_note_count: 0,
             })
         }
 
@@ -1257,9 +1298,11 @@ mod tests {
         fn stats(&self) -> Result<RepositoryStats, String> {
             Ok(RepositoryStats {
                 file_count: 1,
+                note_count: 0,
                 tag_count: 0,
                 pinned_count: 0,
                 recent_upload_count: 0,
+                recent_note_count: 0,
             })
         }
 

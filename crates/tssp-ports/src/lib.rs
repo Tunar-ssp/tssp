@@ -10,8 +10,9 @@ use std::sync::Arc;
 
 use thiserror::Error;
 use tssp_domain::{
-    ContentHash, Cursor, FileId, FileName, FileRecord, FileSize, MimeType, SessionKind,
-    SessionToken, StorageHandle, Tag, TagKey, TransferSession, UnixTimestamp,
+    ContentHash, Cursor, FileId, FileName, FileRecord, FileSize, MimeType, NoteBody, NoteId,
+    NoteRecord, NoteTitle, SessionKind, SessionToken, StorageHandle, Tag, TagKey,
+    TransferSession, UnixTimestamp,
 };
 
 /// Sort order for file listing queries.
@@ -367,6 +368,119 @@ pub trait FileRepository {
     ) -> Result<Option<FileRecord>, RepositoryError>;
 }
 
+/// Persists and queries Markdown notes.
+pub trait NoteRepository {
+    /// Inserts a new note record.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when metadata cannot be committed.
+    fn insert_note(&self, new_note: NewNoteRecord) -> Result<NoteRecord, RepositoryError>;
+
+    /// Returns one note by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when lookup fails.
+    fn find_note(&self, id: &NoteId) -> Result<Option<NoteRecord>, RepositoryError>;
+
+    /// Replaces a note's title and body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn update_note(
+        &self,
+        id: &NoteId,
+        title: &NoteTitle,
+        body: &NoteBody,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError>;
+
+    /// Deletes a note idempotently.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the delete cannot be committed.
+    fn delete_note(&self, id: &NoteId) -> Result<bool, RepositoryError>;
+
+    /// Lists notes using the supplied query.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query fails.
+    fn list_notes(&self, query: &NoteListQuery) -> Result<PagedNotes, RepositoryError>;
+
+    /// Adds tags to a note idempotently.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn add_tags_to_note(
+        &self,
+        id: &NoteId,
+        tags: &[Tag],
+    ) -> Result<TagMutationOutcome, RepositoryError>;
+
+    /// Removes one tag from a note idempotently.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn remove_tag_from_note(
+        &self,
+        id: &NoteId,
+        tag: &TagKey,
+    ) -> Result<TagMutationOutcome, RepositoryError>;
+
+    /// Pins a note, optionally at a specific position.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn pin_note(&self, id: &NoteId, position: Option<u32>) -> Result<PinOutcome, RepositoryError>;
+
+    /// Unpins a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn unpin_note(&self, id: &NoteId) -> Result<PinOutcome, RepositoryError>;
+
+    /// Full-text search over note titles and bodies.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the search fails.
+    fn search_notes(&self, query: &str) -> Result<Vec<NoteRecord>, RepositoryError>;
+
+    /// Unified ranked search across files and notes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when either search backend fails.
+    fn search_all(&self, query: &str) -> Result<Vec<SearchHit>, RepositoryError>;
+}
+
+/// Metadata needed to create a note.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewNoteRecord {
+    /// New note id.
+    pub id: NoteId,
+    /// Display title.
+    pub title: NoteTitle,
+    /// Markdown body.
+    pub body: NoteBody,
+    /// Creation timestamp.
+    pub created_at: UnixTimestamp,
+    /// Last update timestamp.
+    pub updated_at: UnixTimestamp,
+    /// Initial tags.
+    pub tags: Vec<Tag>,
+    /// Initial pin position.
+    pub pinned_at: Option<u32>,
+}
+
 impl<T> BlobStore for Arc<T>
 where
     T: BlobStore,
@@ -481,6 +595,69 @@ where
     }
 }
 
+impl<T> NoteRepository for Arc<T>
+where
+    T: NoteRepository,
+{
+    fn insert_note(&self, new_note: NewNoteRecord) -> Result<NoteRecord, RepositoryError> {
+        self.as_ref().insert_note(new_note)
+    }
+
+    fn find_note(&self, id: &NoteId) -> Result<Option<NoteRecord>, RepositoryError> {
+        self.as_ref().find_note(id)
+    }
+
+    fn update_note(
+        &self,
+        id: &NoteId,
+        title: &NoteTitle,
+        body: &NoteBody,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError> {
+        self.as_ref().update_note(id, title, body, updated_at)
+    }
+
+    fn delete_note(&self, id: &NoteId) -> Result<bool, RepositoryError> {
+        self.as_ref().delete_note(id)
+    }
+
+    fn list_notes(&self, query: &NoteListQuery) -> Result<PagedNotes, RepositoryError> {
+        self.as_ref().list_notes(query)
+    }
+
+    fn add_tags_to_note(
+        &self,
+        id: &NoteId,
+        tags: &[Tag],
+    ) -> Result<TagMutationOutcome, RepositoryError> {
+        self.as_ref().add_tags_to_note(id, tags)
+    }
+
+    fn remove_tag_from_note(
+        &self,
+        id: &NoteId,
+        tag: &TagKey,
+    ) -> Result<TagMutationOutcome, RepositoryError> {
+        self.as_ref().remove_tag_from_note(id, tag)
+    }
+
+    fn pin_note(&self, id: &NoteId, position: Option<u32>) -> Result<PinOutcome, RepositoryError> {
+        self.as_ref().pin_note(id, position)
+    }
+
+    fn unpin_note(&self, id: &NoteId) -> Result<PinOutcome, RepositoryError> {
+        self.as_ref().unpin_note(id)
+    }
+
+    fn search_notes(&self, query: &str) -> Result<Vec<NoteRecord>, RepositoryError> {
+        self.as_ref().search_notes(query)
+    }
+
+    fn search_all(&self, query: &str) -> Result<Vec<SearchHit>, RepositoryError> {
+        self.as_ref().search_all(query)
+    }
+}
+
 impl<T> SessionRepository for Arc<T>
 where
     T: SessionRepository,
@@ -524,17 +701,109 @@ where
     }
 }
 
+/// Sort order for note listing queries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NoteListSort {
+    /// Descending by last update (default).
+    #[default]
+    UpdatedDesc,
+    /// Ascending by last update.
+    UpdatedAsc,
+    /// Descending by creation time.
+    CreatedDesc,
+    /// Ascending by creation time.
+    CreatedAsc,
+    /// Ascending by title.
+    TitleAsc,
+    /// Descending by title.
+    TitleDesc,
+}
+
+impl NoteListSort {
+    /// Parses a sort field string from CLI `--sort`.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim() {
+            "updated" => Some(Self::UpdatedAsc),
+            "-updated" => Some(Self::UpdatedDesc),
+            "created" => Some(Self::CreatedAsc),
+            "-created" => Some(Self::CreatedDesc),
+            "title" => Some(Self::TitleAsc),
+            "-title" => Some(Self::TitleDesc),
+            _ => None,
+        }
+    }
+}
+
+/// Query parameters for filtered note listing.
+#[derive(Debug, Clone)]
+pub struct NoteListQuery {
+    /// Maximum notes to return (1..=500).
+    pub limit: u64,
+    /// Required tag keys (AND semantics).
+    pub tags: Vec<TagKey>,
+    /// Only notes updated at or after this timestamp.
+    pub since: Option<UnixTimestamp>,
+    /// Only notes updated at or before this timestamp.
+    pub until: Option<UnixTimestamp>,
+    /// Title substring filter.
+    pub title_substring: Option<String>,
+    /// When true, only pinned notes are returned.
+    pub pinned_only: bool,
+    /// Sort order.
+    pub sort: NoteListSort,
+    /// Cursor from a previous page.
+    pub after_cursor: Option<Cursor>,
+}
+
+impl Default for NoteListQuery {
+    fn default() -> Self {
+        Self {
+            limit: 50,
+            tags: Vec::new(),
+            since: None,
+            until: None,
+            title_substring: None,
+            pinned_only: false,
+            sort: NoteListSort::UpdatedDesc,
+            after_cursor: None,
+        }
+    }
+}
+
+/// Paginated note listing result.
+#[derive(Debug, Clone)]
+pub struct PagedNotes {
+    /// Notes on this page.
+    pub notes: Vec<NoteRecord>,
+    /// Cursor for the next page.
+    pub next_cursor: Option<Cursor>,
+}
+
+/// One ranked unified search hit.
+#[derive(Debug, Clone)]
+pub enum SearchHit {
+    /// A matching file.
+    File(FileRecord),
+    /// A matching note.
+    Note(NoteRecord),
+}
+
 /// Aggregate metadata counts used by health and status views.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct RepositoryStats {
     /// Total logical files.
     pub file_count: u64,
+    /// Total notes.
+    pub note_count: u64,
     /// Total distinct tags.
     pub tag_count: u64,
     /// Total pinned files.
     pub pinned_count: u64,
     /// Files uploaded at or after the caller-supplied recent cutoff.
     pub recent_upload_count: u64,
+    /// Notes created or updated at or after the recent cutoff.
+    pub recent_note_count: u64,
 }
 
 /// Tag plus the number of logical files that currently use it.
@@ -763,11 +1032,14 @@ mod tests {
     fn repository_stats_is_constructable() {
         let stats = RepositoryStats {
             file_count: 10,
+            note_count: 4,
             tag_count: 3,
             pinned_count: 2,
             recent_upload_count: 5,
+            recent_note_count: 1,
         };
         assert_eq!(stats.file_count, 10);
+        assert_eq!(stats.note_count, 4);
         assert_eq!(stats.pinned_count, 2);
     }
 

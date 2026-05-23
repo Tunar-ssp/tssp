@@ -97,14 +97,20 @@ pub(crate) async fn get_file_content(
     stream_blob_response(&record, blob, byte_range, disposition)
 }
 
-pub(crate) async fn find_file_record(state: HttpState, file_id: FileId) -> Result<Option<FileRecord>, String> {
+pub(crate) async fn find_file_record(
+    state: HttpState,
+    file_id: FileId,
+) -> Result<Option<FileRecord>, String> {
     let metadata = state.stats_provider.clone();
     tokio::task::spawn_blocking(move || metadata.find_file(&file_id))
         .await
         .map_err(|error| format!("metadata worker failed: {error}"))?
 }
 
-pub(crate) async fn open_blob(state: HttpState, handle: StorageHandle) -> Result<File, BlobReadError> {
+pub(crate) async fn open_blob(
+    state: HttpState,
+    handle: StorageHandle,
+) -> Result<File, BlobReadError> {
     let reader = state.blob_reader.clone();
     tokio::task::spawn_blocking(move || reader.open_blob(&handle))
         .await

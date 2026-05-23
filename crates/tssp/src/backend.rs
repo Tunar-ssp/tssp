@@ -78,10 +78,7 @@ pub(crate) fn build_client() -> Result<Client, String> {
 /// Only retries on connection errors and server-side 5xx responses (except 507).
 /// Client errors (4xx) and 507 are returned immediately without retry.
 #[allow(dead_code)]
-pub(crate) fn send_with_retry<F>(
-    make_request: F,
-    operation: &str,
-) -> Result<Response, CliExitCode>
+pub(crate) fn send_with_retry<F>(make_request: F, operation: &str) -> Result<Response, CliExitCode>
 where
     F: Fn() -> RequestBuilder,
 {

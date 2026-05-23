@@ -38,7 +38,13 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
 
     let parallelism = cli.upload.parallel.unwrap_or(1).max(1) as usize;
     if plan.items.len() > 1 && parallelism > 1 {
-        Ok(upload_parallel(&client, &address, &plan.items, cli, parallelism))
+        Ok(upload_parallel(
+            &client,
+            &address,
+            &plan.items,
+            cli,
+            parallelism,
+        ))
     } else if plan.items.len() > 1 {
         upload_batch(&client, &address, &plan.items, cli)
     } else {
@@ -116,10 +122,7 @@ fn upload_parallel(
 
     drop(tx);
 
-    let mut results: Vec<(usize, UploadResult)> = rx
-        .iter()
-        .map(|r| (r.index, r))
-        .collect();
+    let mut results: Vec<(usize, UploadResult)> = rx.iter().map(|r| (r.index, r)).collect();
     results.sort_by_key(|(idx, _)| *idx);
 
     for handle in handles {
@@ -209,6 +212,17 @@ impl UploadPlan {
         }
         if args.files.is_empty() {
             return Err(UploadInputError::usage("no files specified for upload"));
+        }
+
+        if let Some(first_file) = args.files.first() {
+            if first_file.to_string_lossy() == "upload" && !first_file.exists() {
+                return Err(UploadInputError::usage(
+                    "no such file or directory 'upload'.\n\n\
+                    Note: 'upload' is the default action and not a subcommand.\n\
+                    To upload a file, simply pass its path directly:\n\
+                    tssp <file>",
+                ));
+            }
         }
         if args.rename.is_some() && args.files.len() > 1 {
             return Err(UploadInputError::usage(
@@ -671,9 +685,7 @@ fn print_batch_results(
                 eprintln!(
                     "  [{}] {}: {}",
                     idx,
-                    items
-                        .get(idx)
-                        .map_or(&"?".to_string(), |i| &i.filename),
+                    items.get(idx).map_or(&"?".to_string(), |i| &i.filename),
                     item_result
                         .error
                         .as_ref()
@@ -683,9 +695,7 @@ fn print_batch_results(
                 println!(
                     "  [{}] {} ({})",
                     idx,
-                    items
-                        .get(idx)
-                        .map_or(&"?".to_string(), |i| &i.filename),
+                    items.get(idx).map_or(&"?".to_string(), |i| &i.filename),
                     item_result.outcome
                 );
             }

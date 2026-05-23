@@ -4,6 +4,7 @@
 //! kept behind the `FileRepository` port so application services stay storage
 //! agnostic.
 
+mod notes;
 mod sessions;
 
 pub use sessions::SqliteSessionRepository;
@@ -414,6 +415,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.lock()?;
         Ok(RepositoryStats {
             file_count: count(&connection, "SELECT COUNT(*) FROM files", [])?,
+            note_count: count(&connection, "SELECT COUNT(*) FROM notes", [])?,
             tag_count: count(&connection, "SELECT COUNT(*) FROM tags", [])?,
             pinned_count: count(
                 &connection,
@@ -423,6 +425,11 @@ impl FileRepository for SqliteFileRepository {
             recent_upload_count: count(
                 &connection,
                 "SELECT COUNT(*) FROM files WHERE uploaded_at >= ?1",
+                params![recent_since.seconds()],
+            )?,
+            recent_note_count: count(
+                &connection,
+                "SELECT COUNT(*) FROM notes WHERE updated_at >= ?1",
                 params![recent_since.seconds()],
             )?,
         })
@@ -792,6 +799,34 @@ fn run_migrations(connection: &Connection) -> Result<(), SqliteRepositoryError> 
             INSERT OR IGNORE INTO schema_migrations (version) VALUES (1);
             ",
         )
+        .map_err(SqliteRepositoryError::Migration)?;
+    notes::migrate_notes_schema(connection)
+}
+
+pub(crate) fn migration_applied(
+    connection: &Connection,
+    version: i64,
+) -> Result<bool, SqliteRepositoryError> {
+    let count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = ?1",
+            params![version],
+            |row| row.get(0),
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+    Ok(count > 0)
+}
+
+pub(crate) fn record_migration(
+    connection: &Connection,
+    version: i64,
+) -> Result<(), SqliteRepositoryError> {
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?1)",
+            params![version],
+        )
+        .map(|_rows| ())
         .map_err(SqliteRepositoryError::Migration)
 }
 
@@ -888,6 +923,9 @@ fn cleanup_orphaned_tags(transaction: &rusqlite::Transaction<'_>) -> Result<(), 
             "DELETE FROM tags
              WHERE NOT EXISTS (
                  SELECT 1 FROM file_tags WHERE file_tags.tag_key = tags.key
+             )
+             AND NOT EXISTS (
+                 SELECT 1 FROM note_tags WHERE note_tags.tag_key = tags.key
              )",
             [],
         )
@@ -1090,7 +1128,7 @@ fn invalid_cursor(message: impl Into<String>) -> RepositoryError {
     }
 }
 
-fn count<P>(connection: &Connection, sql: &str, params: P) -> Result<u64, RepositoryError>
+pub(crate) fn count<P>(connection: &Connection, sql: &str, params: P) -> Result<u64, RepositoryError>
 where
     P: rusqlite::Params,
 {
@@ -1137,13 +1175,13 @@ fn map_file_row(row: &Row<'_>) -> Result<FileRecord, RepositoryError> {
     })
 }
 
-fn map_domain_repository_error(error: &tssp_domain::DomainError) -> RepositoryError {
+pub(crate) fn map_domain_repository_error(error: &tssp_domain::DomainError) -> RepositoryError {
     RepositoryError::OperationFailed {
         message: error.to_string(),
     }
 }
 
-fn map_rusqlite_repository_error(error: rusqlite::Error) -> RepositoryError {
+pub(crate) fn map_rusqlite_repository_error(error: rusqlite::Error) -> RepositoryError {
     match error {
         rusqlite::Error::SqliteFailure(failure, _message)
             if failure.code == ErrorCode::DatabaseBusy
@@ -1269,9 +1307,11 @@ mod tests {
             .unwrap_or_else(|error| panic!("stats failed: {error}"));
 
         assert_eq!(stats.file_count, 2);
+        assert_eq!(stats.note_count, 0);
         assert_eq!(stats.tag_count, 2);
         assert_eq!(stats.pinned_count, 2);
         assert_eq!(stats.recent_upload_count, 1);
+        assert_eq!(stats.recent_note_count, 0);
     }
 
     #[test]

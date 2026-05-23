@@ -14,6 +14,8 @@ tssp-domain = { path = "../tssp-domain" }
 tssp-ports = { path = "../tssp-ports" }
 
 [dev-dependencies]
+tssp-adapter-sqlite = { path = "../tssp-adapter-sqlite" }
+tssp-adapter-system = { path = "../tssp-adapter-system" }
 tssp-domain = { path = "../tssp-domain" }
 
 [lints]

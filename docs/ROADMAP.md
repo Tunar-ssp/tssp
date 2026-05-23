@@ -1,9 +1,10 @@
 # tssp — Engineering Specification
 
-**Project:** `tssp` — self-hosted transfer & storage system for Orange Pi
-**Spec version:** 1.0
+**Project:** `tssp` — self-hosted local cloud & transfer system for Orange Pi
+**Spec version:** 1.1
 **Audience:** Implementation engineer or AI coding agent (Claude Code / Codex)
 **Status:** Ready for implementation. This document is authoritative.
+**Current milestone:** Core transfer/storage backbone, local cloud architecture, notes system, core UX concepts.
 
 ---
 
@@ -29,14 +30,19 @@ Where this document uses **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and
 
 ## 1. Mission
 
-Build a **production-grade, self-hosted file transfer and storage system** that runs on a passively cooled Orange Pi and replaces ad-hoc file sharing (WhatsApp, email, USB sticks, browser uploads). The system must be:
+Build a **production-grade, self-hosted local cloud and transfer system** that runs on a passively cooled Orange Pi and replaces ad-hoc file sharing (WhatsApp, email, USB sticks, browser uploads) **and** scattered personal storage (Google Drive, random folders, notes apps). The system stores **files and text content** (notes, snippets, clipboard captures) in one searchable, organized, easily retrievable local cloud — a personal Google Drive that never leaves your network.
+
+The system must be:
 
 - **Fast.** Sub-second response for metadata queries. Line-rate uploads and downloads on local Wi-Fi.
-- **Light.** Idle RAM footprint under 30 MB for the backend daemon. Negligible CPU when idle. No background polling loops.
-- **Reliable.** Power-loss safe. Never corrupts the index. Never loses a file that was acknowledged as uploaded.
+- **Light.** Idle RAM footprint under 30 MB for the backend daemon. Negligible CPU when idle. No background polling loops. Every design decision must respect the Orange Pi's limited resources.
+- **Reliable.** Power-loss safe. Never corrupts the index. Never loses a file or note that was acknowledged as saved.
+- **Searchable.** Files, notes, and tags are all full-text indexed. The primary interaction pattern is search-first: type a few characters, find what you need instantly.
 - **Scriptable.** First-class CLI with stable output formats and exit codes.
-- **Beautiful.** CLI output that respects modern terminal conventions (colors, progress, Unicode) and degrades cleanly when those aren't available.
+- **Beautiful.** CLI output that respects modern terminal conventions (colors, progress, Unicode) and degrades cleanly when those aren't available. Web dashboard that is lightweight but polished — closer to Notion than to a file manager.
 - **Maintainable.** A new contributor can read the codebase, locate any feature, and ship a change in under an hour.
+
+The architecture MUST support multiple local users in the future without requiring a rewrite. The current milestone does not implement multi-user, but the data model and API must not preclude it.
 
 Quality bar: **comparable to `ripgrep`, `sqlite`, `restic`, or the `curl` codebase.** This is the standard against which all decisions are measured.
 
@@ -140,7 +146,7 @@ The implementer MUST use the following. These are not suggestions.
 
 The codebase is organized as a Cargo workspace with the following logical layers. The implementer chooses crate names and directory names; the layering itself is mandatory.
 
-1. **Domain core** — pure logic, no I/O. Defines entities (file record, tag, pin, QR session), value objects (hash, file size, MIME type), and the rules that govern them (validation, state transitions). Depends on nothing.
+1. **Domain core** — pure logic, no I/O. Defines entities (file record, note, tag, pin, QR session, text snippet), value objects (hash, file size, MIME type), and the rules that govern them (validation, state transitions). Depends on nothing.
 
 2. **Ports** — trait definitions for everything the core needs from the outside world: persistence, blob storage, clock, ID generator, hasher, thumbnail engine. Depends only on the domain core.
 
@@ -166,12 +172,24 @@ The architecture MUST anticipate, without implementing, the following future cap
 - Alternative metadata stores (PostgreSQL for multi-user deployments).
 - Auto-tagging via embedding models.
 - Webhook delivery on file events.
-- WhatsApp bot integration.
 - Multi-user authentication and per-user quotas.
 - End-to-end encryption.
 - Federation between multiple Pi instances.
+- Desktop clipboard agents (e.g., a future `tssp cp` daemon that watches the system clipboard and auto-syncs to the cloud).
+- Mobile companion apps that upload screenshots, photos, and text to the cloud.
 
 The implementer MUST NOT add code for these, but MUST design ports and event types in a way that does not preclude them.
+
+### 5.4 Content model
+
+The system manages two first-class content types:
+
+1. **Files** — arbitrary binary blobs with metadata (name, size, hash, MIME type, tags, pin status). This is the existing model.
+2. **Notes** — lightweight text documents stored as Markdown. Notes have a title, a body, tags, pin status, and timestamps. Notes are stored in the SQLite index directly (not as blobs on disk) because they are small, text-searchable, and benefit from transactional updates.
+
+Both content types share the same tag namespace, the same pin system, and appear together in unified search results. The API and CLI treat them as peers, not as file-with-special-MIME-type hacks.
+
+Future content types (bookmarks, clipboard snippets, voice memos) SHOULD be expressible by extending this model without modifying existing content-type code.
 
 ---
 
@@ -210,7 +228,9 @@ Each subsystem is a distinct module with a defined responsibility, a defined pub
 
 **Thumbnail subsystem.** Generates thumbnails for image files. Triggered on upload (eager) or on first request (lazy) — the choice is configurable, default lazy. Thumbnails are themselves stored via the storage subsystem and indexed by the source file's hash plus a size parameter. Thumbnails MUST never be generated synchronously on the upload request path if eager mode is enabled; that work happens on a separate worker queue.
 
-**Health subsystem.** Exposes liveness (is the process running), readiness (can it accept requests), and detailed status (storage usage, index size, file counts, uptime, version). Used by the CLI's `status` command and by external monitors.
+**Notes subsystem.** Manages the lifecycle of text notes. Notes are stored entirely in SQLite (no blob on disk). Each note has: a UUIDv7 id, a title (derived from the first heading or first line if no heading), a Markdown body, tags, pin status, `created_at`, and `updated_at` timestamps. The body is indexed via FTS5 alongside file names and tags, so `GET /api/v1/search` returns both files and notes in a unified result set. Notes MUST support create, read, update (full body replace), delete, tag, untag, pin, and unpin operations. The maximum note body size is 1 MB (configurable) — this is a notes system, not a document store. Notes are versioned only by `updated_at`; full revision history is out of scope for the current milestone.
+
+**Health subsystem.** Exposes liveness (is the process running), readiness (can it accept requests), and detailed status (storage usage, index size, file counts, note counts, uptime, version). Used by the CLI's `status` command and by external monitors.
 
 **Configuration subsystem.** Loads, validates, and exposes the daemon's configuration. Validation runs at startup and the daemon refuses to start with invalid configuration, printing a clear error.
 
@@ -245,8 +265,19 @@ The endpoint surface, grouped by resource:
 - `DELETE /api/v1/files/{id}/pin` — unpin.
 - `POST /api/v1/pins/reorder` — reorder pins.
 
+**Notes:**
+- `POST /api/v1/notes` — create a note. JSON body with `title` (optional, derived from body if absent), `body` (Markdown string, required), `tags` (optional list). Returns the created note record with status 201.
+- `GET /api/v1/notes` — list notes. Query parameters for filtering (tag, since, until, pinned-only, title substring), ordering (created-at, updated-at, title), and pagination (cursor-based). Default ordering is `updated_at` descending.
+- `GET /api/v1/notes/{id}` — get a single note's full content.
+- `PUT /api/v1/notes/{id}` — replace the note body and/or title. Returns the updated note record.
+- `DELETE /api/v1/notes/{id}` — delete a note. Returns 204. Idempotent.
+- `POST /api/v1/notes/{id}/tags` — add tags to a note. Idempotent.
+- `DELETE /api/v1/notes/{id}/tags/{tag}` — remove a tag from a note. Idempotent.
+- `PUT /api/v1/notes/{id}/pin` — pin a note.
+- `DELETE /api/v1/notes/{id}/pin` — unpin a note.
+
 **Search:**
-- `GET /api/v1/search?q={query}` — full-text search across filenames and tags. Returns ranked results.
+- `GET /api/v1/search?q={query}` — full-text search across filenames, note titles, note bodies, and tags. Returns ranked results. Each result includes a `type` field (`file` or `note`) so clients can render them appropriately.
 
 **Sessions (QR):**
 - `POST /api/v1/sessions/send` — create a send session for an existing file. Body identifies the file; response includes the token, the download URL, and the expiration.
@@ -256,7 +287,7 @@ The endpoint surface, grouped by resource:
 - `POST /u/{token}` — public, unauthenticated upload endpoint used by the receiving phone. Accepts multipart. Invalidates the session on successful response.
 
 **System:**
-- `GET /api/v1/status` — overall status: version, uptime, storage usage, file count, recent activity summary.
+- `GET /api/v1/status` — overall status: version, uptime, storage usage, file count, note count, recent activity summary.
 - `GET /healthz` — liveness probe, returns 200 always when the process is up.
 - `GET /readyz` — readiness probe, returns 200 only when the daemon can serve requests.
 - `GET /metrics` — Prometheus-format metrics (optional, behind a config flag).
@@ -292,6 +323,18 @@ Shutdown sequence (on SIGTERM/SIGINT):
 
 ## 7. CLI Client — `tssp`
 
+### 7.0 Role of the CLI
+
+The CLI is a **power-user and scripting interface**, not the primary UI. Most users will interact with the system through the **web dashboard** (§8), which provides a visual, low-friction experience for uploading, browsing, searching, and managing files and notes.
+
+The CLI exists for:
+- **Automation and scripting** — piping files, cron jobs, CI/CD, shell aliases.
+- **Power-user workflows** — batch uploads, recursive folder uploads, quick clipboard saves from the terminal.
+- **Headless/remote administration** — SSH into the Pi and manage the system without a browser.
+- **Situations where the web is unavailable** — SSH-only access, broken web bundle, etc.
+
+Every CLI command has a web dashboard equivalent. If a workflow feels awkward in the CLI (e.g., creating and editing notes, browsing files visually, tagging interactively), the user SHOULD be directed to the web dashboard instead. The CLI help text SHOULD include hints like "Tip: use the web dashboard at http://<host>:8421 for a visual experience."
+
 ### 7.1 Global behavior
 
 - The CLI MUST work with no configuration on first run, prompting the user to run `tssp init` or to set `--host` explicitly.
@@ -302,13 +345,16 @@ Shutdown sequence (on SIGTERM/SIGINT):
 - All commands MUST exit with a documented exit code (see 7.4).
 - All long-running commands MUST handle Ctrl+C gracefully: cancel in-flight uploads, clean up partial state on the server, print a clear cancellation message.
 - All commands that talk to the server MUST set a connect timeout (default 5 s) and a read timeout (default 60 s, configurable), and MUST retry transient failures with exponential backoff (configurable, default 3 retries).
+- When the CLI connects to a remote daemon (non-local IP or domain), it MUST use the `token` from the config file or prompt for one. See §12 for the dual-mode auth model.
 
 ### 7.2 Configuration
 
 The CLI configuration includes at minimum:
 - `host` — the daemon's hostname or IP.
 - `port` — the daemon's port (default 8421, chosen to avoid common conflicts).
-- `scheme` — `http` or `https` (default `http` for local networks).
+- `scheme` — `http` or `https` (default `http` for local networks, `https` when using a domain).
+- `url` — optional full base URL override (e.g., `https://cloud.tunarmammadli.com`). When set, `host`, `port`, and `scheme` are ignored.
+- `token` — optional authentication token for remote/domain access. Not required on local network.
 - `discovery` — boolean, enable mDNS to find the daemon by `tsspd.local` (default true).
 - `timeout` — read timeout in seconds.
 - `parallel` — default parallel upload count for batch operations.
@@ -485,15 +531,16 @@ This is the complete, locked CLI surface. Each command is specified by: synopsis
 
 ---
 
-#### `tssp search <name>`
+#### `tssp search <query>`
 
-**Synopsis:** Filename search.
+**Synopsis:** Unified search across files and notes.
 
-**Behavior:** Uses the daemon's full-text search endpoint. Returns ranked matches. Highlights matched substrings in the output when colors are enabled.
+**Behavior:** Uses the daemon's full-text search endpoint. Returns ranked matches from both files and notes. Each result is labeled with its type (`file` or `note`). Highlights matched substrings in the output when colors are enabled.
 
 **Flags:**
 - `--limit <n>` — max results.
-- `--tag <name>` — restrict to files with the given tag.
+- `--tag <name>` — restrict to items with the given tag.
+- `--type <file|note>` — restrict to one content type.
 
 ---
 
@@ -545,7 +592,7 @@ This is the complete, locked CLI surface. Each command is specified by: synopsis
 
 **Synopsis:** Show daemon health and storage.
 
-**Behavior:** Calls `/api/v1/status` and renders: daemon version, uptime, host/port, storage used / total / free, file count, tag count, pinned count, recent activity (files uploaded in the last 24 hours), and a clear OK/Warning/Error indicator at the top. Exits non-zero if the daemon is unreachable.
+**Behavior:** Calls `/api/v1/status` and renders: daemon version, uptime, host/port, storage used / total / free, file count, note count, tag count, pinned count, recent activity (files uploaded and notes created in the last 24 hours), and a clear OK/Warning/Error indicator at the top. Exits non-zero if the daemon is unreachable.
 
 ---
 
@@ -576,6 +623,80 @@ This is the complete, locked CLI surface. Each command is specified by: synopsis
 
 ---
 
+#### `tssp note create`
+
+**Synopsis:** Create a new note.
+
+**Behavior:** If a body is provided via `--body`, creates the note non-interactively. If `--body` is omitted and stdin is a TTY, opens `$EDITOR` (or `nano` as fallback) with a temporary Markdown file; the note is created from the saved content. If stdin is a pipe, reads the body from stdin. An empty body after trimming is an error.
+
+**Flags:**
+- `--body <markdown>` — note body as a string.
+- `--title <title>` — explicit title (otherwise derived from the first `#` heading or first line of the body).
+- `-tag <name>` — attach a tag (repeatable).
+- `--pin` — pin the note immediately.
+
+---
+
+#### `tssp note list`
+
+**Synopsis:** List notes.
+
+**Behavior:** Fetches a page of notes from the daemon. Renders as a table (id, title, updated-at, tags). Supports filtering and ordering flags.
+
+**Flags:**
+- `--tag <name>` — filter by tag (repeatable, AND semantics).
+- `--since <duration>` — e.g., `1d`, `2h`, or ISO timestamp.
+- `--limit <n>` — page size.
+- `--sort <field>` — `updated`, `created`, `title`.
+- `--pinned` — pinned notes only.
+
+---
+
+#### `tssp note show <id>`
+
+**Synopsis:** Display a note's full content.
+
+**Behavior:** Fetches the note by id and renders the Markdown body to the terminal. When stdout is a TTY, renders with basic formatting (headings, bold, lists). When piped, outputs raw Markdown.
+
+---
+
+#### `tssp note edit <id>`
+
+**Synopsis:** Edit an existing note.
+
+**Behavior:** Fetches the current body, opens it in `$EDITOR`, and PUTs the result back. If `--body` is provided, replaces without opening an editor.
+
+**Flags:**
+- `--body <markdown>` — replace body non-interactively.
+- `--title <title>` — update the title.
+
+---
+
+#### `tssp note delete <id>`
+
+**Synopsis:** Delete a note.
+
+**Behavior:** Prompts for confirmation unless `--yes` is passed or stdin is not a TTY. Idempotent.
+
+**Flags:**
+- `--yes` — skip confirmation.
+
+---
+
+#### `tssp cp`
+
+**Synopsis:** Quick text/clipboard save to the cloud. *(Foundation — current milestone defines the concept and backend storage; full desktop integration is a future milestone.)*
+
+**Behavior:** Reads text from stdin (if piped) or from the system clipboard (if no stdin and a display server is available) and saves it as a note on the daemon. This is the fastest path from "I have some text" to "it's in my cloud." If the input looks like a file path or URI, the CLI uploads the file instead (same as `tssp paste` for file URIs).
+
+**Flags:**
+- `--title <title>` — explicit title for the created note.
+- `-tag <name>` — attach a tag.
+
+**Future direction (not implemented this milestone):** A persistent `tssp cp --watch` mode that monitors the system clipboard and auto-syncs changes to the cloud. Desktop tray integration. Mobile companion.
+
+---
+
 ### 7.6 Shell completions
 
 Completions MUST cover:
@@ -589,11 +710,52 @@ The CLI provides the script; the user installs it into their shell. Installation
 
 ---
 
-## 8. Web Dashboard — `tssp-web`
+## 8. Web Dashboard — `tssp-web` (Primary Interface)
 
-Out of scope for detailed UX in this spec. The backend MUST expose every API endpoint the dashboard will need (see §6.3). The build pipeline produces a static bundle that is embedded into `tsspd`. The dashboard is served at `/` with SPA fallback routing. Authentication is out of scope for v1 (local network trust model — see §12).
+The web dashboard is the **primary user interface** for tssp. Most users will never touch the CLI — they will upload files by dragging them into the browser, create notes in a visual editor, search with a search bar, and manage their cloud entirely through the web. The CLI exists for power users, scripting, and automation (§7.0).
 
-The implementer MUST scaffold the web project (SvelteKit static adapter), wire up the build to embed into the daemon binary, and produce a minimal placeholder page that confirms connectivity to the API. Full UI is designed and built in a separate workstream.
+The backend MUST expose every API endpoint the dashboard needs (see §6.3). The build pipeline produces a static bundle that is embedded into `tsspd`. The dashboard is served at `/` with SPA fallback routing. When accessed via domain (e.g., `cloud.tunarmammadli.com`), the web dashboard MUST present a login screen (see §12).
+
+The implementer MUST scaffold the web project (SvelteKit static adapter), wire up the build to embed into the daemon binary, and produce a functional dashboard — not just a placeholder. The dashboard is the product's face.
+
+### 8.1 UX Philosophy
+
+The guiding principle is: **zero friction**. Every interaction should require the fewest possible clicks/taps. The user should never wonder "how do I..." — the answer should be visually obvious.
+
+Design priorities, in order:
+1. **Instant uploads** — drag and drop, paste from clipboard, or click to browse. One step.
+2. **Instant retrieval** — search bar is always visible, always fast. Type → find → click → done.
+3. **Visual browsing** — thumbnails for images, icons for documents, previews for notes. The landing page shows recent activity without scrolling.
+4. **Effortless organization** — tagging and pinning are inline (click a tag chip, not a modal). Bulk operations are visual (select multiple → tag/pin/delete).
+5. **Works on phone** — mobile-first responsive design. Uploading a photo from a phone browser should be as easy as sharing to an app.
+
+### 8.2 Core Screens
+
+- **Home / Feed.** Shows the most recent files and notes in a unified timeline. Search bar at the top. Drag-and-drop upload zone covers the entire viewport.
+- **Search results.** Unified results for files and notes. Filterable by type (file/note), tag, date range. Each result shows type icon, name/title, size/preview, tags, date.
+- **File detail.** Metadata, preview (image/PDF inline), download button, tags, pin toggle, share (QR), delete.
+- **Note editor.** Inline Markdown editor with live preview. Title, body, tags, pin toggle. Auto-saves on blur or after a short debounce. No "save" button — it just works.
+- **Upload progress.** A non-blocking toast/overlay showing upload progress. Multiple uploads show as a list. Completed uploads link to the file.
+- **Settings.** Connection info, storage usage, daemon version. Minimal.
+- **Login (remote only).** Simple password field. Appears only when accessed from outside the local network. See §12.
+
+### 8.3 Interaction Patterns
+
+- **Drag and drop.** The entire viewport is a drop target. Dropping files uploads them. Dropping text creates a note. Visual feedback (border glow, drop zone highlight) confirms the drop target is active.
+- **Paste.** Ctrl+V / Cmd+V anywhere (when not in a text input) uploads clipboard images as files or clipboard text as notes.
+- **Quick note.** A persistent "+" or "New Note" button opens the note editor. Keyboard shortcut (e.g., `N`) opens it instantly.
+- **Inline tagging.** Click the tag area on any file/note to add tags with an autocomplete dropdown. No separate tag management screen needed.
+- **Bulk operations.** Long-press (mobile) or checkbox (desktop) to select multiple items, then apply tags, pin, or delete in one action.
+- **QR sharing.** One-click "Share" button on any file generates a QR code inline — no page navigation.
+
+### 8.4 Technical Constraints
+
+- **Lightweight but polished.** The bundle MUST remain small enough to load instantly on the Orange Pi's limited bandwidth. No heavy frontend frameworks or runtime dependencies. CSS animations over JS animations. System fonts over web fonts unless the total payload stays under 200 KB gzipped.
+- **Works offline (progressive).** Once loaded, the shell MUST work offline (cached via service worker). Uploads queue and sync when connectivity returns.
+- **Accessible.** Keyboard navigation, screen reader friendly, sufficient contrast.
+- **Responsive.** Desktop, tablet, and phone layouts. Mobile-first — the phone experience is just as important as desktop.
+
+The dashboard is not a file manager with tree navigation. It is a personal cloud feed — searchable, taggable, and instant.
 
 ---
 
@@ -604,6 +766,11 @@ The implementer MUST scaffold the web project (SvelteKit static adapter), wire u
 Required keys: bind address, port, data directory, log level, log format.
 
 Optional keys with sensible defaults: worker thread count, max upload size, request timeouts, session TTLs, thumbnail mode (eager/lazy/disabled), thumbnail sizes, mDNS advertisement (on/off), metrics endpoint (on/off), web dashboard (on/off), CORS allowed origins, max files per batch upload.
+
+Domain/remote access keys (optional, enable remote access when set):
+- `public_url` — the public URL where the daemon is accessible (e.g., `https://cloud.tunarmammadli.com`). Used to generate correct absolute URLs in API responses and QR codes. When unset, URLs are generated from the bind address.
+- `auth_password_hash` — bcrypt hash of the access password. When set, all non-local requests require authentication (see §12). When unset, no authentication is enforced.
+- `trusted_proxies` — list of IP ranges or CIDR blocks for reverse proxies. Enables `X-Forwarded-For` trust for local-network detection.
 
 Configuration is layered: built-in defaults → config file → environment variables (`TSSPD_<KEY>`) → CLI flags. Each layer overrides the previous. The effective configuration is logged at startup at INFO level so operators can verify what's in effect.
 
@@ -728,13 +895,34 @@ This section is the heart of the specification. The implementer MUST handle ever
 
 ---
 
-## 12. Security Model (v1)
+## 12. Security Model (v1) — Dual-Mode Access
 
-The trust model for v1 is **local network only**. The daemon listens on the LAN, there is no authentication, and the user is expected to trust everyone on the network. This MUST be:
+The system operates in two access modes depending on where the request originates:
 
+### 12.1 Local network access (no authentication)
+
+When a request originates from the local network (private IPv4 ranges `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, or link-local IPv6), **no authentication is required**. The user is trusted implicitly. This is the default experience when using the system at home.
+
+This MUST be:
 - Documented prominently in the README.
-- Reflected in the default bind address (the daemon SHOULD default to binding only to private IPv4 ranges and link-local IPv6, refusing to bind to public addresses unless explicitly configured).
-- Reinforced by `tssp init` warning the user if it detects the daemon is reachable from a public interface.
+- Reflected in the default bind address (the daemon SHOULD default to binding only to private IPv4 ranges and link-local IPv6, refusing to bind to public addresses unless explicitly configured with `public_url`).
+
+### 12.2 Remote/domain access (password required)
+
+When a request originates from outside the local network (e.g., via `cloud.tunarmammadli.com` through a reverse proxy), the daemon MUST require authentication. The authentication model for v1 is a **single shared password**:
+
+- The operator sets a password during initial setup or via `tsspd --set-password`. The password is stored as a bcrypt hash in the daemon config.
+- **Web dashboard login:** The web dashboard shows a simple login screen with a password field. On successful authentication, the server issues a session cookie (HTTP-only, Secure when behind HTTPS, SameSite=Strict) with a configurable TTL (default 30 days). The user stays logged in until the cookie expires or they log out.
+- **CLI authentication:** The CLI sends a `Bearer` token in the `Authorization` header. The token is obtained by running `tssp login`, which prompts for the password, exchanges it for a long-lived token via `POST /api/v1/auth/token`, and stores it in the config file. Subsequent commands use the stored token automatically.
+- **API endpoints for auth:**
+  - `POST /api/v1/auth/login` — accepts `{ "password": "..." }`, returns a session cookie and/or a bearer token.
+  - `POST /api/v1/auth/token` — same as login but returns a long-lived API token for CLI use.
+  - `POST /api/v1/auth/logout` — invalidates the session.
+- Local-network detection uses the client IP from the TCP connection (or `X-Forwarded-For` when `trusted_proxies` is configured). If the IP is in a private range, authentication is skipped.
+
+Multi-user authentication, per-user quotas, and role-based access are out of scope for v1. The single-password model is intentionally simple — it protects against unauthorized internet access, not against malicious local-network users.
+
+### 12.3 Shared security measures (all access modes)
 
 QR session tokens are 128 bits of entropy, single-use, and short-lived. This is sufficient to prevent guessing attacks within the session TTL.
 
@@ -742,7 +930,9 @@ Path traversal in filenames is prevented at every boundary: filenames are saniti
 
 The HTTP server MUST set: `X-Content-Type-Options: nosniff` on all responses; `Content-Security-Policy` on web app responses; appropriate CORS headers configured via config.
 
-Authentication, multi-user support, TLS, encryption at rest — explicitly out of scope for v1. The architecture MUST permit them as future additions (§5.3).
+TLS is handled by the reverse proxy (e.g., Caddy or nginx in front of `tsspd`), not by the daemon itself. The daemon trusts the proxy to terminate TLS and forward `X-Forwarded-*` headers. A reference Caddy configuration for `cloud.tunarmammadli.com` SHOULD be included in the documentation.
+
+Full multi-user support, encryption at rest, and end-to-end encryption are explicitly deferred to future milestones. The architecture MUST permit them as future additions (§5.3).
 
 ---
 
@@ -794,8 +984,8 @@ All documentation is in version control, written in Markdown, and rendered corre
 
 The project is considered complete for v1.0 when:
 
-1. All commands in §7.5 work as specified.
-2. All HTTP endpoints in §6.3 are implemented and return correct results.
+1. All commands in §7.5 work as specified, including all `tssp note` subcommands and `tssp cp`.
+2. All HTTP endpoints in §6.3 are implemented and return correct results, including all Notes endpoints.
 3. All edge cases in §10 have a test that demonstrates correct behavior.
 4. The daemon runs continuously on an Orange Pi for at least 7 days under realistic load without crash, memory growth, or data corruption.
 5. The CLI binary is under 10 MB compressed.
@@ -804,6 +994,49 @@ The project is considered complete for v1.0 when:
 8. A clean `cargo clippy --workspace --all-targets -- -D warnings` produces no warnings.
 9. A clean `cargo fmt --check` passes.
 10. All documentation in §15 exists and is accurate.
+11. Unified search returns both files and notes in a single ranked result set.
+12. Notes can be created, edited, deleted, tagged, pinned, and searched via both CLI and API.
+
+---
+
+## 17. Current Milestone Scope & Boundaries
+
+This section clarifies what is in scope for the current development milestone and what is explicitly deferred.
+
+### 17.1 In Scope
+
+- **Core transfer/storage backbone.** All file upload, download, deduplication, tagging, pinning, and search functionality as specified in §6 and §7.
+- **Local cloud architecture.** The system behaves as a personal local cloud (a self-hosted Google Drive alternative). Files are searchable, organized, and easily retrievable. The data model supports both files and text content (notes).
+- **Notes system.** Full CRUD lifecycle for Markdown notes via API and CLI. Notes are first-class entities with tags, pins, and full-text search. Notes appear in unified search alongside files.
+- **Web-first UX.** The web dashboard is the primary interface (§8). It MUST support drag-and-drop uploads, inline note editing, visual search, and mobile-responsive layouts. The CLI is for power users and scripting only.
+- **Clipboard and text-transfer foundation.** The `tssp paste` and `tssp cp` commands provide the backend and CLI plumbing for clipboard-driven and text-driven transfers. The storage layer supports saving arbitrary text content as notes.
+- **Domain access.** The system MUST be accessible via a custom domain (e.g., `cloud.tunarmammadli.com`) behind a reverse proxy. The daemon generates correct URLs when `public_url` is configured.
+- **Dual-mode authentication.** No password on local network; password required when accessed via domain/internet (§12). Single shared password model.
+- **Resource efficiency.** All design decisions respect the Orange Pi's constraints: low CPU usage, low RAM usage (idle under 30 MB), SQLite for storage, no background polling, bounded worker pools.
+
+### 17.2 Explicitly Deferred (Future Milestones)
+
+The following are **not** part of the current milestone. They MUST NOT be implemented, but the architecture MUST NOT preclude them:
+
+- WhatsApp bot integration.
+- Ubuntu desktop companion app.
+- Mobile companion app (native).
+- AI-powered features (auto-tagging, smart search, content analysis).
+- Multi-user authentication and per-user access control (the data model should not preclude adding a `user_id` column later).
+- TLS termination (handled by reverse proxy, not the daemon).
+- Multi-device clipboard sync daemons.
+- External service integrations (S3, cloud storage providers).
+- Note revision history and collaboration.
+- End-to-end encryption.
+
+### 17.3 Architecture Constraints (Reinforced)
+
+- **Rust backend.** No runtime dependencies beyond the OS. Single static binary.
+- **SQLite.** WAL mode. FTS5 for search. No external database process.
+- **Self-hosted, local-first.** All data stays on the Orange Pi. No cloud dependencies. Domain access is just a reverse proxy pointing to the same local daemon.
+- **Orange Pi resource budget.** Idle RAM under 30 MB. CPU usage negligible when idle. Thumbnail generation and hashing governed by semaphores. No unbounded spawning.
+- **Lightweight frontend.** The web dashboard bundle MUST load instantly even on the Pi's limited bandwidth. No heavy JS frameworks.
+- **Web is the primary UI.** The dashboard MUST cover every common workflow visually. The CLI is a secondary interface for automation and power users.
 
 ---
 

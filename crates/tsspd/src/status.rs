@@ -73,9 +73,11 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
     fn stats(&self) -> Result<RepositoryStats, String> {
         Ok(RepositoryStats {
             file_count: 0,
+            note_count: 0,
             tag_count: 0,
             pinned_count: 0,
             recent_upload_count: 0,
+            recent_note_count: 0,
         })
     }
 
@@ -192,6 +194,8 @@ pub struct StatusResponse {
     pub uptime_seconds: u64,
     /// Indexed file count.
     pub file_count: u64,
+    /// Indexed note count.
+    pub note_count: u64,
     /// Known tag count.
     pub tag_count: u64,
     /// Pinned file count.
@@ -230,6 +234,7 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
                 status: "ok",
                 uptime_seconds: state.started_at.elapsed().as_secs(),
                 file_count: repository_stats.file_count,
+                note_count: repository_stats.note_count,
                 tag_count: repository_stats.tag_count,
                 pinned_count: repository_stats.pinned_count,
                 recent_upload_count_24h: repository_stats.recent_upload_count,

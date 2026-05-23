@@ -6,10 +6,10 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::notes::NoteRecordResponse;
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
-use tssp_domain::FileRecord;
-use tssp_ports::FileRepository;
+use tssp_ports::{NoteRepository, SearchHit};
 
 /// Query parameters for searching files.
 #[derive(Debug, Deserialize)]
@@ -18,30 +18,48 @@ pub(crate) struct SearchQuery {
     pub q: String,
 }
 
+/// One unified search result.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub(crate) enum SearchResultItem {
+    /// Matching file.
+    File {
+        /// File metadata payload.
+        #[serde(flatten)]
+        record: FileRecordResponse,
+    },
+    /// Matching note.
+    Note {
+        /// Note metadata payload.
+        #[serde(flatten)]
+        record: NoteRecordResponse,
+    },
+}
+
 /// Response for search endpoint.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct SearchResponse {
     /// Stable response schema version.
     pub schema_version: u8,
-    /// Array of matching file records.
-    pub files: Vec<FileRecordResponse>,
+    /// Ranked matches across files and notes.
+    pub results: Vec<SearchResultItem>,
 }
 
-/// Provides file search functionality.
+/// Provides unified search functionality.
 pub trait FileSearchProvider: Send + Sync {
-    /// Searches files matching the query.
+    /// Searches files and notes matching the query.
     ///
     /// # Errors
     ///
     /// Returns a short diagnostic when the query fails.
-    fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, String>;
+    fn search(&self, query: &str) -> Result<Vec<SearchHit>, String>;
 }
 
 #[derive(Debug)]
 pub(crate) struct StaticFileSearchProvider;
 
 impl FileSearchProvider for StaticFileSearchProvider {
-    fn search_files(&self, _query: &str) -> Result<Vec<FileRecord>, String> {
+    fn search(&self, _query: &str) -> Result<Vec<SearchHit>, String> {
         Ok(Vec::new())
     }
 }
@@ -62,11 +80,11 @@ impl<R> RepositoryFileSearchProvider<R> {
 
 impl<R> FileSearchProvider for RepositoryFileSearchProvider<R>
 where
-    R: FileRepository + Send + Sync,
+    R: NoteRepository + Send + Sync,
 {
-    fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, String> {
+    fn search(&self, query: &str) -> Result<Vec<SearchHit>, String> {
         self.repository
-            .search_files(query)
+            .search_all(query)
             .map_err(|error| error.to_string())
     }
 }
@@ -91,11 +109,22 @@ pub(crate) async fn search_files(
     let search_provider = state.search_provider.clone();
     let query = params.q;
 
-    match tokio::task::spawn_blocking(move || search_provider.search_files(&query)).await {
-        Ok(Ok(files)) => {
+    match tokio::task::spawn_blocking(move || search_provider.search(&query)).await {
+        Ok(Ok(hits)) => {
+            let results = hits
+                .iter()
+                .map(|hit| match hit {
+                    SearchHit::File(file) => SearchResultItem::File {
+                        record: FileRecordResponse::from_record(file),
+                    },
+                    SearchHit::Note(note) => SearchResultItem::Note {
+                        record: NoteRecordResponse::from_record(note),
+                    },
+                })
+                .collect();
             let response = SearchResponse {
                 schema_version: 1,
-                files: files.iter().map(FileRecordResponse::from_record).collect(),
+                results,
             };
             (StatusCode::OK, Json(response)).into_response()
         }
@@ -129,6 +158,7 @@ pub(crate) async fn search_files(
 mod tests {
     use super::*;
     use axum::body::to_bytes;
+    use tssp_ports::FileRepository;
     use axum::http::Request;
     use axum::routing::get;
     use axum::Router;
@@ -177,7 +207,7 @@ mod tests {
         let result: SearchResponse = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("json parse failed: {error}"));
         assert_eq!(result.schema_version, 1);
-        assert!(result.files.is_empty());
+        assert!(result.results.is_empty());
     }
 
     struct MockRepo;
@@ -289,13 +319,83 @@ mod tests {
         }
     }
 
+    impl NoteRepository for MockRepo {
+        fn insert_note(
+            &self,
+            _new_note: tssp_ports::NewNoteRecord,
+        ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn find_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+        ) -> Result<Option<tssp_domain::NoteRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn update_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _title: &tssp_domain::NoteTitle,
+            _body: &tssp_domain::NoteBody,
+            _updated_at: tssp_domain::UnixTimestamp,
+        ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn delete_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+        ) -> Result<bool, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn list_notes(
+            &self,
+            _query: &tssp_ports::NoteListQuery,
+        ) -> Result<tssp_ports::PagedNotes, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn add_tags_to_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _tags: &[tssp_domain::Tag],
+        ) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn remove_tag_from_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _tag: &tssp_domain::TagKey,
+        ) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn pin_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _position: Option<u32>,
+        ) -> Result<tssp_ports::PinOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn unpin_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+        ) -> Result<tssp_ports::PinOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn search_notes(
+            &self,
+            _query: &str,
+        ) -> Result<Vec<tssp_domain::NoteRecord>, tssp_ports::RepositoryError> {
+            Ok(vec![])
+        }
+        fn search_all(&self, _query: &str) -> Result<Vec<tssp_ports::SearchHit>, tssp_ports::RepositoryError> {
+            Ok(vec![])
+        }
+    }
+
     #[tokio::test]
     async fn repository_search_provider_delegates_to_repo() {
-        let repo = MockRepo;
-        let provider = RepositoryFileSearchProvider::new(repo);
-
+        let provider = RepositoryFileSearchProvider::new(MockRepo);
         let result = provider
-            .search_files("test")
+            .search("test")
             .unwrap_or_else(|error| panic!("search failed: {error}"));
         assert!(result.is_empty());
     }
@@ -408,6 +508,83 @@ mod tests {
             _new_name: &tssp_domain::FileName,
         ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
             unimplemented!()
+        }
+    }
+
+    impl NoteRepository for FailingMockRepo {
+        fn insert_note(
+            &self,
+            _new_note: tssp_ports::NewNoteRecord,
+        ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn find_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+        ) -> Result<Option<tssp_domain::NoteRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn update_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _title: &tssp_domain::NoteTitle,
+            _body: &tssp_domain::NoteBody,
+            _updated_at: tssp_domain::UnixTimestamp,
+        ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn delete_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+        ) -> Result<bool, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn list_notes(
+            &self,
+            _query: &tssp_ports::NoteListQuery,
+        ) -> Result<tssp_ports::PagedNotes, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn add_tags_to_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _tags: &[tssp_domain::Tag],
+        ) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn remove_tag_from_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _tag: &tssp_domain::TagKey,
+        ) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn pin_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _position: Option<u32>,
+        ) -> Result<tssp_ports::PinOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn unpin_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+        ) -> Result<tssp_ports::PinOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn search_notes(
+            &self,
+            _query: &str,
+        ) -> Result<Vec<tssp_domain::NoteRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn search_all(
+            &self,
+            _query: &str,
+        ) -> Result<Vec<tssp_ports::SearchHit>, tssp_ports::RepositoryError> {
+            Err(tssp_ports::RepositoryError::OperationFailed {
+                message: "db error".into(),
+            })
         }
     }
 

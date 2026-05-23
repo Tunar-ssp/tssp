@@ -55,11 +55,7 @@ pub trait SessionProvider: Send + Sync {
     /// # Errors
     ///
     /// Returns an error when the update cannot be committed.
-    fn complete_receive_session(
-        &self,
-        token: &SessionToken,
-        file_id: &str,
-    ) -> Result<(), String>;
+    fn complete_receive_session(&self, token: &SessionToken, file_id: &str) -> Result<(), String>;
 }
 
 /// Static session provider that returns empty/placeholder responses.
@@ -87,7 +83,11 @@ impl SessionProvider for StaticSessionProvider {
         Err("session provider not initialized".to_string())
     }
 
-    fn complete_receive_session(&self, _token: &SessionToken, _file_id: &str) -> Result<(), String> {
+    fn complete_receive_session(
+        &self,
+        _token: &SessionToken,
+        _file_id: &str,
+    ) -> Result<(), String> {
         Err("session provider not initialized".to_string())
     }
 }
@@ -211,8 +211,7 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
 
     fn complete_receive_session(&self, token: &SessionToken, file_id: &str) -> Result<(), String> {
         let now = self.clock.now();
-        let fid = tssp_domain::FileId::new(file_id)
-            .map_err(|e| format!("invalid file id: {e}"))?;
+        let fid = tssp_domain::FileId::new(file_id).map_err(|e| format!("invalid file id: {e}"))?;
         self.service
             .complete_receive_session(token, &fid, now)
             .map_err(|e| format!("failed to complete receive session: {e}"))

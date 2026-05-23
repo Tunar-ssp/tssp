@@ -5,3 +5,5 @@
 *.log
 *.tmp
 temp
+data
+scratch_*.rs

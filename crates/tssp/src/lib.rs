@@ -142,9 +142,111 @@ pub enum Command {
     Init,
     /// Manage CLI configuration.
     Config(ConfigCommand),
+    /// Manage Markdown notes.
+    Note(NoteCommand),
+    /// Quick-save text or clipboard to the cloud as a note.
+    Cp(CpArgs),
     /// Generate a shell completion script.
     #[command(hide = true)]
     Completions(CompletionArgs),
+}
+
+/// `tssp note` subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum NoteSubcommand {
+    /// Create a new note.
+    Create(NoteCreateArgs),
+    /// List notes.
+    List(NoteListArgs),
+    /// Show a note.
+    Show(NoteShowArgs),
+    /// Edit a note.
+    Edit(NoteEditArgs),
+    /// Delete a note.
+    Delete(NoteDeleteArgs),
+}
+
+/// Wrapper for `tssp note`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteCommand {
+    /// Note action to run.
+    #[command(subcommand)]
+    pub action: NoteSubcommand,
+}
+
+/// Arguments for `tssp note create`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteCreateArgs {
+    /// Note body as Markdown.
+    #[arg(long)]
+    pub body: Option<String>,
+    /// Explicit title.
+    #[arg(long)]
+    pub title: Option<String>,
+    /// Attach a tag.
+    #[arg(long = "tag", short = 't', value_name = "NAME")]
+    pub tags: Vec<String>,
+    /// Pin immediately.
+    #[arg(long)]
+    pub pin: bool,
+}
+
+/// Arguments for `tssp note list`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteListArgs {
+    /// Filter by tag.
+    #[arg(long = "tag", value_name = "NAME")]
+    pub tags: Vec<String>,
+    /// Page size.
+    #[arg(long, value_name = "N")]
+    pub limit: Option<u16>,
+    /// Sort field (`updated`, `created`, `title`, with optional leading `-`).
+    #[arg(long, value_name = "FIELD")]
+    pub sort: Option<String>,
+    /// Pinned notes only.
+    #[arg(long)]
+    pub pinned: bool,
+}
+
+/// Arguments for `tssp note show`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteShowArgs {
+    /// Note id.
+    pub id: String,
+}
+
+/// Arguments for `tssp note edit`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteEditArgs {
+    /// Note id.
+    pub id: String,
+    /// Replacement body.
+    #[arg(long)]
+    pub body: Option<String>,
+    /// New title.
+    #[arg(long)]
+    pub title: Option<String>,
+}
+
+/// Arguments for `tssp note delete`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteDeleteArgs {
+    /// Note id.
+    pub id: String,
+    /// Skip confirmation.
+    #[arg(long)]
+    pub yes: bool,
+}
+
+/// Arguments for `tssp cp`.
+#[derive(Debug, Clone, Args)]
+pub struct CpArgs {
+    /// Explicit title.
+    #[arg(long)]
+    pub title: Option<String>,
+    /// Attach a tag.
+    #[arg(long = "tag", short = 't', value_name = "NAME")]
+    pub tags: Vec<String>,
 }
 
 /// Arguments for `tssp send`.

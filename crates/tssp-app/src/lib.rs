@@ -5,12 +5,14 @@
 //! files are local, or delivery is HTTP.
 
 mod delete;
+mod notes;
 mod pins;
 mod sessions;
 mod tags;
 mod upload;
 
 pub use delete::{DeleteFileError, DeleteFileResult, DeleteFileService};
+pub use notes::{CreateNoteRequest, NoteError, NoteService, UpdateNoteRequest};
 pub use pins::{PinError, PinService};
 pub use sessions::SessionService;
 pub use tags::{TagError, TagService};

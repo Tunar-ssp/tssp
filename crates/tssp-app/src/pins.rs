@@ -163,9 +163,11 @@ mod tests {
         ) -> Result<RepositoryStats, RepositoryError> {
             Ok(RepositoryStats {
                 file_count: 0,
+                note_count: 0,
                 tag_count: 0,
                 pinned_count: 0,
                 recent_upload_count: 0,
+                recent_note_count: 0,
             })
         }
 

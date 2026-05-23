@@ -12,10 +12,12 @@ description = "Command line client for TSSP"
 arboard.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
+image = "0.25.10"
 qrcode.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 time.workspace = true
 tssp-cli-core = { path = "../tssp-cli-core" }
 

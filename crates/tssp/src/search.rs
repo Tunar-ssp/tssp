@@ -97,15 +97,20 @@ fn validate_args(args: &SearchArgs) -> Option<&'static str> {
 fn apply_filters(mut response: SearchResponse, args: &SearchArgs) -> SearchResponse {
     if let Some(tag_filter) = args.tag.as_deref() {
         let normalized_filter = normalize_tag(tag_filter);
-        response.files.retain(|file| {
-            file.tags
+        response.results.retain(|item| match item {
+            SearchResultItem::File { record: file } => file
+                .tags
                 .iter()
-                .any(|tag| normalize_tag(tag) == normalized_filter)
+                .any(|tag| normalize_tag(tag) == normalized_filter),
+            SearchResultItem::Note { record: note } => note
+                .tags
+                .iter()
+                .any(|tag| normalize_tag(tag) == normalized_filter),
         });
     }
 
     if let Some(limit) = args.limit {
-        response.files.truncate(usize::from(limit));
+        response.results.truncate(usize::from(limit));
     }
 
     response
@@ -130,19 +135,32 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
         return Ok(());
     }
 
-    if response.files.is_empty() {
-        println!("no files matched");
+    if response.results.is_empty() {
+        println!("no matches");
         return Ok(());
     }
 
-    for file in &response.files {
-        println!(
-            "{}\t{}\t{}\t{}",
-            file.id,
-            file.name,
-            file.size_bytes,
-            file.tags.join(",")
-        );
+    for item in &response.results {
+        match item {
+            SearchResultItem::File { record: file } => {
+                println!(
+                    "file\t{}\t{}\t{}\t{}",
+                    file.id,
+                    file.name,
+                    file.size_bytes,
+                    file.tags.join(",")
+                );
+            }
+            SearchResultItem::Note { record: note } => {
+                println!(
+                    "note\t{}\t{}\tupdated={}\t{}",
+                    note.id,
+                    note.title,
+                    note.updated_at,
+                    note.tags.join(",")
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -150,7 +168,20 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
 #[derive(Debug, Deserialize, Serialize)]
 struct SearchResponse {
     schema_version: u8,
-    files: Vec<FileRecordResponse>,
+    results: Vec<SearchResultItem>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum SearchResultItem {
+    File {
+        #[serde(flatten)]
+        record: FileRecordResponse,
+    },
+    Note {
+        #[serde(flatten)]
+        record: NoteRecordResponse,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -158,6 +189,14 @@ struct FileRecordResponse {
     id: String,
     name: String,
     size_bytes: u64,
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct NoteRecordResponse {
+    id: String,
+    title: String,
+    updated_at: i64,
     tags: Vec<String>,
 }
 
@@ -190,8 +229,9 @@ mod tests {
     fn parse_search_body_handles_valid_json() {
         let json = r#"{
             "schema_version": 1,
-            "files": [
+            "results": [
                 {
+                    "type": "file",
                     "id": "file-1",
                     "name": "report.pdf",
                     "size_bytes": 1024,
@@ -203,8 +243,11 @@ mod tests {
         let result = parse_search_body(json, "http://localhost")
             .unwrap_or_else(|error| panic!("parse failed: {error}"));
         assert_eq!(result.schema_version, 1);
-        assert_eq!(result.files.len(), 1);
-        assert_eq!(result.files[0].id, "file-1");
+        assert_eq!(result.results.len(), 1);
+        match &result.results[0] {
+            SearchResultItem::File { record: file } => assert_eq!(file.id, "file-1"),
+            SearchResultItem::Note { .. } => panic!("expected file result"),
+        }
     }
 
     #[test]
@@ -263,9 +306,9 @@ mod tests {
     fn apply_filters_limits_results() {
         let response = SearchResponse {
             schema_version: 1,
-            files: vec![
-                file("id-1", "first.txt", &["Docs"]),
-                file("id-2", "second.txt", &["Notes"]),
+            results: vec![
+                file_hit("id-1", "first.txt", &["Docs"]),
+                file_hit("id-2", "second.txt", &["Notes"]),
             ],
         };
 
@@ -278,17 +321,20 @@ mod tests {
             },
         );
 
-        assert_eq!(filtered.files.len(), 1);
-        assert_eq!(filtered.files[0].id, "id-1");
+        assert_eq!(filtered.results.len(), 1);
+        match &filtered.results[0] {
+            SearchResultItem::File { record: file } => assert_eq!(file.id, "id-1"),
+            SearchResultItem::Note { .. } => panic!("expected file"),
+        }
     }
 
     #[test]
     fn apply_filters_matches_tags_case_insensitively() {
         let response = SearchResponse {
             schema_version: 1,
-            files: vec![
-                file("id-1", "first.txt", &["Family Photos"]),
-                file("id-2", "second.txt", &["Docs"]),
+            results: vec![
+                file_hit("id-1", "first.txt", &["Family Photos"]),
+                file_hit("id-2", "second.txt", &["Docs"]),
             ],
         };
 
@@ -301,8 +347,11 @@ mod tests {
             },
         );
 
-        assert_eq!(filtered.files.len(), 1);
-        assert_eq!(filtered.files[0].id, "id-1");
+        assert_eq!(filtered.results.len(), 1);
+        match &filtered.results[0] {
+            SearchResultItem::File { record: file } => assert_eq!(file.id, "id-1"),
+            SearchResultItem::Note { .. } => panic!("expected file"),
+        }
     }
 
     #[test]
@@ -314,7 +363,7 @@ mod tests {
     fn print_search_results_quiet() {
         let response = SearchResponse {
             schema_version: 1,
-            files: vec![],
+            results: vec![],
         };
         assert!(print_search_results(&response, false, true).is_ok());
     }
@@ -323,7 +372,7 @@ mod tests {
     fn print_search_results_json() {
         let response = SearchResponse {
             schema_version: 1,
-            files: vec![],
+            results: vec![],
         };
         assert!(print_search_results(&response, true, false).is_ok());
     }
@@ -332,7 +381,7 @@ mod tests {
     fn print_search_results_empty() {
         let response = SearchResponse {
             schema_version: 1,
-            files: vec![],
+            results: vec![],
         };
         assert!(print_search_results(&response, false, false).is_ok());
     }
@@ -341,7 +390,7 @@ mod tests {
     fn print_search_results_with_files() {
         let response = SearchResponse {
             schema_version: 1,
-            files: vec![file("id1", "test.txt", &["Docs"])],
+            results: vec![file_hit("id1", "test.txt", &["Docs"])],
         };
         assert!(print_search_results(&response, false, false).is_ok());
     }
@@ -445,12 +494,14 @@ mod tests {
         assert_eq!(super::run_search(&cli, &args), Ok(CliExitCode::Usage));
     }
 
-    fn file(id: &str, name: &str, tags: &[&str]) -> FileRecordResponse {
-        FileRecordResponse {
-            id: id.to_string(),
-            name: name.to_string(),
-            size_bytes: 123,
-            tags: tags.iter().map(|tag| (*tag).to_string()).collect(),
+    fn file_hit(id: &str, name: &str, tags: &[&str]) -> SearchResultItem {
+        SearchResultItem::File {
+            record: FileRecordResponse {
+                id: id.to_string(),
+                name: name.to_string(),
+                size_bytes: 123,
+                tags: tags.iter().map(|tag| (*tag).to_string()).collect(),
+            },
         }
     }
 }
