@@ -7,7 +7,7 @@ use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 
 /// Top-level CLI parser.
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 #[command(name = "tssp")]
 #[command(version, about = "Self-hosted local-network file transfer client")]
 #[command(arg_required_else_help = true)]
@@ -34,7 +34,7 @@ pub struct Cli {
 }
 
 /// Output-related global flags.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct OutputArgs {
     /// Emit stable JSON output.
     #[arg(long, global = true)]
@@ -50,7 +50,7 @@ pub struct OutputArgs {
 }
 
 /// Logging-related global flags.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct LoggingArgs {
     /// Emit debug logs to stderr.
     #[arg(long, global = true)]
@@ -58,7 +58,7 @@ pub struct LoggingArgs {
 }
 
 /// Connection-related global flags.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConnectionArgs {
     /// Override daemon host.
     #[arg(long, global = true, env = "TSSP_HOST")]
@@ -70,7 +70,7 @@ pub struct ConnectionArgs {
 }
 
 /// Upload flags for the default action.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct UploadArgs {
     /// Attach a tag during upload.
     #[arg(long = "tag", short = 't', value_name = "NAME")]
@@ -102,7 +102,7 @@ pub struct UploadArgs {
 }
 
 /// Locked CLI command surface.
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Upload a file and create a phone transfer session.
     Send(SendArgs),
@@ -148,7 +148,7 @@ pub enum Command {
 }
 
 /// Arguments for `tssp send`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct SendArgs {
     /// File to upload and send.
     pub file: PathBuf,
@@ -161,7 +161,7 @@ pub struct SendArgs {
 }
 
 /// Arguments for `tssp receive`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ReceiveArgs {
     /// Also download the received file to this local path.
     #[arg(long, value_name = "PATH")]
@@ -172,7 +172,7 @@ pub struct ReceiveArgs {
 }
 
 /// Arguments for `tssp paste`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct PasteArgs {
     /// Attach a tag.
     #[arg(long = "tag", short = 't', value_name = "NAME")]
@@ -183,7 +183,7 @@ pub struct PasteArgs {
 }
 
 /// Arguments for `tssp copy`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CopyArgs {
     /// File id.
     pub id: String,
@@ -193,7 +193,7 @@ pub struct CopyArgs {
 }
 
 /// Arguments for `tssp pull`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct PullArgs {
     /// File id or filename.
     pub id_or_name: String,
@@ -209,7 +209,7 @@ pub struct PullArgs {
 }
 
 /// Arguments for `tssp list`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ListArgs {
     /// Filter by tag. Repeated tags use AND semantics.
     #[arg(long = "tag", value_name = "NAME")]
@@ -235,7 +235,7 @@ pub struct ListArgs {
 }
 
 /// Arguments for `tssp last`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct LastArgs {
     /// Number of uploads to show.
     #[arg(default_value_t = 10)]
@@ -243,7 +243,7 @@ pub struct LastArgs {
 }
 
 /// Arguments for `tssp search`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct SearchArgs {
     /// Query text.
     pub query: String,
@@ -256,7 +256,7 @@ pub struct SearchArgs {
 }
 
 /// Arguments for tag mutations.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct TagArgs {
     /// File id.
     pub id: String,
@@ -265,7 +265,7 @@ pub struct TagArgs {
 }
 
 /// Arguments for `tssp pin`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct PinArgs {
     /// File id.
     pub id: String,
@@ -275,7 +275,7 @@ pub struct PinArgs {
 }
 
 /// `tssp pins` subcommands.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct PinsCommand {
     /// Action to perform on pins.
     #[command(subcommand)]
@@ -283,7 +283,7 @@ pub struct PinsCommand {
 }
 
 /// Pin list and reorder actions.
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum PinsAction {
     /// List pinned files.
     List,
@@ -292,7 +292,7 @@ pub enum PinsAction {
 }
 
 /// Arguments for `tssp pins reorder`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ReorderArgs {
     /// File IDs in the exact order they should appear.
     #[arg(required = true)]
@@ -300,7 +300,7 @@ pub struct ReorderArgs {
 }
 
 /// Arguments for `tssp remove`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct RemoveArgs {
     /// File id.
     pub id: String,
@@ -310,14 +310,14 @@ pub struct RemoveArgs {
 }
 
 /// Single id argument.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct IdArgs {
     /// File id.
     pub id: String,
 }
 
 /// `tssp config` subcommands.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConfigCommand {
     /// Configuration action.
     #[command(subcommand)]
@@ -325,7 +325,7 @@ pub struct ConfigCommand {
 }
 
 /// Configuration mutation and lookup actions.
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum ConfigAction {
     /// Set a config key.
     Set(ConfigSetArgs),
@@ -338,7 +338,7 @@ pub enum ConfigAction {
 }
 
 /// Arguments for `tssp config set`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConfigSetArgs {
     /// Config key.
     pub key: String,
@@ -347,21 +347,21 @@ pub struct ConfigSetArgs {
 }
 
 /// Arguments for `tssp config get`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConfigGetArgs {
     /// Optional config key.
     pub key: Option<String>,
 }
 
 /// Arguments for `tssp config unset`.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConfigUnsetArgs {
     /// Config key.
     pub key: String,
 }
 
 /// Arguments for hidden completion generation.
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct CompletionArgs {
     /// Target shell.
     pub shell: CompletionShell,

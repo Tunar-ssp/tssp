@@ -36,7 +36,10 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
     };
     let client = build_client()?;
 
-    if plan.items.len() > 1 {
+    let parallelism = cli.upload.parallel.unwrap_or(1).max(1) as usize;
+    if plan.items.len() > 1 && parallelism > 1 {
+        Ok(upload_parallel(&client, &address, &plan.items, cli, parallelism))
+    } else if plan.items.len() > 1 {
         upload_batch(&client, &address, &plan.items, cli)
     } else {
         Ok(upload_single(&client, &address, &plan.items, cli))
@@ -66,6 +69,90 @@ fn upload_single(
         return CliExitCode::PartialSuccess;
     }
     last_error
+}
+
+fn upload_parallel(
+    client: &reqwest::blocking::Client,
+    address: &BackendAddress,
+    items: &[UploadItem],
+    cli: &Cli,
+    parallelism: usize,
+) -> CliExitCode {
+    use std::sync::mpsc;
+    use std::sync::Arc;
+    use std::thread;
+
+    let (tx, rx) = mpsc::channel::<UploadResult>();
+    let address = Arc::new(address.clone());
+    let cli = Arc::new(cli.clone());
+
+    let items_arc = Arc::new(items.to_vec());
+    let mut handles = vec![];
+
+    for worker_id in 0..parallelism {
+        let tx = tx.clone();
+        let address = Arc::clone(&address);
+        let cli_clone = Arc::clone(&cli);
+        let client = client.clone();
+        let items = Arc::clone(&items_arc);
+
+        let handle = thread::spawn(move || {
+            let mut index = worker_id;
+            while index < items.len() {
+                let item = &items[index];
+                let result = upload_one(&client, &address, item, &cli_clone);
+                let _ = tx.send(UploadResult {
+                    index,
+                    path: item.path.clone(),
+                    filename: item.filename.clone(),
+                    result,
+                });
+                index += parallelism;
+            }
+        });
+
+        handles.push(handle);
+    }
+
+    drop(tx);
+
+    let mut results: Vec<(usize, UploadResult)> = rx
+        .iter()
+        .map(|r| (r.index, r))
+        .collect();
+    results.sort_by_key(|(idx, _)| *idx);
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let successes = results.iter().filter(|(_, r)| r.result.is_ok()).count();
+    let failures = results.len() - successes;
+
+    if !cli.output.quiet && !cli.output.json {
+        println!("parallel upload completed: {successes} succeeded, {failures} failed");
+        for (_, r) in &results {
+            if r.result.is_err() {
+                eprintln!("  error: {}", r.filename);
+            }
+        }
+    }
+
+    if failures == 0 {
+        CliExitCode::Success
+    } else if successes > 0 {
+        CliExitCode::PartialSuccess
+    } else {
+        CliExitCode::Generic
+    }
+}
+
+struct UploadResult {
+    index: usize,
+    #[allow(dead_code)]
+    path: std::path::PathBuf,
+    filename: String,
+    result: Result<(), CliExitCode>,
 }
 
 fn upload_batch(
