@@ -137,6 +137,10 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/files",
             post(upload::upload_file).layer(DefaultBodyLimit::disable()),
         )
+        .route(
+            "/api/v1/files/batch",
+            post(upload::upload_files_batch).layer(DefaultBodyLimit::disable()),
+        )
         .route("/api/v1/files", get(list::list_files))
         .route("/api/v1/pins", get(pins::list_pins))
         .route("/api/v1/pins/reorder", post(pins::reorder))
@@ -404,6 +408,141 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("json parse failed: {error}"));
         assert_eq!(parsed["error"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn batch_upload_endpoint_returns_per_file_outcomes() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let app = build_router(
+            HttpState::new(Instant::now(), temp.path().to_path_buf())
+                .with_stats_provider(Arc::new(FixedStatsProvider))
+                .with_upload_provider(Arc::new(BatchEchoUploadProvider)),
+        );
+        let response = app
+            .oneshot(batch_multipart_request(
+                "--tssp\r\n\
+                 Content-Disposition: form-data; name=\"tag\"\r\n\r\n\
+                 Docs\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"pin\"\r\n\r\n\
+                 true\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"created.txt\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 hello upload\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"duplicate.txt\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 hello upload\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"broken.txt\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 hello upload\r\n\
+                 --tssp--\r\n",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["schema_version"], 1);
+        assert_eq!(body["created_count"], 1);
+        assert_eq!(body["deduplicated_count"], 1);
+        assert_eq!(body["failed_count"], 1);
+        assert_eq!(body["results"].as_array().map(Vec::len), Some(3));
+        assert_eq!(body["results"][0]["name"], "created.txt");
+        assert_eq!(body["results"][0]["outcome"], "created");
+        assert_eq!(body["results"][0]["http_status"], 201);
+        assert_eq!(body["results"][0]["file"]["tags"][0], "Docs");
+        assert_eq!(body["results"][0]["file"]["pinned"], true);
+        assert_eq!(body["results"][1]["name"], "duplicate.txt");
+        assert_eq!(body["results"][1]["outcome"], "deduplicated");
+        assert_eq!(body["results"][1]["http_status"], 200);
+        assert_eq!(body["results"][2]["name"], "broken.txt");
+        assert_eq!(body["results"][2]["outcome"], "failed");
+        assert_eq!(body["results"][2]["http_status"], 400);
+        assert_eq!(body["results"][2]["error"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn batch_upload_endpoint_rejects_empty_batch() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let app = build_router(
+            HttpState::new(Instant::now(), temp.path().to_path_buf())
+                .with_stats_provider(Arc::new(FixedStatsProvider))
+                .with_upload_provider(Arc::new(BatchEchoUploadProvider)),
+        );
+        let response = app
+            .oneshot(batch_multipart_request(
+                "--tssp\r\n\
+                 Content-Disposition: form-data; name=\"tag\"\r\n\r\n\
+                 Docs\r\n\
+                 --tssp--\r\n",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "invalid_request");
+        assert!(body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("at least one file")));
+    }
+
+    #[tokio::test]
+    async fn batch_upload_endpoint_commits_successful_items_when_one_fails() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let repository = Arc::new(
+            SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
+                .unwrap_or_else(|error| panic!("repository open failed: {error}")),
+        );
+        let storage = Arc::new(
+            FilesystemBlobStore::new(temp.path().join("storage"))
+                .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
+        );
+        let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
+        let upload_service = UploadService::new(
+            storage.clone(),
+            repository.clone(),
+            UuidV7FileIdGenerator,
+            SystemClock,
+        );
+        let app = build_router(
+            HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+                .with_stats_provider(Arc::new(stats_provider))
+                .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+                .with_blob_reader(storage),
+        );
+        let response = app
+            .clone()
+            .oneshot(batch_multipart_request(
+                "--tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"ok.txt\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 hello upload\r\n\
+                 --tssp\r\n\
+                 Content-Disposition: form-data; name=\"file\"; filename=\"\"\r\n\
+                 Content-Type: text/plain\r\n\r\n\
+                 bad name\r\n\
+                 --tssp--\r\n",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("request failed: {error}"));
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["created_count"], 1);
+        assert_eq!(body["failed_count"], 1);
+        assert_eq!(body["results"][0]["outcome"], "created");
+        assert_eq!(body["results"][1]["outcome"], "failed");
+
+        let status = app
+            .oneshot(status_request())
+            .await
+            .unwrap_or_else(|error| panic!("status request failed: {error}"));
+        let status_body = response_json(status).await;
+        assert_eq!(status_body["file_count"], 1);
     }
 
     #[tokio::test]
@@ -1081,10 +1220,51 @@ mod tests {
         }
     }
 
+    struct BatchEchoUploadProvider;
+
+    impl FileUploadProvider for BatchEchoUploadProvider {
+        fn upload(
+            &self,
+            mut request: HttpUploadRequest,
+        ) -> Result<HttpUploadOutcome, HttpUploadError> {
+            let mut bytes = Vec::new();
+            request
+                .source
+                .read_to_end(&mut bytes)
+                .map_err(|error| HttpUploadError::Internal {
+                    message: error.to_string(),
+                })?;
+            if bytes != b"hello upload" {
+                return Err(HttpUploadError::InvalidRequest {
+                    message: "unexpected test upload bytes".to_owned(),
+                });
+            }
+            if request.filename == "broken.txt" {
+                return Err(HttpUploadError::InvalidRequest {
+                    message: "broken test upload".to_owned(),
+                });
+            }
+
+            Ok(HttpUploadOutcome {
+                record: test_record(&request),
+                deduplicated: request.filename == "duplicate.txt",
+            })
+        }
+    }
+
     fn multipart_request(body: &'static str) -> Request<Body> {
         Request::builder()
             .method("POST")
             .uri("/api/v1/files")
+            .header(CONTENT_TYPE, "multipart/form-data; boundary=tssp")
+            .body(Body::from(body))
+            .unwrap_or_else(|error| panic!("request build failed: {error}"))
+    }
+
+    fn batch_multipart_request(body: &'static str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/files/batch")
             .header(CONTENT_TYPE, "multipart/form-data; boundary=tssp")
             .body(Body::from(body))
             .unwrap_or_else(|error| panic!("request build failed: {error}"))

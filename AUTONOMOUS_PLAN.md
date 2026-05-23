@@ -16,7 +16,7 @@ Tasks are intentionally small, verifiable, and ordered by dependency.
 
 ## Upload And Metadata Surface
 
-- [ ] Implement `POST /api/v1/files/batch` with per-file outcomes and tests
+- [x] Implement `POST /api/v1/files/batch` with per-file outcomes and tests
 - [ ] Wire CLI multi-file upload reporting to batch semantics where practical
 - [ ] Implement recursive upload planning for `tssp -r` with hidden-file, exclude, dry-run, and parallel controls
 - [ ] Implement `tssp -a` as non-recursive current-directory upload

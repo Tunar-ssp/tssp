@@ -97,8 +97,8 @@ pub enum HttpUploadError {
 }
 
 impl HttpUploadError {
-    fn response(&self) -> Response {
-        let (status, code, message) = match self {
+    fn response_parts(&self) -> (StatusCode, &'static str, String) {
+        match self {
             Self::InvalidRequest { message } => {
                 (StatusCode::BAD_REQUEST, "invalid_request", message.clone())
             }
@@ -121,7 +121,11 @@ impl HttpUploadError {
                 "internal_error",
                 message.clone(),
             ),
-        };
+        }
+    }
+
+    fn response(&self) -> Response {
+        let (status, code, message) = self.response_parts();
 
         (
             status,
@@ -178,13 +182,45 @@ pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multi
         Err(error) => return error.response(),
     };
 
+    let _mutation_guard = state.storage_mutation_lock.lock().await;
+    match upload_staged_file(&state, staged).await {
+        Ok(outcome) => upload_success_response(&outcome),
+        Err(error) => error.response(),
+    }
+}
+
+pub(crate) async fn upload_files_batch(
+    State(state): State<HttpState>,
+    multipart: Multipart,
+) -> Response {
+    let staged_files = match stage_batch_multipart_upload(multipart, &state.upload_temp_dir).await {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+
+    let _mutation_guard = state.storage_mutation_lock.lock().await;
+    let mut results = Vec::with_capacity(staged_files.len());
+    for staged in staged_files {
+        let filename = staged.filename.clone();
+        let outcome = upload_staged_file(&state, staged).await;
+        results.push(BatchUploadItemResponse::from_upload_result(
+            filename, outcome,
+        ));
+    }
+
+    Json(BatchUploadResponse::from_results(results)).into_response()
+}
+
+async fn upload_staged_file(
+    state: &HttpState,
+    staged: StagedMultipartUpload,
+) -> Result<HttpUploadOutcome, HttpUploadError> {
     let source = match staged.temp_file.reopen() {
         Ok(file) => file,
         Err(error) => {
-            return HttpUploadError::Internal {
+            return Err(HttpUploadError::Internal {
                 message: format!("could not reopen staged upload: {error}"),
-            }
-            .response();
+            });
         }
     };
 
@@ -197,14 +233,11 @@ pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multi
         source: Box::new(source),
     };
 
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     match task::spawn_blocking(move || upload_provider.upload(upload_request)).await {
-        Ok(Ok(outcome)) => upload_success_response(&outcome),
-        Ok(Err(error)) => error.response(),
-        Err(error) => HttpUploadError::Internal {
+        Ok(result) => result,
+        Err(error) => Err(HttpUploadError::Internal {
             message: format!("upload worker failed: {error}"),
-        }
-        .response(),
+        }),
     }
 }
 
@@ -213,6 +246,12 @@ struct StagedMultipartUpload {
     mime_type: Option<String>,
     tags: Vec<String>,
     pinned: bool,
+    temp_file: NamedTempFile,
+}
+
+struct StagedBatchFile {
+    filename: String,
+    mime_type: Option<String>,
     temp_file: NamedTempFile,
 }
 
@@ -261,6 +300,76 @@ async fn stage_multipart_upload(
     finish_staged_upload(filename, mime_type, tags, pinned, temp_file)
 }
 
+async fn stage_batch_multipart_upload(
+    mut multipart: Multipart,
+    upload_temp_dir: &Path,
+) -> Result<Vec<StagedMultipartUpload>, HttpUploadError> {
+    std::fs::create_dir_all(upload_temp_dir).map_err(|error| HttpUploadError::Internal {
+        message: format!("could not create upload temp directory: {error}"),
+    })?;
+
+    let mut files = Vec::new();
+    let mut tags = Vec::new();
+    let mut pinned = false;
+
+    while let Some(field) = next_field(&mut multipart).await? {
+        let Some(name) = field.name().map(str::to_owned) else {
+            return Err(HttpUploadError::InvalidRequest {
+                message: "multipart field is missing a name".to_owned(),
+            });
+        };
+
+        match name.as_str() {
+            "file" => files.push(stage_batch_file(field, upload_temp_dir).await?),
+            "tag" | "tags" => tags.push(field_text(field).await?),
+            "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
+            "destination" | "destination_hint" => {
+                let _ignored = field_text(field).await?;
+            }
+            _unknown => return Err(unknown_field(&name)),
+        }
+    }
+
+    if files.is_empty() {
+        return Err(HttpUploadError::InvalidRequest {
+            message: "batch upload must include at least one file field".to_owned(),
+        });
+    }
+
+    Ok(files
+        .into_iter()
+        .map(|file| StagedMultipartUpload {
+            filename: file.filename,
+            mime_type: file.mime_type,
+            tags: tags.clone(),
+            pinned,
+            temp_file: file.temp_file,
+        })
+        .collect())
+}
+
+async fn stage_batch_file(
+    field: axum::extract::multipart::Field<'_>,
+    upload_temp_dir: &Path,
+) -> Result<StagedBatchFile, HttpUploadError> {
+    let filename = field
+        .file_name()
+        .map_or_else(|| "upload.bin".to_owned(), str::to_owned);
+    let mime_type = field.content_type().map(str::to_owned);
+    let mut temp_file =
+        NamedTempFile::new_in(upload_temp_dir).map_err(|error| HttpUploadError::Internal {
+            message: format!("could not create staged upload file: {error}"),
+        })?;
+    write_field_to_temp(field, &mut temp_file).await?;
+    sync_staged_upload(&mut temp_file)?;
+
+    Ok(StagedBatchFile {
+        filename,
+        mime_type,
+        temp_file,
+    })
+}
+
 async fn next_field(
     multipart: &mut Multipart,
 ) -> Result<Option<axum::extract::multipart::Field<'_>>, HttpUploadError> {
@@ -300,6 +409,18 @@ fn finish_staged_upload(
         });
     };
 
+    sync_staged_upload(&mut temp_file)?;
+
+    Ok(StagedMultipartUpload {
+        filename,
+        mime_type,
+        tags,
+        pinned,
+        temp_file,
+    })
+}
+
+fn sync_staged_upload(temp_file: &mut NamedTempFile) -> Result<(), HttpUploadError> {
     temp_file
         .flush()
         .map_err(|error| HttpUploadError::Internal {
@@ -311,14 +432,7 @@ fn finish_staged_upload(
         .map_err(|error| HttpUploadError::Internal {
             message: format!("could not sync staged upload: {error}"),
         })?;
-
-    Ok(StagedMultipartUpload {
-        filename,
-        mime_type,
-        tags,
-        pinned,
-        temp_file,
-    })
+    Ok(())
 }
 
 async fn write_field_to_temp(
@@ -389,6 +503,94 @@ fn upload_success_response(outcome: &HttpUploadOutcome) -> Response {
         response.headers_mut().insert(LOCATION, location);
     }
     response
+}
+
+#[derive(Debug, Serialize)]
+struct BatchUploadResponse {
+    schema_version: u8,
+    results: Vec<BatchUploadItemResponse>,
+    created_count: usize,
+    deduplicated_count: usize,
+    failed_count: usize,
+}
+
+impl BatchUploadResponse {
+    fn from_results(results: Vec<BatchUploadItemResponse>) -> Self {
+        let created_count = results
+            .iter()
+            .filter(|result| result.outcome == "created")
+            .count();
+        let deduplicated_count = results
+            .iter()
+            .filter(|result| result.outcome == "deduplicated")
+            .count();
+        let failed_count = results
+            .iter()
+            .filter(|result| result.outcome == "failed")
+            .count();
+
+        Self {
+            schema_version: 1,
+            results,
+            created_count,
+            deduplicated_count,
+            failed_count,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct BatchUploadItemResponse {
+    name: String,
+    outcome: &'static str,
+    http_status: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<FileRecordResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<BatchUploadErrorResponse>,
+}
+
+impl BatchUploadItemResponse {
+    fn from_upload_result(
+        name: String,
+        result: Result<HttpUploadOutcome, HttpUploadError>,
+    ) -> Self {
+        match result {
+            Ok(outcome) => {
+                let (outcome_name, http_status) = if outcome.deduplicated {
+                    ("deduplicated", StatusCode::OK)
+                } else {
+                    ("created", StatusCode::CREATED)
+                };
+                Self {
+                    name,
+                    outcome: outcome_name,
+                    http_status: http_status.as_u16(),
+                    file: Some(FileRecordResponse::from_record(&outcome.record)),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                let (status, code, message) = error.response_parts();
+                Self {
+                    name,
+                    outcome: "failed",
+                    http_status: status.as_u16(),
+                    file: None,
+                    error: Some(BatchUploadErrorResponse {
+                        code: code.to_owned(),
+                        message,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct BatchUploadErrorResponse {
+    code: String,
+    message: String,
 }
 
 /// JSON representation of one file record.
