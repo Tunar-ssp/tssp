@@ -145,16 +145,15 @@ impl HttpState {
     }
 }
 
-async fn options_response() -> impl axum::response::IntoResponse {
-    (
-        axum::http::StatusCode::NO_CONTENT,
-        [
-            (
-                axum::http::header::ALLOW,
-                "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
-            ),
-        ],
-    )
+async fn options_response() -> (axum::http::StatusCode, axum::http::header::HeaderMap) {
+    let mut headers = axum::http::header::HeaderMap::new();
+    headers.insert(
+        axum::http::header::ALLOW,
+        axum::http::HeaderValue::from_static(
+            "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+        ),
+    );
+    (axum::http::StatusCode::NO_CONTENT, headers)
 }
 
 /// Builds the daemon router.
