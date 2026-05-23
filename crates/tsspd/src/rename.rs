@@ -7,7 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tssp_domain::FileName;
+use tssp_domain::{FileName, Tag};
 
 use crate::HttpState;
 
@@ -28,37 +28,31 @@ pub async fn rename_file(
     Path(id): Path<String>,
     Json(request): Json<RenameRequest>,
 ) -> Result<(StatusCode, Json<RenameResponse>), (StatusCode, Json<Value>)> {
-    let file_id = match tssp_domain::FileId::new(&id) {
-        Ok(fid) => fid,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "schema_version": 1,
-                    "error": {
-                        "code": "invalid_request",
-                        "message": "invalid file id"
-                    }
-                })),
-            ))
-        }
-    };
+    let file_id = tssp_domain::FileId::new(&id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "schema_version": 1,
+                "error": {
+                    "code": "invalid_request",
+                    "message": "invalid file id"
+                }
+            })),
+        )
+    })?;
 
-    let new_name = match FileName::new(&request.name) {
-        Ok(fname) => fname,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "schema_version": 1,
-                    "error": {
-                        "code": "invalid_request",
-                        "message": "invalid filename"
-                    }
-                })),
-            ))
-        }
-    };
+    let new_name = FileName::new(&request.name).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "schema_version": 1,
+                "error": {
+                    "code": "invalid_request",
+                    "message": "invalid filename"
+                }
+            })),
+        )
+    })?;
 
     match state.stats_provider.rename_file(&file_id, &new_name) {
         Ok(Some(record)) => {
@@ -67,7 +61,7 @@ pub async fn rename_file(
                 "name": record.name.original(),
                 "size": record.size.bytes(),
                 "mime": record.mime_type.as_str(),
-                "tags": record.tags.iter().map(|t| t.display()).collect::<Vec<_>>(),
+                "tags": record.tags.iter().map(Tag::display).collect::<Vec<_>>(),
                 "uploaded": record.uploaded_at.seconds(),
                 "pinned": record.pinned_at.is_some(),
             });
@@ -252,23 +246,21 @@ mod tests {
 
     fn test_record() -> FileRecord {
         FileRecord {
-            id: FileId::new("test-file-id-00000000").unwrap(),
-            name: FileName::new("newname.txt").unwrap(),
+            id: FileId::new("test-file-id-00000000").expect("valid file id"),
+            name: FileName::new("newname.txt").expect("valid filename"),
             size: tssp_domain::FileSize::new(1024),
             content_hash: ContentHash::new(
-                "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123"
-                    .to_owned(),
+                "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
             )
-            .unwrap(),
-            mime_type: MimeType::new("text/plain").unwrap(),
+            .expect("valid content hash"),
+            mime_type: MimeType::new("text/plain").expect("valid mime type"),
             tags: vec![],
-            uploaded_at: UnixTimestamp::new(1000000000).unwrap(),
+            uploaded_at: UnixTimestamp::new(1_000_000_000).expect("valid timestamp"),
             pinned_at: None,
             storage_handle: StorageHandle::new(
-                "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123"
-                    .to_owned(),
+                "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123",
             )
-            .unwrap(),
+            .expect("valid storage handle"),
         }
     }
 
@@ -288,13 +280,16 @@ mod tests {
         )
         .await;
 
-        assert!(response.is_ok());
-        let (status, body) = response.unwrap();
-        assert_eq!(status, StatusCode::OK);
-        let response = body.0;
-        assert_eq!(response.schema_version, 1);
-        assert_eq!(response.id, "test-file-id-00000000");
-        assert_eq!(response.file["name"], "newname.txt");
+        match response {
+            Ok((status, body)) => {
+                assert_eq!(status, StatusCode::OK);
+                let resp = body.0;
+                assert_eq!(resp.schema_version, 1);
+                assert_eq!(resp.id, "test-file-id-00000000");
+                assert_eq!(resp.file["name"], "newname.txt");
+            }
+            Err(_) => assert!(false, "response should be ok"),
+        }
     }
 
     #[tokio::test]
@@ -312,7 +307,7 @@ mod tests {
         .await;
 
         assert!(response.is_err());
-        let (status, body) = response.unwrap_err();
+        let (status, body) = response.expect_err("response should be error");
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let response = body.0;
         assert_eq!(response["error"]["code"], "invalid_request");
@@ -334,7 +329,7 @@ mod tests {
         .await;
 
         assert!(response.is_err());
-        let (status, body) = response.unwrap_err();
+        let (status, body) = response.expect_err("response should be error");
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let response = body.0;
         assert_eq!(response["error"]["code"], "invalid_request");
@@ -356,7 +351,7 @@ mod tests {
         .await;
 
         assert!(response.is_err());
-        let (status, body) = response.unwrap_err();
+        let (status, body) = response.expect_err("response should be error");
         assert_eq!(status, StatusCode::NOT_FOUND);
         let response = body.0;
         assert_eq!(response["error"]["code"], "not_found");
@@ -378,7 +373,7 @@ mod tests {
         .await;
 
         assert!(response.is_err());
-        let (status, body) = response.unwrap_err();
+        let (status, body) = response.expect_err("response should be error");
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         let response = body.0;
         assert_eq!(response["error"]["code"], "internal_error");

@@ -410,7 +410,7 @@ impl<'a> UploadOutput<'a> {
 fn is_hidden(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
-        .map_or(false, |name| name.starts_with('.'))
+        .is_some_and(|name| name.starts_with('.'))
 }
 
 fn upload_filename(path: &Path, args: &UploadArgs) -> Result<String, String> {
@@ -623,7 +623,7 @@ mod tests {
         std::env::set_current_dir(&current).ok();
 
         assert!(plan.is_ok());
-        assert_eq!(plan.unwrap().items.len(), 1);
+        assert_eq!(plan.expect("plan should be ok").items.len(), 1);
     }
 
     #[test]
@@ -648,7 +648,7 @@ mod tests {
         let plan = UploadPlan::from_args(&args);
 
         assert!(plan.is_ok());
-        assert_eq!(plan.unwrap().items.len(), 1);
+        assert_eq!(plan.expect("plan should be ok").items.len(), 1);
     }
 
     #[test]
