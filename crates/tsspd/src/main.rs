@@ -66,9 +66,25 @@ async fn main() -> ExitCode {
     }
 }
 
-fn cleanup_temp_uploads(temp_dir: &std::path::Path) -> Result<(), String> {
+fn run_integrity_check(db_path: &std::path::Path) -> Result<(), String> {
+    if !db_path.exists() {
+        return Ok(()); // Fresh database, no check needed
+    }
+    let conn = rusqlite::Connection::open(db_path)
+        .map_err(|e| format!("could not open database for integrity check: {e}"))?;
+    let result: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(|e| format!("integrity check query failed: {e}"))?;
+    if result != "ok" {
+        return Err(format!("database integrity check reported: {result}"));
+    }
+    tracing::info!("startup: database integrity check passed");
+    Ok(())
+}
+
+fn cleanup_temp_uploads(temp_dir: &std::path::Path) {
     if !temp_dir.exists() {
-        return Ok(());
+        return;
     }
 
     let mut removed = 0;
@@ -97,7 +113,6 @@ fn cleanup_temp_uploads(temp_dir: &std::path::Path) -> Result<(), String> {
     if removed > 0 {
         tracing::info!("startup: cleaned up {} orphaned temp uploads", removed);
     }
-    Ok(())
 }
 
 async fn shutdown_signal() {
@@ -163,6 +178,10 @@ async fn run(cli: Cli) -> Result<(), String> {
         SqliteFileRepository::open(&metadata_path)
             .map_err(|error| format!("could not initialize metadata store: {error}"))?,
     );
+
+    // Run SQLite integrity check on startup (§10.2)
+    run_integrity_check(&metadata_path)
+        .map_err(|error| format!("database integrity check failed: {error}"))?;
     let storage = Arc::new(
         FilesystemBlobStore::new(cli.data_dir.join("storage"))
             .map_err(|error| format!("could not initialize blob storage: {error}"))?,
@@ -191,7 +210,7 @@ async fn run(cli: Cli) -> Result<(), String> {
         tracing::info!("startup: removed {} expired sessions", deleted);
     }
 
-    cleanup_temp_uploads(&http_upload_temp_dir)?;
+    cleanup_temp_uploads(&http_upload_temp_dir);
 
     let upload_provider = ApplicationFileUploadProvider::new(upload_service);
     let delete_provider = ApplicationFileDeleteProvider::new(delete_service);
@@ -362,9 +381,8 @@ mod tests {
         std::fs::write(temp_dir.join("orphan2.tmp"), b"more data")
             .unwrap_or_else(|error| panic!("write failed: {error}"));
 
-        let result = super::cleanup_temp_uploads(&temp_dir);
+        super::cleanup_temp_uploads(&temp_dir);
 
-        assert!(result.is_ok());
         assert!(!temp_dir.join("orphan1.tmp").exists());
         assert!(!temp_dir.join("orphan2.tmp").exists());
     }
@@ -374,9 +392,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let temp_dir = temp.path().join("does-not-exist");
 
-        let result = super::cleanup_temp_uploads(&temp_dir);
-
-        assert!(result.is_ok());
+        super::cleanup_temp_uploads(&temp_dir);
     }
 
     #[test]
@@ -390,9 +406,8 @@ mod tests {
         std::fs::write(subdir.join("file.tmp"), b"data")
             .unwrap_or_else(|error| panic!("write failed: {error}"));
 
-        let result = super::cleanup_temp_uploads(&temp_dir);
+        super::cleanup_temp_uploads(&temp_dir);
 
-        assert!(result.is_ok());
         assert!(subdir.join("file.tmp").exists());
     }
 

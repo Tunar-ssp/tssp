@@ -10,7 +10,7 @@ use crate::backend::{build_client, BackendAddress};
 use crate::sessions_helper::generate_qr_code;
 
 pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
-    let timeout = parse_timeout(&args.timeout)?;
+    let timeout = parse_timeout(args.timeout.as_deref())?;
 
     eprintln!(
         "Creating receive session with timeout: {}s...",
@@ -55,15 +55,15 @@ pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
             });
             let json_str = serde_json::to_string_pretty(&output)
                 .map_err(|e| format!("failed to serialize JSON: {e}"))?;
-            println!("{}", json_str);
+            println!("{json_str}");
         } else {
             let qr = generate_qr_code(&receive_url, 200)?;
-            println!("{}", qr);
+            println!("{qr}");
 
             println!("\nReceive URL:");
-            println!("{}\n", receive_url);
-            println!("Session token: {}", token);
-            println!("Expires in: {} seconds", ttl);
+            println!("{receive_url}\n");
+            println!("Session token: {token}");
+            println!("Expires in: {ttl} seconds");
 
             if !cli.output.quiet {
                 eprintln!("Receive session created successfully!");
@@ -76,14 +76,14 @@ pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
     }
 }
 
-fn parse_timeout(timeout_str: &Option<String>) -> Result<Duration, String> {
+fn parse_timeout(timeout_str: Option<&str>) -> Result<Duration, String> {
     match timeout_str {
         None => Ok(Duration::from_secs(300)),
         Some(s) => {
             if let Ok(secs) = s.parse::<u64>() {
                 Ok(Duration::from_secs(secs))
             } else {
-                Err(format!("invalid timeout duration: {}", s))
+                Err(format!("invalid timeout duration: {s}"))
             }
         }
     }
@@ -96,25 +96,25 @@ mod tests {
 
     #[test]
     fn parse_timeout_defaults_to_300_seconds() {
-        let result = parse_timeout(&None);
+        let result = parse_timeout(None);
         assert_eq!(result, Ok(Duration::from_secs(300)));
     }
 
     #[test]
     fn parse_timeout_parses_valid_duration() {
-        let result = parse_timeout(&Some("600".to_string()));
+        let result = parse_timeout(Some("600"));
         assert_eq!(result, Ok(Duration::from_secs(600)));
     }
 
     #[test]
     fn parse_timeout_rejects_invalid_duration() {
-        let result = parse_timeout(&Some("invalid".to_string()));
+        let result = parse_timeout(Some("invalid"));
         assert!(matches!(result, Err(e) if e.contains("invalid timeout")));
     }
 
     #[test]
     fn parse_timeout_rejects_negative_duration() {
-        let result = parse_timeout(&Some("-100".to_string()));
+        let result = parse_timeout(Some("-100"));
         assert!(matches!(result, Err(e) if e.contains("invalid timeout")));
     }
 }

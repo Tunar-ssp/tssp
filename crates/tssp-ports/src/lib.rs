@@ -165,6 +165,17 @@ pub trait SessionRepository: Send + Sync {
         used_at: UnixTimestamp,
     ) -> Result<(), RepositoryError>;
 
+    /// Associates a file with a receive session (records what was uploaded).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the update cannot be committed.
+    fn set_received_file(
+        &self,
+        token: &SessionToken,
+        file_id: &FileId,
+    ) -> Result<(), RepositoryError>;
+
     /// Deletes expired sessions.
     ///
     /// # Errors
@@ -491,6 +502,14 @@ where
         used_at: UnixTimestamp,
     ) -> Result<(), RepositoryError> {
         self.as_ref().mark_session_used(token, used_at)
+    }
+
+    fn set_received_file(
+        &self,
+        token: &SessionToken,
+        file_id: &FileId,
+    ) -> Result<(), RepositoryError> {
+        self.as_ref().set_received_file(token, file_id)
     }
 
     fn cleanup_expired_sessions(&self, before: UnixTimestamp) -> Result<u64, RepositoryError> {

@@ -157,6 +157,7 @@ async fn options_response() -> (axum::http::StatusCode, axum::http::header::Head
 }
 
 /// Builds the daemon router.
+#[allow(clippy::too_many_lines)]
 pub fn build_router(state: HttpState) -> Router {
     Router::new()
         .route(
@@ -230,7 +231,16 @@ pub fn build_router(state: HttpState) -> Router {
             post(sessions::use_session_endpoint).options(options_response),
         )
         .route("/s/{token}", get(public_sessions::get_send_session_page))
-        .route("/u/{token}", get(public_sessions::get_receive_session_page))
+        .route(
+            "/u/{token}",
+            get(public_sessions::get_receive_session_page)
+                .post(public_sessions::post_receive_session_upload)
+                .layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/api/v1/files/{id}/thumbnail",
+            get(file::get_file_thumbnail).options(options_response),
+        )
         .route("/healthz", get(status::healthz))
         .route("/readyz", get(status::readyz))
         .route(

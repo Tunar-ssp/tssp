@@ -177,6 +177,28 @@ impl SessionRepository for SqliteSessionRepository {
         Ok(())
     }
 
+    fn set_received_file(
+        &self,
+        token: &SessionToken,
+        file_id: &FileId,
+    ) -> Result<(), RepositoryError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| RepositoryError::OperationFailed {
+                message: format!("session connection lock is poisoned: {e}"),
+            })?;
+
+        connection
+            .execute(
+                "UPDATE sessions SET received_file = ?1 WHERE token = ?2",
+                params![file_id.as_str(), token.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(())
+    }
+
     fn cleanup_expired_sessions(&self, before: UnixTimestamp) -> Result<u64, RepositoryError> {
         let connection = self
             .connection
@@ -232,6 +254,7 @@ impl SessionRepository for SqliteSessionRepository {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use tssp_domain::SessionKind;

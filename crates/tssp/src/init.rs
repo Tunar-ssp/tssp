@@ -5,28 +5,44 @@ use std::io::{self, Write};
 use tssp::Cli;
 use tssp_cli_core::CliExitCode;
 
+use crate::config::{resolve_config_path, save_config, ConfigFile};
+
 /// Runs the init command for first-time setup.
 pub fn run(_cli: &Cli) -> Result<CliExitCode, String> {
     eprintln!("tssp first-run setup wizard");
-    eprintln!("");
+    eprintln!();
     eprintln!("No configuration file found. Let's set up your daemon connection.");
-    eprintln!("");
+    eprintln!();
 
     let hostname = prompt_for_hostname()?;
     let port = prompt_for_port()?;
 
-    eprintln!("");
-    eprintln!("Configuration would be saved for {}:{}", hostname, port);
-    eprintln!("init setup; implementation pending");
-    eprintln!("");
-    eprintln!("Configuration saved. You can now use tssp commands.");
+    let config = ConfigFile {
+        host: if hostname == "localhost" {
+            None
+        } else {
+            Some(hostname.clone())
+        },
+        port: if port == 8421 { None } else { Some(port) },
+    };
+
+    save_config(&config)?;
+
+    let config_path = resolve_config_path()?;
+    eprintln!();
+    eprintln!("Configuration saved to: {}", config_path.display());
+    eprintln!("Daemon: {hostname}:{port}");
+    eprintln!();
+    eprintln!("You can now use tssp commands.");
 
     Ok(CliExitCode::Success)
 }
 
 fn prompt_for_hostname() -> Result<String, String> {
     eprint!("Daemon hostname [localhost]: ");
-    let _ = io::stderr().flush();
+    io::stderr()
+        .flush()
+        .map_err(|e| format!("failed to flush stderr: {e}"))?;
 
     let mut input = String::new();
     io::stdin()
@@ -43,7 +59,9 @@ fn prompt_for_hostname() -> Result<String, String> {
 
 fn prompt_for_port() -> Result<u16, String> {
     eprint!("Daemon port [8421]: ");
-    let _ = io::stderr().flush();
+    io::stderr()
+        .flush()
+        .map_err(|e| format!("failed to flush stderr: {e}"))?;
 
     let mut input = String::new();
     io::stdin()
@@ -56,6 +74,6 @@ fn prompt_for_port() -> Result<u16, String> {
     } else {
         trimmed
             .parse()
-            .map_err(|_| format!("invalid port: {}", trimmed))
+            .map_err(|_| format!("invalid port: {trimmed}"))
     }
 }

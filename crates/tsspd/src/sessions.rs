@@ -49,6 +49,17 @@ pub trait SessionProvider: Send + Sync {
     ///
     /// Returns an error when the update cannot be committed.
     fn use_session(&self, token: &SessionToken) -> Result<(), String>;
+
+    /// Associates a received file with a session and marks it used.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the update cannot be committed.
+    fn complete_receive_session(
+        &self,
+        token: &SessionToken,
+        file_id: &str,
+    ) -> Result<(), String>;
 }
 
 /// Static session provider that returns empty/placeholder responses.
@@ -75,9 +86,13 @@ impl SessionProvider for StaticSessionProvider {
     fn use_session(&self, _token: &SessionToken) -> Result<(), String> {
         Err("session provider not initialized".to_string())
     }
+
+    fn complete_receive_session(&self, _token: &SessionToken, _file_id: &str) -> Result<(), String> {
+        Err("session provider not initialized".to_string())
+    }
 }
 
-/// Application-level session provider backed by SessionService.
+/// Application-level session provider backed by `SessionService`.
 #[allow(dead_code)]
 pub struct ApplicationSessionProvider<R: SessionRepository, C: Clock> {
     service: SessionService<R>,
@@ -193,6 +208,15 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             .use_session(token, now)
             .map_err(|e| format!("failed to use session: {e}"))
     }
+
+    fn complete_receive_session(&self, token: &SessionToken, file_id: &str) -> Result<(), String> {
+        let now = self.clock.now();
+        let fid = tssp_domain::FileId::new(file_id)
+            .map_err(|e| format!("invalid file id: {e}"))?;
+        self.service
+            .complete_receive_session(token, &fid, now)
+            .map_err(|e| format!("failed to complete receive session: {e}"))
+    }
 }
 
 /// HTTP response for session operations.
@@ -250,21 +274,20 @@ fn generate_session_token() -> SessionToken {
         .as_secs();
     let counter = TOKEN_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-    // Generate a 22-character base64url-compatible token from timestamp and counter
-    // Use only characters from base64url alphabet: a-zA-Z0-9-_
-    let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let alphabet: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut token = String::with_capacity(22);
 
-    let combined = timestamp.wrapping_mul(1000000).wrapping_add(counter);
+    let combined = timestamp.wrapping_mul(1_000_000).wrapping_add(counter);
     let mut value = combined;
 
     for _ in 0..22 {
         let idx = (value % 64) as usize;
-        token.push(alphabet.chars().nth(idx).unwrap());
+        token.push(alphabet[idx] as char);
         value /= 64;
     }
 
-    SessionToken::new(&token).expect("failed to create valid token")
+    #[allow(clippy::expect_used)]
+    SessionToken::new(&token).expect("alphabet is base64url-safe and length is 22; always valid")
 }
 
 /// HTTP error response for session operations.
@@ -360,11 +383,12 @@ pub async fn use_session_endpoint(
     state
         .session_provider
         .use_session(&token)
-        .map(|_| StatusCode::NO_CONTENT)
+        .map(|()| StatusCode::NO_CONTENT)
         .map_err(|_| HttpSessionError::NotFound)
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -399,7 +423,7 @@ mod tests {
 
     #[test]
     fn create_receive_session_request_uses_default_ttl() {
-        let json = r#"{}"#;
+        let json = "{}";
         let req: CreateReceiveSessionRequest =
             serde_json::from_str(json).expect("deserialize failed");
         assert_eq!(req.ttl_seconds, 86_400);

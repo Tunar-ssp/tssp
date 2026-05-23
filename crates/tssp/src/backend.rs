@@ -2,13 +2,20 @@
 
 use std::time::Duration;
 
-use reqwest::blocking::Client;
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use tssp::ConnectionArgs;
+use tssp_cli_core::CliExitCode;
 
 const DEFAULT_HOST: &str = "127.0.0.1";
 pub(crate) const DEFAULT_PORT: u16 = 8421;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Maximum number of retries for transient failures.
+const MAX_RETRIES: u32 = 3;
+
+/// Initial backoff delay before the first retry.
+const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 
 /// Parsed daemon address used by command handlers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +71,63 @@ pub(crate) fn build_client() -> Result<Client, String> {
         .map_err(|error| format!("could not build HTTP client: {error}"))
 }
 
+/// Sends a request with exponential-backoff retry on transient network errors.
+///
+/// Only retries on connection errors and server-side 5xx responses (except 507).
+/// Client errors (4xx) and 507 are returned immediately without retry.
+pub(crate) fn send_with_retry<F>(
+    make_request: F,
+    operation: &str,
+) -> Result<Response, CliExitCode>
+where
+    F: Fn() -> RequestBuilder,
+{
+    let mut delay = INITIAL_BACKOFF;
+    let mut last_err = String::new();
+
+    for attempt in 0..=MAX_RETRIES {
+        let result = make_request().send();
+        match result {
+            Ok(response) => {
+                let status = response.status();
+                // Don't retry client errors or storage-full
+                if status.is_client_error() || status.as_u16() == 507 {
+                    return Ok(response);
+                }
+                // Retry on 5xx
+                if status.is_server_error() {
+                    last_err = format!("server returned {status}");
+                } else {
+                    return Ok(response);
+                }
+            }
+            Err(error) if error.is_connect() || error.is_timeout() => {
+                last_err = format!("{error}");
+            }
+            Err(error) => {
+                eprintln!("error: {operation}: {error}");
+                return Err(CliExitCode::Network);
+            }
+        }
+
+        if attempt < MAX_RETRIES {
+            eprintln!(
+                "warning: {operation} failed (attempt {}/{}), retrying in {:.1}s: {last_err}",
+                attempt + 1,
+                MAX_RETRIES + 1,
+                delay.as_secs_f32()
+            );
+            std::thread::sleep(delay);
+            delay = delay.saturating_mul(2);
+        }
+    }
+
+    eprintln!("error: {operation}: {last_err} (all {MAX_RETRIES} retries exhausted)");
+    Err(CliExitCode::Network)
+}
+
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{BackendAddress, DEFAULT_PORT};
     use tssp::ConnectionArgs;

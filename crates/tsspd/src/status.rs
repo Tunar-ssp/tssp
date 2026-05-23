@@ -215,10 +215,10 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
         Ok(repository_stats) => {
             let storage_bytes_used = tokio::task::spawn_blocking(move || {
                 calculate_directory_size(
-                    &state
+                    state
                         .upload_temp_dir
                         .parent()
-                        .unwrap_or_else(|| state.upload_temp_dir.as_path()),
+                        .unwrap_or(state.upload_temp_dir.as_path()),
                 )
             })
             .await
@@ -267,6 +267,7 @@ fn calculate_directory_size(path: &Path) -> u64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{healthz, readyz, status, MetadataStatsProvider, StaticMetadataStatsProvider};
     use crate::HttpState;
@@ -402,7 +403,7 @@ mod tests {
             since: None,
             until: None,
             pinned_only: false,
-            sort: Default::default(),
+            sort: tssp_ports::ListSort::default(),
             after_cursor: None,
         };
         let result = provider

@@ -97,14 +97,14 @@ pub(crate) async fn get_file_content(
     stream_blob_response(&record, blob, byte_range, disposition)
 }
 
-async fn find_file_record(state: HttpState, file_id: FileId) -> Result<Option<FileRecord>, String> {
+pub(crate) async fn find_file_record(state: HttpState, file_id: FileId) -> Result<Option<FileRecord>, String> {
     let metadata = state.stats_provider.clone();
     tokio::task::spawn_blocking(move || metadata.find_file(&file_id))
         .await
         .map_err(|error| format!("metadata worker failed: {error}"))?
 }
 
-async fn open_blob(state: HttpState, handle: StorageHandle) -> Result<File, BlobReadError> {
+pub(crate) async fn open_blob(state: HttpState, handle: StorageHandle) -> Result<File, BlobReadError> {
     let reader = state.blob_reader.clone();
     tokio::task::spawn_blocking(move || reader.open_blob(&handle))
         .await
@@ -113,7 +113,7 @@ async fn open_blob(state: HttpState, handle: StorageHandle) -> Result<File, Blob
         })?
 }
 
-fn stream_blob_response(
+pub(crate) fn stream_blob_response(
     record: &FileRecord,
     mut blob: File,
     range: Option<ByteRange>,
@@ -378,7 +378,7 @@ fn error_response(status: StatusCode, code: &'static str, message: String) -> Re
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-struct ByteRange {
+pub(crate) struct ByteRange {
     start: u64,
     end_inclusive: u64,
 }
@@ -390,7 +390,7 @@ impl ByteRange {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum DispositionMode {
+pub(crate) enum DispositionMode {
     Attachment,
     Inline,
 }

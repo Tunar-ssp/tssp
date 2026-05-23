@@ -97,7 +97,7 @@ pub enum HttpUploadError {
 }
 
 impl HttpUploadError {
-    fn response_parts(&self) -> (StatusCode, &'static str, String) {
+    pub(crate) fn response_parts(&self) -> (StatusCode, &'static str, String) {
         match self {
             Self::InvalidRequest { message } => {
                 (StatusCode::BAD_REQUEST, "invalid_request", message.clone())
@@ -177,6 +177,10 @@ where
 }
 
 pub(crate) async fn upload_file(State(state): State<HttpState>, multipart: Multipart) -> Response {
+    if let Err(error) = check_free_space(&state.upload_temp_dir).await {
+        return error.response();
+    }
+
     let staged = match stage_multipart_upload(multipart, &state.upload_temp_dir).await {
         Ok(value) => value,
         Err(error) => return error.response(),
@@ -193,6 +197,10 @@ pub(crate) async fn upload_files_batch(
     State(state): State<HttpState>,
     multipart: Multipart,
 ) -> Response {
+    if let Err(error) = check_free_space(&state.upload_temp_dir).await {
+        return error.response();
+    }
+
     let staged_files = match stage_batch_multipart_upload(multipart, &state.upload_temp_dir).await {
         Ok(value) => value,
         Err(error) => return error.response(),
@@ -209,6 +217,63 @@ pub(crate) async fn upload_files_batch(
     }
 
     Json(BatchUploadResponse::from_results(results)).into_response()
+}
+
+/// Minimum free bytes required before accepting an upload (500 MiB or 1% of total).
+const MIN_FREE_BYTES_ABSOLUTE: u64 = 500 * 1024 * 1024;
+const MIN_FREE_PERCENT: u64 = 1;
+
+async fn check_free_space(path: &Path) -> Result<(), HttpUploadError> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let stat = nix_statvfs(&path)?;
+        let free_bytes = stat.free_bytes;
+        let total_bytes = stat.total_bytes;
+        let threshold = std::cmp::max(
+            MIN_FREE_BYTES_ABSOLUTE,
+            total_bytes * MIN_FREE_PERCENT / 100,
+        );
+        if free_bytes < threshold {
+            Err(HttpUploadError::InsufficientStorage {
+                message: format!(
+                    "insufficient storage: {free_bytes} bytes free, {threshold} bytes required"
+                ),
+            })
+        } else {
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| HttpUploadError::Internal {
+        message: format!("could not check disk space: {e}"),
+    })?
+}
+
+struct DiskStat {
+    free_bytes: u64,
+    total_bytes: u64,
+}
+
+fn nix_statvfs(path: &Path) -> Result<DiskStat, HttpUploadError> {
+    // Fall back to the parent directory if the path doesn't exist yet
+    let check_path = if path.exists() {
+        path.to_path_buf()
+    } else {
+        path.parent()
+            .filter(|p| p.exists())
+            .unwrap_or(std::path::Path::new("/tmp"))
+            .to_path_buf()
+    };
+
+    let stat = rustix::fs::statvfs(&check_path).map_err(|e| HttpUploadError::Internal {
+        message: format!("statvfs on {} failed: {e}", check_path.display()),
+    })?;
+
+    let block = stat.f_frsize;
+    Ok(DiskStat {
+        free_bytes: stat.f_bavail * block,
+        total_bytes: stat.f_blocks * block,
+    })
 }
 
 async fn upload_staged_file(
@@ -241,12 +306,12 @@ async fn upload_staged_file(
     }
 }
 
-struct StagedMultipartUpload {
-    filename: String,
-    mime_type: Option<String>,
-    tags: Vec<String>,
-    pinned: bool,
-    temp_file: NamedTempFile,
+pub(crate) struct StagedMultipartUpload {
+    pub(crate) filename: String,
+    pub(crate) mime_type: Option<String>,
+    pub(crate) tags: Vec<String>,
+    pub(crate) pinned: bool,
+    pub(crate) temp_file: NamedTempFile,
 }
 
 struct StagedBatchFile {
@@ -255,7 +320,7 @@ struct StagedBatchFile {
     temp_file: NamedTempFile,
 }
 
-async fn stage_multipart_upload(
+pub(crate) async fn stage_multipart_upload(
     mut multipart: Multipart,
     upload_temp_dir: &Path,
 ) -> Result<StagedMultipartUpload, HttpUploadError> {

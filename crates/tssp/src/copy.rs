@@ -48,10 +48,10 @@ pub fn run(cli: &Cli, args: &CopyArgs) -> Result<CliExitCode, String> {
                 });
                 let json_str = serde_json::to_string_pretty(&output)
                     .map_err(|e| format!("failed to serialize JSON: {e}"))?;
-                println!("{}", json_str);
+                println!("{json_str}");
             } else {
                 copy_to_clipboard(&share_url)?;
-                println!("Share URL copied to clipboard: {}", share_url);
+                println!("Share URL copied to clipboard: {share_url}");
 
                 if !cli.output.quiet {
                     eprintln!("Share URL copied successfully!");
@@ -78,10 +78,10 @@ pub fn run(cli: &Cli, args: &CopyArgs) -> Result<CliExitCode, String> {
             });
             let json_str = serde_json::to_string_pretty(&output)
                 .map_err(|e| format!("failed to serialize JSON: {e}"))?;
-            println!("{}", json_str);
+            println!("{json_str}");
         } else {
             copy_to_clipboard(&download_url)?;
-            println!("Download URL copied to clipboard: {}", download_url);
+            println!("Download URL copied to clipboard: {download_url}");
 
             if !cli.output.quiet {
                 eprintln!("Download URL copied successfully!");

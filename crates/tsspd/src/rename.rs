@@ -99,6 +99,7 @@ pub async fn rename_file(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::match_wild_err_arm)]
 mod tests {
     use axum::extract::{Path, State};
     use axum::http::StatusCode;
@@ -290,7 +291,7 @@ mod tests {
                 assert_eq!(resp.id, "test-file-id-00000000");
                 assert_eq!(resp.file["name"], "newname.txt");
             }
-            Err(_) => assert!(false, "response should be ok"),
+            Err(_) => panic!("response should be ok"),
         }
     }
 
@@ -323,7 +324,7 @@ mod tests {
             State(state),
             Path("test-file-id-00000000".to_string()),
             Json(RenameRequest {
-                name: "".to_string(),
+                name: String::new(),
             }),
         )
         .await;

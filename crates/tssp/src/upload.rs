@@ -39,7 +39,7 @@ pub(crate) fn run(cli: &Cli) -> Result<CliExitCode, String> {
     if plan.items.len() > 1 {
         upload_batch(&client, &address, &plan.items, cli)
     } else {
-        upload_single(&client, &address, &plan.items, cli)
+        Ok(upload_single(&client, &address, &plan.items, cli))
     }
 }
 
@@ -48,7 +48,7 @@ fn upload_single(
     address: &BackendAddress,
     items: &[UploadItem],
     cli: &Cli,
-) -> Result<CliExitCode, String> {
+) -> CliExitCode {
     let mut successes = 0_usize;
     let mut last_error = CliExitCode::Success;
 
@@ -60,12 +60,12 @@ fn upload_single(
     }
 
     if successes == items.len() {
-        return Ok(CliExitCode::Success);
+        return CliExitCode::Success;
     }
     if successes > 0 {
-        return Ok(CliExitCode::PartialSuccess);
+        return CliExitCode::PartialSuccess;
     }
-    Ok(last_error)
+    last_error
 }
 
 fn upload_batch(
@@ -570,8 +570,7 @@ fn print_batch_results(
                     item_result
                         .error
                         .as_ref()
-                        .map(|e| &e.message)
-                        .unwrap_or(&"unknown error".to_string())
+                        .map_or(&"unknown error".to_string(), |e| &e.message)
                 );
             }
         }
@@ -587,13 +586,11 @@ fn print_batch_results(
                     idx,
                     items
                         .get(idx)
-                        .map(|i| &i.filename)
-                        .unwrap_or(&"?".to_string()),
+                        .map_or(&"?".to_string(), |i| &i.filename),
                     item_result
                         .error
                         .as_ref()
-                        .map(|e| &e.message)
-                        .unwrap_or(&"unknown error".to_string())
+                        .map_or(&"unknown error".to_string(), |e| &e.message)
                 );
             } else {
                 println!(
@@ -601,8 +598,7 @@ fn print_batch_results(
                     idx,
                     items
                         .get(idx)
-                        .map(|i| &i.filename)
-                        .unwrap_or(&"?".to_string()),
+                        .map_or(&"?".to_string(), |i| &i.filename),
                     item_result.outcome
                 );
             }
@@ -759,6 +755,7 @@ fn header_value(value: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use std::io::Read;
 

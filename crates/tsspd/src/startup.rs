@@ -31,7 +31,7 @@ impl<R: SessionRepository, C: Clock> StartupService<R, C> {
         let deleted = self.session_service.cleanup_expired_sessions(now)?;
 
         if deleted > 0 {
-            eprintln!("cleanup: removed {} expired sessions", deleted);
+            eprintln!("cleanup: removed {deleted} expired sessions");
         }
 
         Ok(())
@@ -39,6 +39,7 @@ impl<R: SessionRepository, C: Clock> StartupService<R, C> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::sync::Arc;
@@ -78,6 +79,14 @@ mod tests {
             &self,
             _token: &tssp_domain::SessionToken,
             _used_at: tssp_domain::UnixTimestamp,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        fn set_received_file(
+            &self,
+            _token: &tssp_domain::SessionToken,
+            _file_id: &tssp_domain::FileId,
         ) -> Result<(), RepositoryError> {
             Ok(())
         }

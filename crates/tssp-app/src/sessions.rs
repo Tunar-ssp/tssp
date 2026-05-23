@@ -1,6 +1,6 @@
 //! Application service for session management.
 
-use tssp_domain::{SessionKind, SessionToken, TransferSession, UnixTimestamp};
+use tssp_domain::{FileId, SessionKind, SessionToken, TransferSession, UnixTimestamp};
 use tssp_ports::{RepositoryError, SessionRepository};
 
 /// Application service for managing transfer sessions.
@@ -102,6 +102,21 @@ impl<R: SessionRepository> SessionService<R> {
         self.repository.mark_session_used(token, now)
     }
 
+    /// Associates a received file with a session and marks it used.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the update cannot be committed.
+    pub fn complete_receive_session(
+        &self,
+        token: &SessionToken,
+        file_id: &FileId,
+        now: UnixTimestamp,
+    ) -> Result<(), RepositoryError> {
+        self.repository.set_received_file(token, file_id)?;
+        self.repository.mark_session_used(token, now)
+    }
+
     /// Cleans up expired sessions.
     ///
     /// # Errors
@@ -161,6 +176,14 @@ mod tests {
             &self,
             _token: &SessionToken,
             _used_at: UnixTimestamp,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        fn set_received_file(
+            &self,
+            _token: &SessionToken,
+            _file_id: &FileId,
         ) -> Result<(), RepositoryError> {
             Ok(())
         }
