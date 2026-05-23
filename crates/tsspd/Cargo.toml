@@ -12,6 +12,7 @@ description = "TSSP backend daemon"
 axum.workspace = true
 clap.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true

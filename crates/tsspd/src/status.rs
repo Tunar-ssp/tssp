@@ -51,6 +51,17 @@ pub trait MetadataStatsProvider: Send + Sync {
         tag: &tssp_domain::TagKey,
         limit: u64,
     ) -> Result<Vec<FileRecord>, String>;
+
+    /// Renames a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when the rename fails.
+    fn rename_file(
+        &self,
+        id: &FileId,
+        new_name: &tssp_domain::FileName,
+    ) -> Result<Option<FileRecord>, String>;
 }
 
 #[derive(Debug)]
@@ -87,6 +98,14 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
         _limit: u64,
     ) -> Result<Vec<FileRecord>, String> {
         Ok(Vec::new())
+    }
+
+    fn rename_file(
+        &self,
+        _id: &FileId,
+        _new_name: &tssp_domain::FileName,
+    ) -> Result<Option<FileRecord>, String> {
+        Ok(None)
     }
 }
 
@@ -144,6 +163,16 @@ where
     ) -> Result<Vec<FileRecord>, String> {
         self.repository
             .list_files_by_tag(tag, limit)
+            .map_err(|error| error.to_string())
+    }
+
+    fn rename_file(
+        &self,
+        id: &FileId,
+        new_name: &tssp_domain::FileName,
+    ) -> Result<Option<FileRecord>, String> {
+        self.repository
+            .rename_file(id, new_name)
             .map_err(|error| error.to_string())
     }
 }

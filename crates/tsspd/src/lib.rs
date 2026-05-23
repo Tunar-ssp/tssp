@@ -10,6 +10,7 @@ mod delete;
 mod file;
 mod list;
 mod pins;
+mod rename;
 mod search;
 mod status;
 mod tags;
@@ -157,7 +158,9 @@ pub fn build_router(state: HttpState) -> Router {
         .route("/api/v1/files/{id}/content", get(content::get_file_content))
         .route(
             "/api/v1/files/{id}",
-            get(file::get_file).delete(delete::delete_file),
+            get(file::get_file)
+                .delete(delete::delete_file)
+                .patch(rename::rename_file),
         )
         .route("/api/v1/search", get(search::search_files))
         .route("/healthz", get(status::healthz))
@@ -1113,6 +1116,14 @@ mod tests {
         ) -> Result<Vec<tssp_domain::FileRecord>, String> {
             Ok(Vec::new())
         }
+
+        fn rename_file(
+            &self,
+            _id: &tssp_domain::FileId,
+            _new_name: &tssp_domain::FileName,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(None)
+        }
     }
 
     struct FailingStatsProvider;
@@ -1145,6 +1156,14 @@ mod tests {
             _tag: &tssp_domain::TagKey,
             _limit: u64,
         ) -> Result<Vec<tssp_domain::FileRecord>, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn rename_file(
+            &self,
+            _id: &tssp_domain::FileId,
+            _new_name: &tssp_domain::FileName,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
             Err("metadata database is unavailable".to_owned())
         }
     }
@@ -1188,6 +1207,14 @@ mod tests {
             _limit: u64,
         ) -> Result<Vec<tssp_domain::FileRecord>, String> {
             Ok(vec![single_record()])
+        }
+
+        fn rename_file(
+            &self,
+            _id: &tssp_domain::FileId,
+            _new_name: &tssp_domain::FileName,
+        ) -> Result<Option<tssp_domain::FileRecord>, String> {
+            Ok(Some(single_record()))
         }
     }
 
