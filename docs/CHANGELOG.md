@@ -47,4 +47,10 @@ The format follows Keep a Changelog, and this project uses Semantic Versioning.
   SQLite tag counts and join-table cleanup.
 - Functional `tssp tag` and `tssp untag` commands with stable exit-code mapping
   and JSON/human output.
+- Workspace CRUD stabilization with validated names/languages/body sizes,
+  collision-resistant ids, owner-preserving admin updates, admin delete support,
+  and web create/edit/delete actions.
+- Unified search improvements with server-side limit/tag/type/kind/pinned/
+  visibility filters, deterministic ranking, SQLite indexes for bounded fuzzy
+  candidates, and CLI query parameter forwarding.
 - Initial project documentation and CI workflow.

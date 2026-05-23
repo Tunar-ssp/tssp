@@ -25,12 +25,16 @@ pub(crate) fn run_search(cli: &Cli, args: &SearchArgs) -> Result<CliExitCode, St
     };
 
     let client = build_client()?;
-    // URL encoding the query manually if urlencoding crate is available.
-    // Assuming reqwest can handle it if we construct the URL properly.
-    // To avoid adding a dependency, we will just pass it to `reqwest` via query params.
+    let mut query_params = vec![("q", args.query.clone())];
+    if let Some(limit) = args.limit {
+        query_params.push(("limit", limit.to_string()));
+    }
+    if let Some(tag) = &args.tag {
+        query_params.push(("tag", tag.clone()));
+    }
 
     let response = api_get(&client, &address.url(SEARCH_ENDPOINT))
-        .query(&[("q", &args.query)])
+        .query(&query_params)
         .header(ACCEPT, "application/vnd.tssp.v1+json")
         .send()
         .map_err(|error| {

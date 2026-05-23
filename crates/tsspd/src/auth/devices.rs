@@ -161,7 +161,7 @@ impl DeviceStore {
         };
         let mut statement = connection.prepare(sql)?;
         let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
+            params_vec.iter().map(std::convert::AsRef::as_ref).collect();
         let mut rows = statement.query(params_ref.as_slice())?;
         let mut devices = Vec::new();
         while let Some(row) = rows.next()? {

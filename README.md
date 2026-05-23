@@ -34,10 +34,11 @@ The foundation currently includes:
   `GET /api/v1/tags`, `POST /api/v1/files/{id}/tags`,
   `DELETE /api/v1/files/{id}/tags/{tag}`, `GET /api/v1/pins`,
   `PUT`/`DELETE /api/v1/files/{id}/pin`, `POST /api/v1/pins/reorder`,
-  `GET /api/v1/search`, notes APIs, dual-mode auth (`/api/v1/auth/*`), and a
-  lightweight GCS-style web dashboard at `/`, backed by real
-  metadata status counts, tag mutation, pin mutation, search, and
-  upload/download/delete storage when started from the binary.
+  `GET /api/v1/search`, notes APIs, workspace CRUD, dual-mode auth
+  (`/api/v1/auth/*`), and a lightweight GCS-style web dashboard at `/`, backed
+  by real metadata status counts, tag mutation, pin mutation, search,
+  workspace editing, and upload/download/delete storage when started from the
+  binary.
 - A filesystem blob adapter that streams uploads into content-addressed BLAKE3
   storage with fanout directories and deduplication.
 - A SQLite metadata adapter with embedded migrations, WAL configuration,

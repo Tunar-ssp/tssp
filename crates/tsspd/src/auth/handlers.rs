@@ -302,15 +302,7 @@ async fn perform_login(
         state
             .auth
             .authenticate_legacy_password(password, kind, now)
-            .map(|token| super::service::SessionInfo {
-                token,
-                user_id: tssp_domain::UserId::new("legacy")
-                    .unwrap_or_else(|_| tssp_domain::UserId::new("user-legacy").expect("id")),
-                name: tssp_domain::UserName::new("legacy")
-                    .unwrap_or_else(|_| tssp_domain::UserName::new("legacy").expect("name")),
-                role: tssp_domain::UserRole::Admin,
-                device_token: None,
-            })
+            .and_then(legacy_session_info)
     } else {
         Err(AuthError::NotConfigured)
     };
@@ -350,6 +342,20 @@ async fn perform_login(
         }
     }
     response
+}
+
+fn legacy_session_info(token: String) -> Result<super::service::SessionInfo, AuthError> {
+    let user_id = tssp_domain::UserId::new("user-legacy")
+        .map_err(|error| AuthError::Store(format!("legacy user id is invalid: {error}")))?;
+    let name = tssp_domain::UserName::new("legacy")
+        .map_err(|error| AuthError::Store(format!("legacy user name is invalid: {error}")))?;
+    Ok(super::service::SessionInfo {
+        token,
+        user_id,
+        name,
+        role: tssp_domain::UserRole::Admin,
+        device_token: None,
+    })
 }
 
 /// Web login: sets session cookie and returns token.

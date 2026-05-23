@@ -10,7 +10,7 @@ pub const MAX_NOTE_BODY_BYTES: usize = 1_048_576;
 const MAX_ID_LEN: usize = 128;
 const MAX_TITLE_BYTES: usize = 512;
 
-/// Opaque note identifier (UUIDv7 on the wire).
+/// Opaque note identifier (`UUIDv7` on the wire).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NoteId(String);
 

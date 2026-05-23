@@ -95,10 +95,11 @@ tssp search report --limit 10
 tssp search report --tag Docs
 ```
 
-Calls `/api/v1/search?q=<query>`. The current implementation applies `--tag`
-matching case-insensitively against the daemon result set and truncates the
-final output with `--limit`. Empty queries, empty tag filters, and `--limit 0`
-return exit code `2`.
+Calls `/api/v1/search` with server-side `q`, `limit`, and `tag` query
+parameters. The daemon ranks exact matches first, then prefix matches, then a
+bounded fuzzy fallback over indexed candidates. The CLI keeps a final local
+filtering pass for compatibility with older daemons. Empty queries, empty tag
+filters, and `--limit 0` return exit code `2`.
 
 ## `tssp info`
 

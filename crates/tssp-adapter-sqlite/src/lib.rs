@@ -175,16 +175,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {
-        if query.limit == 0 {
-            return Err(RepositoryError::OperationFailed {
-                message: "list limit must be greater than 0".to_owned(),
-            });
-        }
-        if query.limit > 500 {
-            return Err(RepositoryError::OperationFailed {
-                message: "list limit must not exceed 500".to_owned(),
-            });
-        }
+        let page_limit = validate_list_limit(query.limit)?;
 
         let connection = self.lock()?;
         let mut sql = String::from(
@@ -282,10 +273,6 @@ impl FileRepository for SqliteFileRepository {
             records.push(record);
         }
 
-        let page_limit =
-            usize::try_from(query.limit).map_err(|error| RepositoryError::OperationFailed {
-                message: format!("list limit does not fit usize: {error}"),
-            })?;
         let has_more = records.len() > page_limit;
         if has_more {
             records.truncate(page_limit);
@@ -817,6 +804,22 @@ impl FileRepository for SqliteFileRepository {
     }
 }
 
+fn validate_list_limit(limit: u64) -> Result<usize, RepositoryError> {
+    if limit == 0 {
+        return Err(RepositoryError::OperationFailed {
+            message: "list limit must be greater than 0".to_owned(),
+        });
+    }
+    if limit > 500 {
+        return Err(RepositoryError::OperationFailed {
+            message: "list limit must not exceed 500".to_owned(),
+        });
+    }
+    usize::try_from(limit).map_err(|error| RepositoryError::OperationFailed {
+        message: format!("list limit does not fit usize: {error}"),
+    })
+}
+
 fn normalize_folder_prefix(value: &str) -> String {
     value.trim().trim_matches('/').replace('\\', "/")
 }
@@ -950,57 +953,76 @@ fn run_migrations(connection: &Connection) -> Result<(), SqliteRepositoryError> 
         .map_err(SqliteRepositoryError::Migration)?;
     notes::migrate_notes_schema(connection)?;
     migrate_folders_schema(connection)?;
-    migrate_cloud_schema(connection)
+    migrate_cloud_schema(connection)?;
+    migrate_search_indexes(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
 pub(crate) fn migrate_cloud_schema(connection: &Connection) -> Result<(), SqliteRepositoryError> {
-    if migration_applied(connection, 7)? {
+    if !migration_applied(connection, 7)? {
+        connection
+            .execute_batch(
+                "
+                ALTER TABLE files ADD COLUMN owner_id TEXT;
+                ALTER TABLE files ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
+                ALTER TABLE files ADD COLUMN public_token TEXT;
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public_token ON files(public_token)
+                    WHERE public_token IS NOT NULL;
+                CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
+                CREATE INDEX IF NOT EXISTS idx_files_visibility ON files(visibility);
+                ",
+            )
+            .map_err(SqliteRepositoryError::Migration)?;
+
+        record_migration(connection, 7)?;
+    }
+
+    if !migration_applied(connection, 8)? {
+        connection
+            .execute_batch(
+                "
+                ALTER TABLE notes ADD COLUMN owner_id TEXT;
+                ALTER TABLE notes ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
+                CREATE INDEX IF NOT EXISTS idx_notes_owner ON notes(owner_id);
+
+                CREATE TABLE IF NOT EXISTS workspaces (
+                    id TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    language TEXT NOT NULL DEFAULT 'text',
+                    body TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
+                ",
+            )
+            .map_err(SqliteRepositoryError::Migration)?;
+
+        record_migration(connection, 8)?;
+    }
+    Ok(())
+}
+
+/// Adds indexes used by bounded fuzzy search candidate queries (schema v9).
+pub(crate) fn migrate_search_indexes(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 9)? {
         return Ok(());
     }
 
     connection
         .execute_batch(
             "
-            ALTER TABLE files ADD COLUMN owner_id TEXT;
-            ALTER TABLE files ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
-            ALTER TABLE files ADD COLUMN public_token TEXT;
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_files_public_token ON files(public_token)
-                WHERE public_token IS NOT NULL;
-            CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_files_visibility ON files(visibility);
+            CREATE INDEX IF NOT EXISTS idx_files_name_nocase ON files(name COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_files_mime_nocase ON files(mime_type COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_notes_title_nocase ON notes(title COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_file_tags_tag_key ON file_tags(tag_key);
+            CREATE INDEX IF NOT EXISTS idx_note_tags_tag_key ON note_tags(tag_key);
             ",
         )
         .map_err(SqliteRepositoryError::Migration)?;
 
-    record_migration(connection, 7)?;
-
-    if migration_applied(connection, 8)? {
-        return Ok(());
-    }
-
-    connection
-        .execute_batch(
-            "
-            ALTER TABLE notes ADD COLUMN owner_id TEXT;
-            ALTER TABLE notes ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
-            CREATE INDEX IF NOT EXISTS idx_notes_owner ON notes(owner_id);
-
-            CREATE TABLE IF NOT EXISTS workspaces (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                language TEXT NOT NULL DEFAULT 'text',
-                body TEXT NOT NULL,
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
-            ",
-        )
-        .map_err(SqliteRepositoryError::Migration)?;
-
-    record_migration(connection, 8)?;
+    record_migration(connection, 9)?;
     Ok(())
 }
 
@@ -1457,7 +1479,10 @@ mod tests {
         ContentHash, Cursor, FileId, FileName, FileSize, MimeType, StorageHandle, Tag, TagKey,
         UnixTimestamp,
     };
-    use tssp_ports::{FileRepository, ListQuery, ListSort, NewFileRecord, RepositoryError};
+    use tssp_ports::{
+        FileRepository, ListQuery, ListSort, NewFileRecord, NoteRepository, RepositoryError,
+        SearchHit,
+    };
 
     use super::SqliteFileRepository;
 
@@ -2126,6 +2151,44 @@ mod tests {
             .search_files("nonexistent")
             .unwrap_or_else(|error| panic!("search failed: {error}"));
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn unified_search_ranks_exact_prefix_and_fuzzy_file_hits() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+
+        let mut exact = new_file("file-exact", &["Finance"], 3_000);
+        exact.name = filename("annual_report.pdf");
+        repository
+            .insert_file(exact)
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let mut prefix = new_file("file-prefix", &["Finance"], 2_000);
+        prefix.name = filename("reporting-notes.txt");
+        repository
+            .insert_file(prefix)
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let mut fuzzy = new_file("file-fuzzy", &["Finance"], 1_000);
+        fuzzy.name = filename("reprot-draft.txt");
+        repository
+            .insert_file(fuzzy)
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let hits = repository
+            .search_all("report")
+            .unwrap_or_else(|error| panic!("search failed: {error}"));
+        let ids = hits
+            .iter()
+            .filter_map(|hit| match hit {
+                SearchHit::File(file) => Some(file.id.as_str().to_owned()),
+                SearchHit::Note(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids.first().map(String::as_str), Some("file-exact"));
+        assert!(ids.iter().any(|id| id == "file-fuzzy"));
     }
 
     fn new_file(id: &str, tags: &[&str], uploaded_at: i64) -> NewFileRecord {

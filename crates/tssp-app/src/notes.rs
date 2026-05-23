@@ -73,7 +73,7 @@ where
                 .map_err(|error| NoteError::IdGeneration(error.message))?
                 .as_str(),
         )?;
-        let pinned_at = request.pin.then(|| 1_u32);
+        let pinned_at = request.pin.then_some(1_u32);
 
         self.repository
             .insert_note(NewNoteRecord {

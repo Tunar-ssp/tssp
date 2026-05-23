@@ -3004,6 +3004,7 @@ dependencies = [
  "tssp-app",
  "tssp-domain",
  "tssp-ports",
+ "uuid",
 ]
 
 [[package]]

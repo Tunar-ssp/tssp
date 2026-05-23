@@ -185,7 +185,7 @@ fn upload_batch(
     }
     form_data.extend(format!("--{boundary}--\r\n").as_bytes());
 
-    let response = api_post(&client, &address.url("/api/v1/files/batch"))
+    let response = api_post(client, &address.url("/api/v1/files/batch"))
         .header(
             CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),
@@ -402,7 +402,7 @@ fn upload_one(
     })?;
     let boundary = multipart_boundary();
     let body = MultipartUploadBody::new(&boundary, item, file);
-    let response = api_post(&client, &address.url(UPLOAD_ENDPOINT))
+    let response = api_post(client, &address.url(UPLOAD_ENDPOINT))
         .header(
             CONTENT_TYPE,
             format!("multipart/form-data; boundary={boundary}"),

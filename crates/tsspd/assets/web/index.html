@@ -344,6 +344,25 @@
     </form>
   </dialog>
 
+  <dialog id="workspace-dialog" class="note-dialog workspace-dialog">
+    <form method="dialog" id="workspace-form" class="note-form">
+      <header>
+        <h3 id="workspace-dialog-title">New workspace</h3>
+        <button type="button" class="icon-btn" id="workspace-close" aria-label="Close">×</button>
+      </header>
+      <label for="workspace-name-input">Name</label>
+      <input id="workspace-name-input" type="text" maxlength="120" required>
+      <label for="workspace-language-input">Language</label>
+      <input id="workspace-language-input" type="text" maxlength="40" value="text" required>
+      <label for="workspace-body-input">Body</label>
+      <textarea id="workspace-body-input" rows="14"></textarea>
+      <footer>
+        <button type="button" class="btn btn-text" id="workspace-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="workspace-save">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
   <script src="/assets/js/api.js" defer></script>
   <script src="/assets/js/state.js" defer></script>
   <script src="/assets/js/upload.js" defer></script>

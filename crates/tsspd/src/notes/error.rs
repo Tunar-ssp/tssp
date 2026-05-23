@@ -81,13 +81,12 @@ pub(crate) fn map_note_error(error: NoteError) -> HttpNoteError {
         NoteError::InvalidRequest(domain) => HttpNoteError::InvalidRequest {
             message: domain.to_string(),
         },
-        NoteError::NotFound => HttpNoteError::NotFound {
-            message: "note was not found".to_owned(),
-        },
+        NoteError::NotFound | NoteError::Repository(RepositoryError::NotFound) => {
+            HttpNoteError::NotFound {
+                message: "note was not found".to_owned(),
+            }
+        }
         NoteError::IdGeneration(message) => HttpNoteError::Internal { message },
-        NoteError::Repository(RepositoryError::NotFound) => HttpNoteError::NotFound {
-            message: "note was not found".to_owned(),
-        },
         NoteError::Repository(other) => HttpNoteError::Internal {
             message: other.to_string(),
         },

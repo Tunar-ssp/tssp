@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Effective daemon settings after merging all configuration layers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[allow(clippy::struct_excessive_bools)]
 #[serde(default)]
 pub struct DaemonSettings {
     /// Bind address.
@@ -116,10 +117,10 @@ impl DaemonSettings {
             self.port = port;
         }
         if let Some(data_dir) = &cli.data_dir {
-            self.data_dir = data_dir.clone();
+            self.data_dir.clone_from(data_dir);
         }
         if let Some(public_url) = &cli.public_url {
-            self.public_url = public_url.clone();
+            self.public_url.clone_from(public_url);
         }
         if let Some(trust_forwarded) = cli.trust_forwarded {
             self.trust_forwarded = trust_forwarded;
@@ -181,6 +182,7 @@ impl DaemonSettings {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::{CliOverrides, DaemonSettings};
     use std::net::{IpAddr, Ipv4Addr};

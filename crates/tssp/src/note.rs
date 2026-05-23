@@ -54,7 +54,7 @@ fn run_list(cli: &Cli, args: &NoteListArgs) -> Result<CliExitCode, String> {
     let client = build_client()?;
     let mut query = vec![("limit", args.limit.unwrap_or(50).to_string())];
     if let Some(tag) = args.tags.first() {
-        query.push(("tag", tag.to_string()));
+        query.push(("tag", tag.clone()));
     }
     if args.pinned {
         query.push(("pinned", "true".to_owned()));

@@ -6,6 +6,7 @@ window.Tssp = window.Tssp || {};
   T.authRequired = false;
   T.searchTimer = null;
   T.editingNoteId = null;
+  T.editingWorkspaceId = null;
   T.currentFolder = "";
 
   T.showLogin = function showLogin() {

@@ -42,14 +42,14 @@ fn discover_blocking() -> Result<DiscoveredDaemon, String> {
         .map_err(|error| format!("mDNS browse failed: {error}"))?;
     let deadline = std::time::Instant::now() + DISCOVERY_TIMEOUT;
     while std::time::Instant::now() < deadline {
-        if let Ok(event) = receiver.recv_timeout(Duration::from_millis(250)) {
-            if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
-                let host = info.get_hostname().trim_end_matches('.').to_owned();
-                let port = info.get_port();
-                if !host.is_empty() && port > 0 {
-                    let _ = daemon.shutdown();
-                    return Ok(DiscoveredDaemon { host, port });
-                }
+        if let Ok(mdns_sd::ServiceEvent::ServiceResolved(info)) =
+            receiver.recv_timeout(Duration::from_millis(250))
+        {
+            let host = info.get_hostname().trim_end_matches('.').to_owned();
+            let port = info.get_port();
+            if !host.is_empty() && port > 0 {
+                let _ = daemon.shutdown();
+                return Ok(DiscoveredDaemon { host, port });
             }
         }
     }

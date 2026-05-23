@@ -40,8 +40,7 @@ pub fn collect_system_snapshot(data_dir: &Path) -> Result<SystemSnapshot, String
 
 fn hostname() -> String {
     std::fs::read_to_string("/etc/hostname")
-        .map(|s| s.trim().to_owned())
-        .unwrap_or_else(|_| "localhost".to_owned())
+        .map_or_else(|_| "localhost".to_owned(), |value| value.trim().to_owned())
 }
 
 fn load_average() -> f64 {
@@ -86,8 +85,7 @@ fn parse_kb(value: &str) -> u64 {
         .strip_suffix(" kB")
         .or_else(|| value.trim().strip_suffix(" kB"))
         .and_then(|v| v.trim().parse::<u64>().ok())
-        .map(|kb| kb * 1024)
-        .unwrap_or(0)
+        .map_or(0, |kb| kb * 1024)
 }
 
 fn disk_info(path: &Path) -> Result<(u64, u64), String> {

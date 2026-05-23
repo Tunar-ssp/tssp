@@ -405,6 +405,7 @@ fn generate_token() -> Result<String, AuthStoreError> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::used_underscore_binding)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;

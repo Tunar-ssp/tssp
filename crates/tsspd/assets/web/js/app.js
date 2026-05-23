@@ -77,6 +77,20 @@
     T.$("#note-cancel").addEventListener("click", () => T.$("#note-dialog").close());
     T.$("#note-close").addEventListener("click", () => T.$("#note-dialog").close());
 
+    T.$("#new-workspace-btn")?.addEventListener("click", () =>
+      T.openWorkspaceDialog(null)
+    );
+    T.$("#workspace-form")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      T.saveWorkspace();
+    });
+    T.$("#workspace-cancel")?.addEventListener("click", () =>
+      T.$("#workspace-dialog").close()
+    );
+    T.$("#workspace-close")?.addEventListener("click", () =>
+      T.$("#workspace-dialog").close()
+    );
+
     T.$("#admin-cleanup-temp")?.addEventListener("click", () => T.adminCleanup("temp"));
     T.$("#admin-cleanup-sessions")?.addEventListener("click", () =>
       T.adminCleanup("sessions")
@@ -104,6 +118,16 @@
       const editNote = ev.target.closest("[data-edit-note]");
       if (editNote) {
         T.openNote(editNote.dataset.editNote);
+        return;
+      }
+      const editWorkspace = ev.target.closest("[data-ws-edit]");
+      if (editWorkspace) {
+        T.openWorkspace(editWorkspace.dataset.wsEdit);
+        return;
+      }
+      const deleteWorkspace = ev.target.closest("[data-ws-del]");
+      if (deleteWorkspace) {
+        T.deleteWorkspace(deleteWorkspace.dataset.wsDel);
         return;
       }
       const vis = ev.target.closest("[data-vis]");

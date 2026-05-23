@@ -154,6 +154,7 @@ async fn serve_index_html() -> Response<Body> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::{serve_asset, web_fallback, INDEX_HTML};
     use axum::body::Body;

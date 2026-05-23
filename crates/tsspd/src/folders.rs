@@ -21,7 +21,7 @@ pub struct FolderMoveBody {
     pub to: String,
 }
 
-/// `POST /api/v1/folders/move` — rewrite folder_path prefixes (admin).
+/// `POST /api/v1/folders/move` — rewrite `folder_path` prefixes (admin).
 pub async fn move_folder(
     State(state): State<HttpState>,
     auth: AuthContext,

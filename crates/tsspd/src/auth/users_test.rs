@@ -1,6 +1,7 @@
 //! Integration tests for user authentication.
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::sync::Arc;
 

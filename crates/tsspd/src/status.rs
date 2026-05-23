@@ -73,6 +73,10 @@ pub trait MetadataStatsProvider: Send + Sync {
     fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String>;
 
     /// Updates file visibility and public link token.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when the update fails.
     fn set_file_visibility(
         &self,
         id: &FileId,
@@ -81,12 +85,24 @@ pub trait MetadataStatsProvider: Send + Sync {
     ) -> Result<Option<FileRecord>, String>;
 
     /// Finds a public file by link token.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when lookup fails.
     fn find_file_by_public_token(&self, token: &str) -> Result<Option<FileRecord>, String>;
 
     /// Moves or renames a folder prefix across files.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when the update fails.
     fn update_folder_path_prefix(&self, from_prefix: &str, to_prefix: &str) -> Result<u64, String>;
 
     /// Sets folder path for one file.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when the update fails.
     fn set_file_folder_path(
         &self,
         id: &FileId,
@@ -321,8 +337,7 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
             let data_root = state
                 .upload_temp_dir
                 .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| state.upload_temp_dir.clone());
+                .map_or_else(|| state.upload_temp_dir.clone(), Path::to_path_buf);
             let public_url = state.public_urls().base().to_owned();
             let corrupt_file_count = state.corrupt_file_count;
             let storage_bytes_used =

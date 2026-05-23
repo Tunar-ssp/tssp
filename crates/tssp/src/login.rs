@@ -107,6 +107,7 @@ fn read_password(prompt: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::TokenResponse;
 

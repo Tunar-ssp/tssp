@@ -20,22 +20,22 @@ pub(crate) fn run(cli: &Cli, command: &AdminCommand) -> Result<CliExitCode, Stri
     }
 }
 
-fn get_json(cli: &Cli, path: &str, label: &str) -> Result<CliExitCode, String> {
+fn get_json(cli: &Cli, path: &str, _label: &str) -> Result<CliExitCode, String> {
     let body = fetch(
         cli,
         |client, url| api_get(client, url).header(ACCEPT, "application/json"),
         path,
     )?;
-    print_body(cli, &body, label)
+    Ok(print_body(cli, &body))
 }
 
-fn post_json(cli: &Cli, path: &str, label: &str) -> Result<CliExitCode, String> {
+fn post_json(cli: &Cli, path: &str, _label: &str) -> Result<CliExitCode, String> {
     let body = fetch(
         cli,
         |client, url| api_post(client, url).header(ACCEPT, "application/json"),
         path,
     )?;
-    print_body(cli, &body, label)
+    Ok(print_body(cli, &body))
 }
 
 fn admin_files(cli: &Cli, args: &AdminFilesArgs) -> Result<CliExitCode, String> {
@@ -90,7 +90,7 @@ fn admin_delete(cli: &Cli, id: &str) -> Result<CliExitCode, String> {
         |client, url| api_delete(client, url).header(ACCEPT, "application/json"),
         &path,
     )?;
-    print_body(cli, &body, "delete")
+    Ok(print_body(cli, &body))
 }
 
 fn fetch<F>(cli: &Cli, build: F, path: &str) -> Result<String, String>
@@ -115,7 +115,7 @@ where
         .map_err(|e| format!("unreadable response from {}: {e}", address.base_url()))
 }
 
-fn print_body(cli: &Cli, body: &str, _label: &str) -> Result<CliExitCode, String> {
+fn print_body(cli: &Cli, body: &str) -> CliExitCode {
     if cli.output.json {
         println!("{body}");
     } else if !cli.output.quiet {
@@ -126,7 +126,7 @@ fn print_body(cli: &Cli, body: &str, _label: &str) -> Result<CliExitCode, String
             serde_json::to_string_pretty(&value).unwrap_or_else(|_| body.to_owned())
         );
     }
-    Ok(CliExitCode::Success)
+    CliExitCode::Success
 }
 
 #[derive(Debug, Deserialize)]

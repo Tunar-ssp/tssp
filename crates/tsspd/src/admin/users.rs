@@ -182,7 +182,13 @@ pub async fn admin_set_role(
 }
 
 fn uuid_simple() -> String {
+    use std::fmt::Write as _;
+
     let mut bytes = [0_u8; 8];
     let _ = getrandom::getrandom(&mut bytes);
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    let mut value = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(value, "{byte:02x}");
+    }
+    value
 }

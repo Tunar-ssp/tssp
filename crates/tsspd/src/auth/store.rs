@@ -1,4 +1,4 @@
-//! SQLite persistence for auth configuration and tokens.
+//! `SQLite` persistence for auth configuration and tokens.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -19,7 +19,7 @@ pub enum AuthStoreError {
     InvalidPasswordHash,
 }
 
-/// Thread-safe auth metadata store backed by SQLite.
+/// Thread-safe auth metadata store backed by `SQLite`.
 #[derive(Debug)]
 pub struct AuthStore {
     connection: Mutex<Connection>,
@@ -223,6 +223,7 @@ fn run_auth_migration(connection: &Connection) -> Result<(), AuthStoreError> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::AuthStore;
     use std::path::PathBuf;

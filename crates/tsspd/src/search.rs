@@ -9,13 +9,120 @@ use serde::{Deserialize, Serialize};
 use crate::notes::NoteRecordResponse;
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
+use tssp_domain::{TagKey, Visibility};
 use tssp_ports::{NoteRepository, SearchHit};
+
+const DEFAULT_SEARCH_LIMIT: u64 = 50;
+const MAX_SEARCH_LIMIT: u64 = 100;
 
 /// Query parameters for searching files.
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchQuery {
     /// The search string.
     pub q: String,
+    /// Maximum number of results to return.
+    #[serde(default)]
+    pub limit: Option<u64>,
+    /// Optional result kind (`file`, `note`, or `all`).
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Optional tag filter applied to files and notes.
+    #[serde(default)]
+    pub tag: Option<String>,
+    /// Optional MIME prefix filter for files.
+    #[serde(default, rename = "type")]
+    pub mime_prefix: Option<String>,
+    /// Only return pinned files/notes.
+    #[serde(default)]
+    pub pinned: bool,
+    /// Optional file visibility filter (`public` or `private`).
+    #[serde(default)]
+    pub visibility: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchKind {
+    All,
+    File,
+    Note,
+}
+
+#[derive(Debug)]
+struct SearchFilters {
+    limit: u64,
+    kind: SearchKind,
+    tag: Option<TagKey>,
+    mime_prefix: Option<String>,
+    pinned: bool,
+    visibility: Option<Visibility>,
+}
+
+impl SearchQuery {
+    fn to_filters(&self) -> Result<SearchFilters, String> {
+        let limit = self.limit.unwrap_or(DEFAULT_SEARCH_LIMIT);
+        if limit == 0 {
+            return Err("limit must be greater than 0".to_owned());
+        }
+        if limit > MAX_SEARCH_LIMIT {
+            return Err(format!("limit must not exceed {MAX_SEARCH_LIMIT}"));
+        }
+
+        let kind = parse_kind(self.kind.as_deref())?;
+        let tag = self
+            .tag
+            .as_deref()
+            .map(TagKey::new)
+            .transpose()
+            .map_err(|error| error.to_string())?;
+        let mime_prefix = self
+            .mime_prefix
+            .as_deref()
+            .map(validate_mime_prefix)
+            .transpose()?;
+        if mime_prefix.is_some() && kind == SearchKind::Note {
+            return Err("type filter can only be used with file or all search".to_owned());
+        }
+        let visibility = self
+            .visibility
+            .as_deref()
+            .map(Visibility::parse)
+            .transpose()
+            .map_err(|error| error.to_string())?;
+        if visibility.is_some() && kind == SearchKind::Note {
+            return Err("visibility filter can only be used with file or all search".to_owned());
+        }
+
+        Ok(SearchFilters {
+            limit,
+            kind,
+            tag,
+            mime_prefix,
+            pinned: self.pinned,
+            visibility,
+        })
+    }
+}
+
+fn parse_kind(value: Option<&str>) -> Result<SearchKind, String> {
+    match value.unwrap_or("all").trim().to_ascii_lowercase().as_str() {
+        "" | "all" => Ok(SearchKind::All),
+        "file" | "files" => Ok(SearchKind::File),
+        "note" | "notes" => Ok(SearchKind::Note),
+        _ => Err("kind must be one of all, file, or note".to_owned()),
+    }
+}
+
+fn validate_mime_prefix(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("type filter must not be empty".to_owned());
+    }
+    if trimmed.chars().any(|character| {
+        !(character.is_ascii_alphanumeric() || matches!(character, '/' | '+' | '-' | '.'))
+    }) {
+        return Err("type filter contains invalid characters".to_owned());
+    }
+    Ok(trimmed.to_ascii_lowercase())
 }
 
 /// One unified search result.
@@ -41,6 +148,8 @@ pub(crate) enum SearchResultItem {
 pub(crate) struct SearchResponse {
     /// Stable response schema version.
     pub schema_version: u8,
+    /// Applied result limit.
+    pub limit: u64,
     /// Ranked matches across files and notes.
     pub results: Vec<SearchResultItem>,
 }
@@ -105,15 +214,32 @@ pub(crate) async fn search_files(
         )
             .into_response();
     }
+    let filters = match params.to_filters() {
+        Ok(value) => value,
+        Err(message) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "invalid_request",
+                        message,
+                    },
+                }),
+            )
+                .into_response();
+        }
+    };
 
     let search_provider = state.search_provider.clone();
-    let query = params.q;
+    let query = params.q.clone();
 
     match tokio::task::spawn_blocking(move || search_provider.search(&query)).await {
         Ok(Ok(hits)) => {
             let results = hits
-                .iter()
-                .map(|hit| match hit {
+                .into_iter()
+                .filter(|hit| hit_matches_filters(hit, &filters))
+                .take(usize::try_from(filters.limit).unwrap_or(usize::MAX))
+                .map(|hit| match &hit {
                     SearchHit::File(file) => SearchResultItem::File {
                         record: FileRecordResponse::from_record(file),
                     },
@@ -124,6 +250,7 @@ pub(crate) async fn search_files(
                 .collect();
             let response = SearchResponse {
                 schema_version: 1,
+                limit: filters.limit,
                 results,
             };
             (StatusCode::OK, Json(response)).into_response()
@@ -150,6 +277,50 @@ pub(crate) async fn search_files(
                 }),
             )
                 .into_response()
+        }
+    }
+}
+
+fn hit_matches_filters(hit: &SearchHit, filters: &SearchFilters) -> bool {
+    match hit {
+        SearchHit::File(file) => {
+            if filters.kind == SearchKind::Note {
+                return false;
+            }
+            if filters.pinned && !file.is_pinned() {
+                return false;
+            }
+            if let Some(tag) = &filters.tag {
+                if !file.tags.iter().any(|item| item.key() == tag) {
+                    return false;
+                }
+            }
+            if let Some(prefix) = &filters.mime_prefix {
+                if !file.mime_type.as_str().starts_with(prefix) {
+                    return false;
+                }
+            }
+            if let Some(visibility) = filters.visibility {
+                if file.visibility != visibility {
+                    return false;
+                }
+            }
+            true
+        }
+        SearchHit::Note(note) => {
+            if filters.kind == SearchKind::File
+                || filters.mime_prefix.is_some()
+                || filters.visibility.is_some()
+            {
+                return false;
+            }
+            if filters.pinned && note.pinned_at.is_none() {
+                return false;
+            }
+            if let Some(tag) = &filters.tag {
+                return note.tags.iter().any(|item| item.key() == tag);
+            }
+            true
         }
     }
 }
@@ -188,6 +359,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_rejects_invalid_limit() {
+        let provider = Arc::new(StaticFileSearchProvider);
+        let router = build_test_router(provider);
+
+        let request = Request::builder()
+            .uri("/search?q=test&limit=0")
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|error| panic!("request build failed: {error}"));
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn search_returns_ok_on_valid_query() {
         let provider = Arc::new(StaticFileSearchProvider);
         let router = build_test_router(provider);
@@ -206,7 +391,31 @@ mod tests {
         let result: SearchResponse = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("json parse failed: {error}"));
         assert_eq!(result.schema_version, 1);
+        assert_eq!(result.limit, DEFAULT_SEARCH_LIMIT);
         assert!(result.results.is_empty());
+    }
+
+    #[test]
+    fn search_query_accepts_supported_filters() {
+        let query = SearchQuery {
+            q: "report".to_owned(),
+            limit: Some(10),
+            kind: Some("file".to_owned()),
+            tag: Some("Finance".to_owned()),
+            mime_prefix: Some("application/pdf".to_owned()),
+            pinned: true,
+            visibility: Some("public".to_owned()),
+        };
+
+        let filters = query
+            .to_filters()
+            .unwrap_or_else(|error| panic!("filters failed: {error}"));
+
+        assert_eq!(filters.limit, 10);
+        assert_eq!(filters.kind, SearchKind::File);
+        assert!(filters.tag.is_some());
+        assert_eq!(filters.mime_prefix.as_deref(), Some("application/pdf"));
+        assert_eq!(filters.visibility, Some(Visibility::Public));
     }
 
     struct MockRepo;

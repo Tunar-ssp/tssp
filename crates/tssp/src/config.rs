@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use tssp::{Cli, ConfigAction, ConfigCommand};
+use tssp::{Cli, ConfigAction, ConfigCommand, ConfigGetArgs, ConfigSetArgs, ConfigUnsetArgs};
 use tssp_cli_core::CliExitCode;
 
 const CONFIG_DIR_NAME: &str = "tssp";
@@ -84,118 +84,130 @@ pub(crate) fn run_config(cli: &Cli, command: &ConfigCommand) -> Result<CliExitCo
             println!("{}", path.display());
             Ok(CliExitCode::Success)
         }
-        ConfigAction::Get(args) => {
-            let config = load_config()?;
-            if let Some(key) = &args.key {
-                match key.as_str() {
-                    "host" => {
-                        if let Some(host) = config.host {
-                            println!("{host}");
-                        }
-                    }
-                    "port" => {
-                        if let Some(port) = config.port {
-                            println!("{port}");
-                        }
-                    }
-                    "token" => {
-                        if let Some(token) = config.token {
-                            println!("{token}");
-                        }
-                    }
-                    other => {
-                        eprintln!("error: unknown configuration key '{other}'");
-                        return Ok(CliExitCode::Usage);
-                    }
-                }
-            } else if cli.output.json {
-                let serialized = serde_json::to_string(&config)
-                    .map_err(|error| format!("failed to serialize config: {error}"))?;
-                println!("{serialized}");
-            } else {
-                if let Some(host) = config.host {
-                    println!("host = {host}");
-                }
-                if let Some(port) = config.port {
-                    println!("port = {port}");
-                }
-                if config.token.is_some() {
-                    println!("token = (set)");
-                }
+        ConfigAction::Get(args) => run_get(cli, args),
+        ConfigAction::Set(args) => run_set(cli, args),
+        ConfigAction::Unset(args) => run_unset(cli, args),
+    }
+}
+
+fn run_get(cli: &Cli, args: &ConfigGetArgs) -> Result<CliExitCode, String> {
+    let config = load_config()?;
+    if let Some(key) = &args.key {
+        return Ok(print_config_key(config, key));
+    }
+    if cli.output.json {
+        let serialized = serde_json::to_string(&config)
+            .map_err(|error| format!("failed to serialize config: {error}"))?;
+        println!("{serialized}");
+    } else {
+        print_config_human(config);
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn print_config_key(config: ConfigFile, key: &str) -> CliExitCode {
+    match key {
+        "host" => {
+            if let Some(host) = config.host {
+                println!("{host}");
             }
-            Ok(CliExitCode::Success)
         }
-        ConfigAction::Set(args) => {
-            let mut config = load_config()?;
-            match args.key.as_str() {
-                "host" => {
-                    let host = args.value.trim();
-                    if host.is_empty() {
-                        return Err("host cannot be empty".to_owned());
-                    }
-                    config.host = Some(host.to_owned());
-                }
-                "port" => {
-                    let port = args
-                        .value
-                        .parse::<u16>()
-                        .map_err(|_| "port must be a valid 16-bit unsigned integer".to_owned())?;
-                    config.port = Some(port);
-                }
-                "token" => {
-                    let token = args.value.trim();
-                    if token.is_empty() {
-                        return Err("token cannot be empty".to_owned());
-                    }
-                    config.token = Some(token.to_owned());
-                }
-                other => {
-                    eprintln!("error: unknown configuration key '{other}'");
-                    return Ok(CliExitCode::Usage);
-                }
+        "port" => {
+            if let Some(port) = config.port {
+                println!("{port}");
             }
-            save_config(&config)?;
-            if !cli.output.quiet {
-                println!("set {} = {}", args.key, args.value);
-            }
-            Ok(CliExitCode::Success)
         }
-        ConfigAction::Unset(args) => {
-            let mut config = load_config()?;
-            let mut found = false;
-            match args.key.as_str() {
-                "host" => {
-                    if config.host.is_some() {
-                        config.host = None;
-                        found = true;
-                    }
-                }
-                "port" => {
-                    if config.port.is_some() {
-                        config.port = None;
-                        found = true;
-                    }
-                }
-                "token" => {
-                    if config.token.is_some() {
-                        config.token = None;
-                        found = true;
-                    }
-                }
-                other => {
-                    eprintln!("error: unknown configuration key '{other}'");
-                    return Ok(CliExitCode::Usage);
-                }
+        "token" => {
+            if let Some(token) = config.token {
+                println!("{token}");
             }
-            if found {
-                save_config(&config)?;
-                if !cli.output.quiet {
-                    println!("unset {}", args.key);
-                }
-            } else if !cli.output.quiet {
-                println!("key {} was already not set", args.key);
+        }
+        other => {
+            eprintln!("error: unknown configuration key '{other}'");
+            return CliExitCode::Usage;
+        }
+    }
+    CliExitCode::Success
+}
+
+fn print_config_human(config: ConfigFile) {
+    if let Some(host) = config.host {
+        println!("host = {host}");
+    }
+    if let Some(port) = config.port {
+        println!("port = {port}");
+    }
+    if config.token.is_some() {
+        println!("token = (set)");
+    }
+}
+
+fn run_set(cli: &Cli, args: &ConfigSetArgs) -> Result<CliExitCode, String> {
+    let mut config = load_config()?;
+    if !set_config_value(&mut config, &args.key, &args.value)? {
+        return Ok(CliExitCode::Usage);
+    }
+    save_config(&config)?;
+    if !cli.output.quiet {
+        println!("set {} = {}", args.key, args.value);
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn set_config_value(config: &mut ConfigFile, key: &str, value: &str) -> Result<bool, String> {
+    match key {
+        "host" => {
+            let host = value.trim();
+            if host.is_empty() {
+                return Err("host cannot be empty".to_owned());
             }
-            Ok(CliExitCode::Success)
+            config.host = Some(host.to_owned());
+        }
+        "port" => {
+            let port = value
+                .parse::<u16>()
+                .map_err(|_| "port must be a valid 16-bit unsigned integer".to_owned())?;
+            config.port = Some(port);
+        }
+        "token" => {
+            let token = value.trim();
+            if token.is_empty() {
+                return Err("token cannot be empty".to_owned());
+            }
+            config.token = Some(token.to_owned());
+        }
+        other => {
+            eprintln!("error: unknown configuration key '{other}'");
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn run_unset(cli: &Cli, args: &ConfigUnsetArgs) -> Result<CliExitCode, String> {
+    let mut config = load_config()?;
+    let Some(found) = unset_config_value(&mut config, &args.key) else {
+        return Ok(CliExitCode::Usage);
+    };
+    if found {
+        save_config(&config)?;
+        if !cli.output.quiet {
+            println!("unset {}", args.key);
+        }
+    } else if !cli.output.quiet {
+        println!("key {} was already not set", args.key);
+    }
+    Ok(CliExitCode::Success)
+}
+
+fn unset_config_value(config: &mut ConfigFile, key: &str) -> Option<bool> {
+    match key {
+        "host" => Some(config.host.take().is_some()),
+        "port" => Some(config.port.take().is_some()),
+        "token" => Some(config.token.take().is_some()),
+        other => {
+            eprintln!("error: unknown configuration key '{other}'");
+            None
         }
     }
 }

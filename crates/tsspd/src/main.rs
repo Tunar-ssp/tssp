@@ -271,7 +271,7 @@ async fn run(cli: Cli) -> Result<(), String> {
             .map_err(|error| format!("could not initialize blob storage: {error}"))?,
     );
 
-    let corrupt_file_count = run_startup_integrity_scan(repository.clone(), storage.clone());
+    let corrupt_file_count = run_startup_integrity_scan(&repository, &storage);
 
     let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
     let upload_service = UploadService::new(

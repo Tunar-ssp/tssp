@@ -1,7 +1,6 @@
 //! Blob/index consistency checks at startup.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::SqliteFileRepository;
@@ -61,10 +60,10 @@ fn blob_exists(storage_root: &Path, hash: &ContentHash) -> bool {
 
 /// Runs integrity scan and logs summary.
 pub fn run_startup_integrity_scan(
-    repository: Arc<SqliteFileRepository>,
-    blob_store: Arc<FilesystemBlobStore>,
+    repository: &SqliteFileRepository,
+    blob_store: &FilesystemBlobStore,
 ) -> u64 {
-    match count_missing_blobs(&repository, &blob_store) {
+    match count_missing_blobs(repository, blob_store) {
         Ok(missing) => {
             if missing > 0 {
                 tracing::warn!(missing, "integrity scan found files with missing blobs");
@@ -81,6 +80,7 @@ pub fn run_startup_integrity_scan(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::blob_exists;
     use tssp_domain::ContentHash;

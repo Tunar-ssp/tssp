@@ -63,8 +63,7 @@ pub async fn auth_middleware(
     let peer = request
         .extensions()
         .get::<SocketAddr>()
-        .map(SocketAddr::ip)
-        .unwrap_or_else(|| std::net::IpAddr::from([127, 0, 0, 1]));
+        .map_or_else(|| std::net::IpAddr::from([127, 0, 0, 1]), SocketAddr::ip);
 
     let headers = request.headers();
     let forwarded = headers

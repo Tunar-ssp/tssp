@@ -20,10 +20,7 @@ pub(crate) fn validate_note_body(body: &str) -> Result<(), HttpNoteError> {
     }
     if body.len() > MAX_NOTE_BODY_BYTES {
         return Err(HttpNoteError::PayloadTooLarge {
-            message: format!(
-                "note body exceeds maximum size of {} bytes",
-                MAX_NOTE_BODY_BYTES
-            ),
+            message: format!("note body exceeds maximum size of {MAX_NOTE_BODY_BYTES} bytes"),
         });
     }
     // Exercise domain rules early so clients get consistent errors.

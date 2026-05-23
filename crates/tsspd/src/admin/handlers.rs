@@ -49,7 +49,7 @@ fn default_limit() -> u64 {
 
 /// `GET /api/v1/admin/overview`
 pub async fn admin_overview(State(state): State<HttpState>) -> impl IntoResponse {
-    let stats = match state.stats_provider.stats() {
+    let repository_stats = match state.stats_provider.stats() {
         Ok(value) => value,
         Err(message) => {
             return (
@@ -77,10 +77,10 @@ pub async fn admin_overview(State(state): State<HttpState>) -> impl IntoResponse
             schema_version: 1,
             version: env!("CARGO_PKG_VERSION"),
             uptime_seconds: state.started_at.elapsed().as_secs(),
-            file_count: stats.file_count,
-            note_count: stats.note_count,
-            tag_count: stats.tag_count,
-            pinned_count: stats.pinned_count,
+            file_count: repository_stats.file_count,
+            note_count: repository_stats.note_count,
+            tag_count: repository_stats.tag_count,
+            pinned_count: repository_stats.pinned_count,
             corrupt_file_count: state.corrupt_file_count,
             storage_bytes_used,
             public_url: Some(state.public_urls().base().to_owned()),

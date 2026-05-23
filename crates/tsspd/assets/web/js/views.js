@@ -359,6 +359,69 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.openWorkspaceDialog = function openWorkspaceDialog(workspace) {
+    T.editingWorkspaceId = workspace ? workspace.id : null;
+    T.$("#workspace-dialog-title").textContent = workspace
+      ? "Edit workspace"
+      : "New workspace";
+    T.$("#workspace-name-input").value = workspace ? workspace.name || "" : "";
+    T.$("#workspace-language-input").value = workspace
+      ? workspace.language || "text"
+      : "text";
+    T.$("#workspace-body-input").value = workspace ? workspace.body || "" : "";
+    T.$("#workspace-dialog").showModal();
+  };
+
+  T.saveWorkspace = async function saveWorkspace() {
+    const payload = {
+      name: T.$("#workspace-name-input").value.trim(),
+      language: T.$("#workspace-language-input").value.trim() || "text",
+      body: T.$("#workspace-body-input").value,
+    };
+    if (!payload.name) {
+      T.showBanner("Workspace name is required", "error");
+      return;
+    }
+    try {
+      if (T.editingWorkspaceId) {
+        await T.api("/workspaces/" + encodeURIComponent(T.editingWorkspaceId), {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await T.api("/workspaces", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      T.$("#workspace-dialog").close();
+      T.showBanner("Workspace saved", "success");
+      T.loadWorkspaces();
+    } catch (e) {
+      T.showBanner(e.message, "error");
+    }
+  };
+
+  T.openWorkspace = async function openWorkspace(id) {
+    try {
+      const workspace = await T.api("/workspaces/" + encodeURIComponent(id));
+      T.openWorkspaceDialog(workspace);
+    } catch (e) {
+      T.showBanner(e.message, "error");
+    }
+  };
+
+  T.deleteWorkspace = async function deleteWorkspace(id) {
+    if (!confirm("Delete this workspace?")) return;
+    try {
+      await T.api("/workspaces/" + encodeURIComponent(id), { method: "DELETE" });
+      T.showBanner("Workspace deleted", "success");
+      T.loadWorkspaces();
+    } catch (e) {
+      T.showBanner(e.message, "error");
+    }
+  };
+
   T.loadAdmin = async function loadAdmin() {
     const overview = T.$("#admin-overview");
     const system = T.$("#admin-system");

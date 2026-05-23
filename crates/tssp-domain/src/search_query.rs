@@ -1,12 +1,12 @@
-//! FTS5 query building with prefix matching for typo-tolerant search.
+//! Search tokenization and FTS5 query building.
 
 /// Builds an FTS5 `MATCH` expression from user input.
 ///
 /// Each token becomes a prefix term (`token*`) joined with `OR` so partial
-/// and mistyped queries still match. Special FTS characters are stripped.
+/// queries match. Special FTS characters are stripped before quoting.
 #[must_use]
 pub fn build_fts_query(input: &str) -> String {
-    let tokens = tokenize(input);
+    let tokens = search_terms(input);
     if tokens.is_empty() {
         return String::new();
     }
@@ -17,13 +17,13 @@ pub fn build_fts_query(input: &str) -> String {
         .join(" OR ")
 }
 
-fn tokenize(input: &str) -> Vec<String> {
+/// Returns normalized search terms used by ranking and bounded fuzzy fallback.
+#[must_use]
+pub fn search_terms(input: &str) -> Vec<String> {
     let mut out = Vec::new();
     for raw in input.split_whitespace() {
         let cleaned = sanitize_token(raw);
-        if cleaned.len() >= 2 {
-            out.push(cleaned);
-        } else if cleaned.len() == 1 {
+        if !cleaned.is_empty() {
             out.push(cleaned);
         }
     }
@@ -40,7 +40,7 @@ fn sanitize_token(token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::build_fts_query;
+    use super::{build_fts_query, search_terms};
 
     #[test]
     fn prefix_per_token() {
@@ -59,5 +59,10 @@ mod tests {
     #[test]
     fn empty_input_returns_empty() {
         assert!(build_fts_query("  ").is_empty());
+    }
+
+    #[test]
+    fn search_terms_are_lowercase_and_operator_safe() {
+        assert_eq!(search_terms("Annual \"Report\""), vec!["annual", "report"]);
     }
 }

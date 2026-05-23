@@ -9,15 +9,31 @@ use super::error::{map_note_error, HttpNoteError};
 /// HTTP-facing note operations.
 pub trait NoteProvider: Send + Sync {
     /// Creates a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when validation or persistence fails.
     fn create_note(&self, request: CreateNoteRequest) -> Result<NoteRecord, HttpNoteError>;
 
     /// Lists notes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when listing fails.
     fn list_notes(&self, query: NoteListQuery) -> Result<PagedNotes, HttpNoteError>;
 
     /// Returns one note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when the note is missing or lookup fails.
     fn get_note(&self, id: NoteId) -> Result<NoteRecord, HttpNoteError>;
 
     /// Replaces a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when validation or persistence fails.
     fn update_note(
         &self,
         id: NoteId,
@@ -25,18 +41,38 @@ pub trait NoteProvider: Send + Sync {
     ) -> Result<NoteRecord, HttpNoteError>;
 
     /// Deletes a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when deletion fails.
     fn delete_note(&self, id: NoteId) -> Result<(), HttpNoteError>;
 
     /// Adds tags to a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when validation or persistence fails.
     fn add_tags(&self, id: NoteId, tags: Vec<String>) -> Result<u64, HttpNoteError>;
 
     /// Removes a tag from a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when validation or persistence fails.
     fn remove_tag(&self, id: NoteId, tag: String) -> Result<u64, HttpNoteError>;
 
     /// Pins a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when the note is missing or persistence fails.
     fn pin_note(&self, id: NoteId, position: Option<u32>) -> Result<(), HttpNoteError>;
 
     /// Unpins a note.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when the note is missing or persistence fails.
     fn unpin_note(&self, id: NoteId) -> Result<(), HttpNoteError>;
 }
 

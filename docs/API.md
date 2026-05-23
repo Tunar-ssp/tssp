@@ -483,16 +483,26 @@ Errors:
 
 ## `GET /api/v1/search`
 
-Runs full-text search against filenames and indexed tags.
+Runs unified search across indexed files, notes, tags, MIME types, and pin/public
+state. Search uses SQLite FTS5 for exact and prefix matches, then applies a
+bounded fuzzy fallback over indexed prefix candidates so typo handling does not
+scan the full database.
 
 Query parameters:
 
 - `q`: required search string.
+- `limit`: optional result limit. Defaults to `50`; maximum is `100`.
+- `kind`: optional `all`, `file`, or `note`.
+- `tag`: optional normalized tag filter.
+- `type`: optional MIME prefix filter for files, such as `image/`.
+- `pinned`: optional `true` to return pinned files and notes only.
+- `visibility`: optional file visibility filter, `public` or `private`.
 
 Example:
 
 ```sh
 curl 'http://127.0.0.1:8421/api/v1/search?q=report'
+curl 'http://127.0.0.1:8421/api/v1/search?q=photo&kind=file&type=image/&limit=20'
 ```
 
 Response:
@@ -500,8 +510,10 @@ Response:
 ```json
 {
   "schema_version": 1,
-  "files": [
+  "limit": 50,
+  "results": [
     {
+      "type": "file",
       "schema_version": 1,
       "id": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f",
       "name": "report.pdf",
@@ -509,6 +521,17 @@ Response:
       "content_hash": "6caeccdad8d0e6ff73e98a68b77cc62a0e1871f4fb18c6c8e1c12e4f3da10827",
       "mime_type": "application/pdf",
       "uploaded_at": 1779494400,
+      "tags": ["Docs"],
+      "pinned": false
+    },
+    {
+      "type": "note",
+      "schema_version": 1,
+      "id": "019b2f12-0f65-7a4a-8e48-280ad8d25a7b",
+      "title": "Meeting notes",
+      "body": "# Meeting notes\n\nDiscuss report",
+      "created_at": 1779494300,
+      "updated_at": 1779494400,
       "tags": ["Docs"],
       "pinned": false
     }
@@ -520,8 +543,81 @@ Status: `200 OK`
 
 Errors:
 
-- `400 Bad Request` when `q` is empty.
+- `400 Bad Request` when `q` is empty or a filter is invalid.
 - `500 Internal Server Error` when search fails.
+
+## `GET /api/v1/workspaces`
+
+Lists saved text/script workspaces. Workspaces are storage only; the daemon does
+not execute workspace bodies.
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "workspaces": [
+    {
+      "id": "ws-019b2f0f3b1f7c20bd797bb4f46e7f9f",
+      "owner_id": "user-tunar",
+      "name": "Pi maintenance",
+      "language": "text",
+      "body": "journalctl -u tsspd",
+      "created_at": 1779494300,
+      "updated_at": 1779494400
+    }
+  ]
+}
+```
+
+Admins see all workspaces; normal users see only their own.
+
+## `POST /api/v1/workspaces`
+
+Creates a workspace.
+
+Request:
+
+```json
+{
+  "name": "Pi maintenance",
+  "language": "text",
+  "body": "journalctl -u tsspd"
+}
+```
+
+Validation:
+
+- `name` is required and limited to 120 bytes.
+- `language` defaults to `text`, is limited to 40 bytes, and accepts only
+  ASCII letters, digits, `.`, `-`, `_`, `+`, and `#`.
+- `body` is limited to 1 MiB.
+
+Status: `201 Created`
+
+## `GET /api/v1/workspaces/{id}`
+
+Returns one workspace if the caller owns it or is an admin.
+
+Status: `200 OK`
+
+Errors:
+
+- `404 Not Found` when the workspace does not exist or is owned by another user.
+
+## `PUT /api/v1/workspaces/{id}`
+
+Replaces a workspace name, language, and body. Admin updates preserve the
+original owner.
+
+Status: `200 OK`
+
+## `DELETE /api/v1/workspaces/{id}`
+
+Deletes a workspace. Admins may delete any workspace; normal users may delete
+only their own.
+
+Status: `204 No Content`
 
 ## `GET /api/v1/status`
 
