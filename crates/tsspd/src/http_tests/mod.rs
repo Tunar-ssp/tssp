@@ -1,3 +1,6 @@
+#[allow(dead_code)]
+pub(crate) mod common;
+
 use std::io::Read;
 use std::sync::Arc;
 
