@@ -54,6 +54,7 @@ tests can cover edge cases directly.
 - `IdGenerator`
 - `BlobStore`
 - `FileRepository`
+- `SessionRepository`
 
 These traits are intentionally small. Concrete adapters can be added without
 changing the use-case code.
@@ -74,6 +75,11 @@ same hash.
 `TagService` lists tag summaries and performs idempotent add/remove mutations.
 It normalizes raw tag strings through the domain layer before asking the
 repository to update the join table.
+
+`SessionService` manages transfer sessions for file sharing. It creates send
+sessions (bound to a specific file) and receive sessions (accepting anonymous
+uploads), both with caller-provided TTL. It retrieves sessions by token,
+marks sessions as used, and cleans up expired sessions based on the current time.
 
 The application layer owns ordering and consistency rules. It does not contain
 HTTP status codes, SQLite statements, or terminal output.
@@ -99,19 +105,23 @@ as deduplicated.
 
 ## SQLite Metadata Adapter
 
-`tssp-adapter-sqlite` implements `FileRepository`. Opening a repository applies
-the required pragmas, runs `PRAGMA integrity_check`, and executes embedded
-forward-only schema setup. The current schema stores files, tags, file/tag joins,
-schema migration records, and an FTS5 table reserved for search.
+`tssp-adapter-sqlite` implements `FileRepository` and `SessionRepository`.
+Opening a repository applies the required pragmas, runs `PRAGMA integrity_check`,
+and executes embedded forward-only schema setup. The current schema stores files,
+tags, file/tag joins, sessions, schema migration records, and an FTS5 table
+reserved for search.
 
 All writes use prepared statements through `rusqlite`. The adapter maps busy and
 locked database states to `RepositoryError::Busy`, duplicate constraints to
 `RepositoryError::Conflict`, and corrupt domain values read from the database to
 typed operation failures.
 
-The repository also exposes aggregate counts for status reporting: total files,
+The file repository exposes aggregate counts for status reporting: total files,
 distinct tags, pinned files, and recent uploads since a caller-provided UTC
 cutoff.
+
+The session repository manages transfer tokens with expiration tracking, session
+kind (send or receive), and optional source/destination file references.
 
 ## System Adapter
 
@@ -136,12 +146,17 @@ The daemon foundation lives in `tsspd`. It currently exposes:
 - `GET /api/v1/status`
 - `POST /api/v1/files`
 - `GET /api/v1/files`
-- `GET /api/v1/tags`
+- `PATCH /api/v1/files/{id}`
+- `DELETE /api/v1/files/{id}`
 - `GET /api/v1/files/{id}`
 - `GET /api/v1/files/{id}/content`
-- `DELETE /api/v1/files/{id}`
 - `POST /api/v1/files/{id}/tags`
 - `DELETE /api/v1/files/{id}/tags/{tag}`
+- `GET /api/v1/tags`
+- `POST /api/v1/sessions/send`
+- `POST /api/v1/sessions/receive`
+- `GET /api/v1/sessions/{token}`
+- `POST /api/v1/sessions/{token}/use`
 - `GET /<any-non-api-path>` as a placeholder web shell
 
 The binary initializes the data directory, opens the SQLite metadata repository,

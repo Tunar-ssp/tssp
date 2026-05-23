@@ -59,10 +59,10 @@ completions
 ```
 
 The default upload action, `status`, `list`, `last`, `search`, `info`,
-exact-id `pull`, `tag`, `untag`, `pin`, `unpin`, `pins`, and `remove` are
-wired to the daemon. Other command execution is still being wired to backend
-services. Parsing and shell completion generation are implemented for the full
-command surface.
+exact-id `pull`, `tag`, `untag`, `pin`, `unpin`, `pins`, `remove`, `send`,
+`receive`, `paste`, `copy`, and `init` are wired to the daemon. `config` and
+`completions` are handled locally. Parsing and shell completion generation are
+implemented for the full command surface.
 
 ## `tssp list`
 
@@ -189,6 +189,61 @@ tssp pins reorder <id-1> <id-2>
 `list` calls `GET /api/v1/pins` and prints pin order. `reorder` calls
 `POST /api/v1/pins/reorder` with a JSON body containing the new ordered id
 list.
+
+## `tssp send`
+
+```sh
+tssp send <file>
+tssp send <file> --tag Docs
+tssp send <file> --qr
+```
+
+Creates a send session for a file and generates a time-limited share token.
+Supports `--tag` for initial tags. The `--qr` flag requests QR code output for
+mobile device scanning.
+
+## `tssp receive`
+
+```sh
+tssp receive
+tssp receive --save ./downloads
+tssp receive --timeout 600
+```
+
+Creates a receive session and waits for an upload. The `--save <path>` option
+saves the received file locally. `--timeout` specifies maximum wait duration
+in seconds (default 300).
+
+## `tssp paste`
+
+```sh
+tssp paste
+tssp paste --tag Docs
+tssp paste --as custom-filename.txt
+```
+
+Uploads the current clipboard contents. Supports text, image, and file-list
+clipboard sources. The `--tag` flag adds initial tags; `--as` overrides the
+generated filename.
+
+## `tssp copy`
+
+```sh
+tssp copy <id>
+tssp copy <id> --share
+```
+
+Copies a file download URL to the clipboard. The `--share` flag generates a
+time-limited share URL instead of a direct content URL.
+
+## `tssp init`
+
+```sh
+tssp init
+```
+
+First-run configuration wizard. Prompts for daemon hostname and port and saves
+the configuration for future commands.
 
 ## `tssp status`
 

@@ -555,6 +555,153 @@ error shape:
 }
 ```
 
+## `PATCH /api/v1/files/{id}`
+
+Renames a file or updates its metadata.
+
+Request body:
+
+```json
+{
+  "name": "new-filename.txt"
+}
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "file": {
+    "id": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f",
+    "name": "new-filename.txt",
+    "size_bytes": 12,
+    "mime_type": "text/plain",
+    "tags": ["Docs"],
+    "uploaded_at": 1779494400,
+    "pinned": true
+  }
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `400 Bad Request` when the id or name is malformed.
+- `404 Not Found` when the file id does not exist.
+- `500 Internal Server Error` when metadata update fails.
+
+## `POST /api/v1/sessions/send`
+
+Creates a send session for sharing a file via a time-limited transfer token.
+
+Request body:
+
+```json
+{
+  "file_id": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f",
+  "ttl_seconds": 3600
+}
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "token": "aaaaaaaaaaaaaaaaaaaaaa",
+  "kind": "send",
+  "created_at": 1779494400,
+  "expires_at": 1779498000,
+  "source_file": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f"
+}
+```
+
+Status: `201 Created`
+
+Errors:
+
+- `400 Bad Request` when parameters are invalid.
+- `404 Not Found` when the file does not exist.
+- `503 Service Unavailable` when the session store is unavailable.
+
+## `POST /api/v1/sessions/receive`
+
+Creates a receive session for accepting a file upload via a time-limited transfer token.
+
+Request body:
+
+```json
+{
+  "ttl_seconds": 3600
+}
+```
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "token": "aaaaaaaaaaaaaaaaaaaaaa",
+  "kind": "receive",
+  "created_at": 1779494400,
+  "expires_at": 1779498000
+}
+```
+
+Status: `201 Created`
+
+Errors:
+
+- `400 Bad Request` when parameters are invalid.
+- `503 Service Unavailable` when the session store is unavailable.
+
+## `GET /api/v1/sessions/{token}`
+
+Retrieves a session by token.
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "token": "aaaaaaaaaaaaaaaaaaaaaa",
+  "kind": "send",
+  "created_at": 1779494400,
+  "expires_at": 1779498000,
+  "source_file": "019b2f0f-3b1f-7c20-bd79-7bb4f46e7f9f"
+}
+```
+
+Status: `200 OK`
+
+Errors:
+
+- `400 Bad Request` when the token is malformed.
+- `404 Not Found` when the session does not exist or has expired.
+- `503 Service Unavailable` when the session store is unavailable.
+
+## `POST /api/v1/sessions/{token}/use`
+
+Marks a session as used (consumed or accessed).
+
+Response:
+
+```json
+{
+  "schema_version": 1
+}
+```
+
+Status: `204 No Content` or `200 OK`
+
+Errors:
+
+- `400 Bad Request` when the token is malformed.
+- `404 Not Found` when the session does not exist.
+- `503 Service Unavailable` when the session store is unavailable.
+
 ## Web Fallback
 
 `GET /` and non-API paths return the embedded placeholder web shell with:
