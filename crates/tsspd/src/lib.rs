@@ -13,6 +13,7 @@ mod pins;
 mod rename;
 mod search;
 mod sessions;
+mod startup;
 mod status;
 mod tags;
 mod upload;
