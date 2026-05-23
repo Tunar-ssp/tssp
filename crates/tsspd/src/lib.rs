@@ -168,6 +168,7 @@ pub fn build_router(state: HttpState) -> Router {
         .route("/api/v1/status", get(status::status))
         .fallback(web::web_fallback)
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(tower_http::cors::CorsLayer::very_permissive())
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             axum::http::header::CONTENT_SECURITY_POLICY,
             axum::http::HeaderValue::from_static("default-src 'self'"),

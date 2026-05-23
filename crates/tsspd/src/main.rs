@@ -64,6 +64,27 @@ async fn main() -> ExitCode {
     }
 }
 
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::SignalKind;
+        let mut sigterm = signal::unix::signal(SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
+
+        tokio::select! {
+            _ = signal::ctrl_c() => {},
+            _ = sigterm.recv() => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = signal::ctrl_c().await;
+    }
+}
+
 async fn run(cli: Cli) -> Result<(), String> {
     let config = DaemonConfig {
         bind: cli.bind,
@@ -125,6 +146,7 @@ async fn run(cli: Cli) -> Result<(), String> {
 
     tracing::info!("tsspd listening on http://{address}");
     axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|error| format!("server failed: {error}"))?;
 
