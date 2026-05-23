@@ -483,4 +483,52 @@ mod tests {
             "Tue, 14 Nov 2023 22:13:20 GMT"
         );
     }
+
+    #[test]
+    fn parse_range_header_returns_none_for_missing_range() {
+        assert_eq!(parse_range_header(None, 100), Ok(None));
+    }
+
+    #[test]
+    fn parse_range_header_handles_empty_suffix_suffix() {
+        let header = HeaderValue::from_static("bytes=-0");
+        assert_eq!(parse_range_header(Some(&header), 10), Err(()));
+    }
+
+    #[test]
+    fn byte_range_wraps_at_file_boundary() {
+        assert_eq!(
+            parse_range_header(Some(&HeaderValue::from_static("bytes=0-999")), 10),
+            Ok(Some(ByteRange {
+                start: 0,
+                end_inclusive: 9
+            }))
+        );
+    }
+
+    #[test]
+    fn content_disposition_escapes_control_chars() {
+        assert_eq!(
+            content_disposition(DispositionMode::Inline, "file\r\n.txt"),
+            "inline; filename=\"file__.txt\""
+        );
+    }
+
+    #[test]
+    fn disposition_mode_defaults_to_attachment() {
+        assert_eq!(disposition_mode(None), Ok(DispositionMode::Attachment));
+    }
+
+    #[test]
+    fn disposition_mode_accepts_inline() {
+        assert_eq!(
+            disposition_mode(Some("inline")),
+            Ok(DispositionMode::Inline)
+        );
+    }
+
+    #[test]
+    fn disposition_mode_rejects_invalid() {
+        assert!(disposition_mode(Some("preview")).is_err());
+    }
 }
