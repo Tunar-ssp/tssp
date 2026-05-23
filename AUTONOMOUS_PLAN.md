@@ -49,8 +49,8 @@ Tasks are intentionally small, verifiable, and ordered by dependency.
 
 ## Documentation And Quality
 
-- [ ] Sync README, API, CLI, architecture, install, and configuration docs with the implemented feature set
-- [ ] Raise measured workspace coverage to at least 70%
+- [x] Sync README, API, CLI, architecture, install, and configuration docs with the implemented feature set
+- [ ] Raise measured workspace coverage to at least 80% (currently ~71%)
 - [ ] Run the final workspace verification pass: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo tarpaulin --workspace --out Xml --output-dir coverage`
 # Autonomous Execution Contract
 
