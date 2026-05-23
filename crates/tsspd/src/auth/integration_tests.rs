@@ -1,6 +1,7 @@
 //! HTTP integration tests for authentication and authorization.
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::sync::Arc;
 

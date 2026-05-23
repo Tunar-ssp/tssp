@@ -138,10 +138,10 @@ pub(crate) async fn web_fallback(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    serve_index_html().await
+    serve_index_html()
 }
 
-async fn serve_index_html() -> Response<Body> {
+fn serve_index_html() -> Response<Body> {
     let mut response = Html(INDEX_HTML.to_owned()).into_response();
     let headers = response.headers_mut();
     headers.insert(

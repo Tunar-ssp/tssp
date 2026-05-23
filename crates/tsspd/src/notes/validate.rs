@@ -42,6 +42,7 @@ fn map_domain_validation(error: DomainError) -> HttpNoteError {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::{parse_note_id, validate_note_body};
     use tssp_domain::MAX_NOTE_BODY_BYTES;

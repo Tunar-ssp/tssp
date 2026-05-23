@@ -234,9 +234,29 @@ impl UserStore {
     ///
     /// # Errors
     ///
-    /// Returns an error when the user does not exist.
+    /// Returns an error when the user does not exist or when the change would
+    /// leave the system without an enabled admin.
     pub fn set_role(&self, id: &UserId, role: UserRole) -> Result<(), UserStoreError> {
         let connection = self.lock()?;
+        if matches!(role, UserRole::User) {
+            let admin_count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled_at IS NULL",
+                [],
+                |row| row.get(0),
+            )?;
+            let target_role: String = connection
+                .query_row(
+                    "SELECT role FROM users WHERE id = ?1",
+                    params![id.as_str()],
+                    |row| row.get(0),
+                )
+                .map_err(|_| UserStoreError::NotFound)?;
+            if target_role == "admin" && admin_count <= 1 {
+                return Err(UserStoreError::Invalid(
+                    "cannot demote the last admin user".to_owned(),
+                ));
+            }
+        }
         let changed = connection.execute(
             "UPDATE users SET role = ?1 WHERE id = ?2",
             params![role.as_str(), id.as_str()],

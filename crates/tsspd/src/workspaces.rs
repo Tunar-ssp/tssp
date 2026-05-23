@@ -32,7 +32,7 @@ pub struct WorkspaceStore {
 /// Workspace persistence failures.
 #[derive(Debug, Error)]
 pub enum WorkspaceError {
-    /// SQLite operation failed.
+    /// `SQLite` operation failed.
     #[error("database error: {0}")]
     Database(#[from] rusqlite::Error),
     /// The requested workspace does not exist or is not visible to the caller.
@@ -500,6 +500,19 @@ fn bad_request(message: &str) -> Response {
         .into_response()
 }
 
+fn internal(message: String) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: "internal_error",
+                message,
+            },
+        }),
+    )
+        .into_response()
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -703,17 +716,4 @@ mod tests {
         let response = router.oneshot(request).await.expect("response");
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
-}
-
-fn internal(message: String) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: "internal_error",
-                message,
-            },
-        }),
-    )
-        .into_response()
 }

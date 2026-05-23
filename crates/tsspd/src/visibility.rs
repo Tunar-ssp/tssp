@@ -13,10 +13,10 @@ use crate::auth::AuthContext;
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
-fn new_public_token() -> String {
+fn new_public_token() -> Result<String, String> {
     let mut bytes = [0_u8; 24];
-    getrandom(&mut bytes).expect("random bytes");
-    URL_SAFE_NO_PAD.encode(bytes)
+    getrandom(&mut bytes).map_err(|error| format!("failed to generate public token: {error}"))?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
 fn can_manage_file(auth: &AuthContext, file: &FileRecord) -> bool {
@@ -124,10 +124,13 @@ pub async fn patch_file_visibility(
 
     let (public_token, public_url) = match visibility {
         Visibility::Public => {
-            let token = existing
-                .public_token
-                .clone()
-                .unwrap_or_else(new_public_token);
+            let token = match existing.public_token.clone() {
+                Some(token) => token,
+                None => match new_public_token() {
+                    Ok(token) => token,
+                    Err(message) => return internal(message),
+                },
+            };
             let url = Some(state.public_urls().public_file_url(&token));
             (Some(token), url)
         }
@@ -189,9 +192,8 @@ pub async fn bulk_file_visibility(
 
     let mut updated = Vec::new();
     for id_str in &body.ids {
-        let file_id = match FileId::new(id_str) {
-            Ok(value) => value,
-            Err(_) => continue,
+        let Ok(file_id) = FileId::new(id_str) else {
+            continue;
         };
         let Some(existing) = state.stats_provider.find_file(&file_id).ok().flatten() else {
             continue;
@@ -199,13 +201,15 @@ pub async fn bulk_file_visibility(
         if !can_manage_file(&auth, &existing) {
             continue;
         }
-        let token = if visibility == Visibility::Public {
-            existing
-                .public_token
-                .clone()
-                .or_else(|| Some(new_public_token()))
-        } else {
-            None
+        let token = match visibility {
+            Visibility::Public => match existing.public_token.clone() {
+                Some(token) => Some(token),
+                None => match new_public_token() {
+                    Ok(token) => Some(token),
+                    Err(message) => return internal(message),
+                },
+            },
+            Visibility::Private => None,
         };
         if let Ok(Some(file)) =
             state

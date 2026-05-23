@@ -209,8 +209,10 @@ mod tests {
 
     #[test]
     fn rejects_invalid_public_url() {
-        let mut settings = DaemonSettings::default();
-        settings.public_url = Some("ftp://bad".to_owned());
+        let settings = DaemonSettings {
+            public_url: Some("ftp://bad".to_owned()),
+            ..DaemonSettings::default()
+        };
         assert!(settings.validate().is_err());
     }
 

@@ -40,4 +40,18 @@ mod tests {
             .expect("login");
         assert!(session.role == UserRole::Admin);
     }
+
+    #[test]
+    fn last_admin_cannot_be_demoted() {
+        let (_temp, auth) = service_with_tunar();
+        let users = auth.users().expect("users");
+        let id = UserId::new("user-tunar").expect("id");
+
+        let result = users.set_role(&id, UserRole::User);
+
+        assert!(result
+            .expect_err("last admin demotion must fail")
+            .to_string()
+            .contains("last admin"));
+    }
 }

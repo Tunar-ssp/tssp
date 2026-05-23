@@ -6,8 +6,12 @@ window.Tssp = window.Tssp || {};
   T.authRequired = false;
   T.searchTimer = null;
   T.editingNoteId = null;
+  T.editingNoteTags = [];
+  T.editingNotePinned = false;
   T.editingWorkspaceId = null;
   T.currentFolder = "";
+  T.currentFiles = [];
+  T.selectedFileIds = new Set();
 
   T.showLogin = function showLogin() {
     T.$("#login-screen").classList.remove("hidden");

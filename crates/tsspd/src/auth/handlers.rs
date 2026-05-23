@@ -252,9 +252,9 @@ pub async fn auth_me(
     StatusCode::UNAUTHORIZED.into_response()
 }
 
-async fn perform_login(
+fn perform_login(
     state: &HttpState,
-    body: LoginRequest,
+    body: &LoginRequest,
     kind: &str,
     peer: SocketAddr,
     headers: &HeaderMap,
@@ -365,7 +365,7 @@ pub async fn auth_login(
     headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Response {
-    perform_login(&state, body, "web", peer, &headers, true).await
+    perform_login(&state, &body, "web", peer, &headers, true)
 }
 
 /// CLI token exchange (Bearer only, no cookie).
@@ -375,7 +375,7 @@ pub async fn auth_token(
     headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    perform_login(&state, body, "api", peer, &headers, false).await
+    perform_login(&state, &body, "api", peer, &headers, false)
 }
 
 /// Logout: revokes cookie/bearer token when present.

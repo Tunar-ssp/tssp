@@ -1,7 +1,7 @@
 //! `tsspd` binary entry point.
 
 use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
@@ -149,6 +149,61 @@ fn cleanup_temp_uploads(temp_dir: &std::path::Path) {
     }
 }
 
+struct RuntimePaths {
+    upload_temp_dir: PathBuf,
+    metadata_path: PathBuf,
+}
+
+fn load_settings(cli: &Cli) -> Result<DaemonSettings, String> {
+    let data_dir = cli
+        .data_dir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("data"));
+    DaemonSettings::load(&data_dir, &cli_overrides(cli))
+}
+
+fn print_check_config(settings: &DaemonSettings) {
+    println!(
+        "configuration ok: {}, data dir {}",
+        settings.socket_addr(),
+        settings.data_dir.display()
+    );
+    println!("config file: {}", settings.config_file_path().display());
+}
+
+fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, String> {
+    std::fs::create_dir_all(&settings.data_dir)
+        .map_err(|error| format!("could not create data directory: {error}"))?;
+
+    if !settings.data_dir.is_dir() {
+        return Err(format!(
+            "data directory {} is not accessible",
+            settings.data_dir.display()
+        ));
+    }
+
+    let upload_temp_dir = settings.data_dir.join("http-upload-tmp");
+    std::fs::create_dir_all(&upload_temp_dir)
+        .map_err(|error| format!("could not create upload temp directory: {error}"))?;
+
+    Ok(RuntimePaths {
+        upload_temp_dir,
+        metadata_path: settings.data_dir.join("metadata.sqlite3"),
+    })
+}
+
+fn open_repository(metadata_path: &Path) -> Result<Arc<SqliteFileRepository>, String> {
+    SqliteFileRepository::open(metadata_path)
+        .map(Arc::new)
+        .map_err(|error| format!("could not initialize metadata store: {error}"))
+}
+
+fn open_storage(settings: &DaemonSettings) -> Result<Arc<FilesystemBlobStore>, String> {
+    FilesystemBlobStore::new(settings.data_dir.join("storage"))
+        .map(Arc::new)
+        .map_err(|error| format!("could not initialize blob storage: {error}"))
+}
+
 fn bootstrap_admin_user(auth: &AuthService, now: i64) -> Result<(), String> {
     let Some(users) = auth.users() else {
         return Ok(());
@@ -202,6 +257,116 @@ fn configure_auth_password(auth: &AuthService) -> Result<(), String> {
     Ok(())
 }
 
+fn start_session_service(
+    metadata_path: &Path,
+    upload_temp_dir: &Path,
+) -> Result<SessionService<SqliteSessionRepository>, String> {
+    let session_connection = rusqlite::Connection::open(metadata_path)
+        .map_err(|error| format!("could not open session database connection: {error}"))?;
+    let session_repository =
+        SqliteSessionRepository::new(Arc::new(std::sync::Mutex::new(session_connection)));
+    let session_service = SessionService::new(session_repository);
+
+    let now = SystemClock.now();
+    let deleted = session_service
+        .cleanup_expired_sessions(now)
+        .map_err(|error| format!("session cleanup failed: {error}"))?;
+    if deleted > 0 {
+        tracing::info!("startup: removed {deleted} expired sessions");
+    }
+
+    cleanup_temp_uploads(upload_temp_dir);
+    Ok(session_service)
+}
+
+fn start_auth_service(
+    metadata_path: &Path,
+    settings: &DaemonSettings,
+) -> Result<AuthService, String> {
+    let auth_store = Arc::new(
+        AuthStore::open(metadata_path)
+            .map_err(|error| format!("could not initialize auth store: {error}"))?,
+    );
+    let user_store = Arc::new(
+        UserStore::open(metadata_path)
+            .map_err(|error| format!("could not initialize user store: {error}"))?,
+    );
+    let device_store = Arc::new(
+        DeviceStore::open(metadata_path)
+            .map_err(|error| format!("could not initialize device store: {error}"))?,
+    );
+    let auth_service = AuthService::new(
+        auth_store,
+        user_store,
+        device_store,
+        settings.trust_forwarded,
+        settings.public_url.is_some(),
+    );
+
+    let now_secs = SystemClock.now().seconds();
+    bootstrap_admin_user(&auth_service, now_secs)?;
+    configure_auth_password(&auth_service)?;
+    let (removed_tokens, removed_devices) = auth_service
+        .cleanup_expired(now_secs)
+        .map_err(|error| format!("auth cleanup failed: {error}"))?;
+    if removed_tokens > 0 {
+        tracing::info!("startup: removed {removed_tokens} expired auth tokens");
+    }
+    if removed_devices > 0 {
+        tracing::info!("startup: removed {removed_devices} expired trusted devices");
+    }
+
+    Ok(auth_service)
+}
+
+fn build_http_state(
+    settings: &Arc<DaemonSettings>,
+    paths: RuntimePaths,
+    repository: Arc<SqliteFileRepository>,
+    storage: Arc<FilesystemBlobStore>,
+    session_service: SessionService<SqliteSessionRepository>,
+    auth_service: AuthService,
+    corrupt_file_count: u64,
+) -> Result<HttpState, String> {
+    let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
+    let upload_service = UploadService::new(
+        storage.clone(),
+        repository.clone(),
+        UuidV7FileIdGenerator,
+        SystemClock,
+    );
+    let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
+    let tag_service = TagService::new(repository.clone());
+    let pin_service = PinService::new(repository.clone());
+    let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
+    let workspace_store = Arc::new(
+        WorkspaceStore::open(&paths.metadata_path)
+            .map_err(|error| format!("could not initialize workspace store: {error}"))?,
+    );
+
+    Ok(HttpState::new(
+        Instant::now(),
+        paths.upload_temp_dir,
+        settings.clone(),
+        PublicUrlBuilder::from_settings(settings),
+        corrupt_file_count,
+    )
+    .with_workspaces(workspace_store)
+    .with_stats_provider(Arc::new(stats_provider))
+    .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+    .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
+    .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
+    .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
+    .with_session_provider(Arc::new(ApplicationSessionProvider::new(
+        session_service,
+        SystemClock,
+    )))
+    .with_note_provider(Arc::new(ApplicationNoteProvider::new(note_service)))
+    .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(repository)))
+    .with_blob_reader(storage)
+    .with_auth(auth_service))
+}
+
 async fn shutdown_signal() {
     use tokio::signal;
 
@@ -225,116 +390,24 @@ async fn shutdown_signal() {
 }
 
 async fn run(cli: Cli) -> Result<(), String> {
-    let data_dir = cli
-        .data_dir
-        .clone()
-        .unwrap_or_else(|| PathBuf::from("data"));
-    let settings = DaemonSettings::load(&data_dir, &cli_overrides(&cli))?;
+    let settings = load_settings(&cli)?;
 
     if cli.check_config {
-        println!(
-            "configuration ok: {}, data dir {}",
-            settings.socket_addr(),
-            settings.data_dir.display()
-        );
-        println!("config file: {}", settings.config_file_path().display());
+        print_check_config(&settings);
         return Ok(());
     }
 
     settings.log_effective();
-
-    std::fs::create_dir_all(&settings.data_dir)
-        .map_err(|error| format!("could not create data directory: {error}"))?;
-
-    if !settings.data_dir.is_dir() {
-        return Err(format!(
-            "data directory {} is not accessible",
-            settings.data_dir.display()
-        ));
-    }
-
-    let http_upload_temp_dir = settings.data_dir.join("http-upload-tmp");
-    std::fs::create_dir_all(&http_upload_temp_dir)
-        .map_err(|error| format!("could not create upload temp directory: {error}"))?;
-
-    let metadata_path = settings.data_dir.join("metadata.sqlite3");
-    let repository = Arc::new(
-        SqliteFileRepository::open(&metadata_path)
-            .map_err(|error| format!("could not initialize metadata store: {error}"))?,
-    );
-
-    run_integrity_check(&metadata_path)
+    let paths = prepare_runtime_paths(&settings)?;
+    let repository = open_repository(&paths.metadata_path)?;
+    run_integrity_check(&paths.metadata_path)
         .map_err(|error| format!("database integrity check failed: {error}"))?;
-
-    let storage = Arc::new(
-        FilesystemBlobStore::new(settings.data_dir.join("storage"))
-            .map_err(|error| format!("could not initialize blob storage: {error}"))?,
-    );
-
+    let storage = open_storage(&settings)?;
     let corrupt_file_count = run_startup_integrity_scan(&repository, &storage);
-
-    let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
-    let upload_service = UploadService::new(
-        storage.clone(),
-        repository.clone(),
-        UuidV7FileIdGenerator,
-        SystemClock,
-    );
-    let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
-    let tag_service = TagService::new(repository.clone());
-    let pin_service = PinService::new(repository.clone());
-    let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
-    let session_connection = rusqlite::Connection::open(&metadata_path)
-        .map_err(|error| format!("could not open session database connection: {error}"))?;
-    let session_repository =
-        SqliteSessionRepository::new(Arc::new(std::sync::Mutex::new(session_connection)));
-    let session_service = SessionService::new(session_repository);
-
-    let now = SystemClock.now();
-    let deleted = session_service
-        .cleanup_expired_sessions(now)
-        .map_err(|error| format!("session cleanup failed: {error}"))?;
-    if deleted > 0 {
-        tracing::info!("startup: removed {deleted} expired sessions");
-    }
-
-    cleanup_temp_uploads(&http_upload_temp_dir);
-
-    let auth_store = Arc::new(
-        AuthStore::open(&metadata_path)
-            .map_err(|error| format!("could not initialize auth store: {error}"))?,
-    );
-    let user_store = Arc::new(
-        UserStore::open(&metadata_path)
-            .map_err(|error| format!("could not initialize user store: {error}"))?,
-    );
-    let device_store = Arc::new(
-        DeviceStore::open(&metadata_path)
-            .map_err(|error| format!("could not initialize device store: {error}"))?,
-    );
-    let global_auth_required = settings.public_url.is_some();
-    let auth_service = AuthService::new(
-        auth_store,
-        user_store,
-        device_store,
-        settings.trust_forwarded,
-        global_auth_required,
-    );
-    let now_secs = SystemClock.now().seconds();
-    bootstrap_admin_user(&auth_service, now_secs)?;
-    configure_auth_password(&auth_service)?;
-    let (removed_tokens, removed_devices) = auth_service
-        .cleanup_expired(now_secs)
-        .map_err(|error| format!("auth cleanup failed: {error}"))?;
-    if removed_tokens > 0 {
-        tracing::info!("startup: removed {removed_tokens} expired auth tokens");
-    }
-    if removed_devices > 0 {
-        tracing::info!("startup: removed {removed_devices} expired trusted devices");
-    }
+    let session_service = start_session_service(&paths.metadata_path, &paths.upload_temp_dir)?;
+    let auth_service = start_auth_service(&paths.metadata_path, &settings)?;
 
     let settings = Arc::new(settings);
-    let public_urls = PublicUrlBuilder::from_settings(&settings);
     let address = settings.socket_addr();
     let listener = TcpListener::bind(address)
         .await
@@ -344,34 +417,15 @@ async fn run(cli: Cli) -> Result<(), String> {
         spawn_advertisement(settings.port);
     }
 
-    let workspace_store = Arc::new(
-        WorkspaceStore::open(&metadata_path)
-            .map_err(|error| format!("could not initialize workspace store: {error}"))?,
-    );
-
-    let state = HttpState::new(
-        Instant::now(),
-        http_upload_temp_dir,
-        settings.clone(),
-        public_urls,
-        corrupt_file_count,
-    )
-    .with_workspaces(workspace_store)
-    .with_stats_provider(Arc::new(stats_provider))
-    .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
-    .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
-    .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
-    .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
-    .with_session_provider(Arc::new(ApplicationSessionProvider::new(
+    let state = build_http_state(
+        &settings,
+        paths,
+        repository,
+        storage,
         session_service,
-        SystemClock,
-    )))
-    .with_note_provider(Arc::new(ApplicationNoteProvider::new(note_service)))
-    .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(
-        repository.clone(),
-    )))
-    .with_blob_reader(storage)
-    .with_auth(auth_service);
+        auth_service,
+        corrupt_file_count,
+    )?;
 
     let router = build_router(state);
 
@@ -419,7 +473,9 @@ mod tests {
 
         let result = run(cli).await;
 
-        let err = result.expect_err("expected data directory setup to fail");
+        let Err(err) = result else {
+            panic!("expected data directory setup to fail");
+        };
         assert!(
             err.contains("data directory") || err.contains("create data directory"),
             "unexpected error: {err}"

@@ -14,11 +14,10 @@ impl PublicUrlBuilder {
     /// Creates a builder from effective daemon settings.
     #[must_use]
     pub fn from_settings(settings: &DaemonSettings) -> Self {
-        let base = settings
-            .public_url
-            .as_deref()
-            .map(trim_trailing_slash)
-            .unwrap_or_else(|| default_base_url(settings.bind, settings.port));
+        let base = settings.public_url.as_deref().map_or_else(
+            || default_base_url(settings.bind, settings.port),
+            trim_trailing_slash,
+        );
         Self { base }
     }
 
@@ -74,8 +73,10 @@ mod tests {
 
     #[test]
     fn uses_public_url_when_set() {
-        let mut settings = DaemonSettings::default();
-        settings.public_url = Some("https://cloud.example.com/".to_owned());
+        let settings = DaemonSettings {
+            public_url: Some("https://cloud.example.com/".to_owned()),
+            ..DaemonSettings::default()
+        };
         let urls = PublicUrlBuilder::from_settings(&settings);
         assert_eq!(urls.base(), "https://cloud.example.com");
         assert_eq!(
