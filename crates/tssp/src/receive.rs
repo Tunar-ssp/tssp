@@ -2,20 +2,66 @@
 
 use std::time::Duration;
 
+use serde_json::json;
 use tssp::{Cli, ReceiveArgs};
 use tssp_cli_core::CliExitCode;
 
-/// Runs the receive command.
-pub fn run(_cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
+use crate::backend::{build_client, BackendAddress};
+use crate::sessions_helper::generate_qr_code;
+
+pub fn run(cli: &Cli, args: &ReceiveArgs) -> Result<CliExitCode, String> {
     let timeout = parse_timeout(&args.timeout)?;
 
     eprintln!(
-        "waiting for receive session (timeout: {}s)",
+        "Creating receive session with timeout: {}s...",
         timeout.as_secs()
     );
-    eprintln!("receive session listening; implementation pending");
 
-    Ok(CliExitCode::Success)
+    let address = BackendAddress::from_connection_args(&cli.connection)
+        .map_err(|e| format!("invalid backend address: {e}"))?;
+    let client = build_client()?;
+
+    let ttl = timeout.as_secs() as u64;
+    let req = json!({
+        "ttl_seconds": ttl
+    });
+
+    let response = client
+        .post(address.url("/api/v1/sessions/receive"))
+        .json(&req)
+        .send()
+        .map_err(|e| format!("failed to create receive session: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "failed to create receive session: {}",
+            response.status()
+        ));
+    }
+
+    let body = response
+        .json::<serde_json::Value>()
+        .map_err(|e| format!("failed to parse session response: {e}"))?;
+
+    if let Some(token) = body.get("token").and_then(|v| v.as_str()) {
+        let receive_url = format!("{}/u/{}", address.base_url(), token);
+
+        let qr = generate_qr_code(&receive_url, 200)?;
+        println!("{}", qr);
+
+        println!("\nReceive URL:");
+        println!("{}\n", receive_url);
+        println!("Session token: {}", token);
+        println!("Expires in: {} seconds", ttl);
+
+        if !cli.output.quiet {
+            eprintln!("Receive session created successfully!");
+        }
+
+        Ok(CliExitCode::Success)
+    } else {
+        Err("failed to extract token from session response".to_string())
+    }
 }
 
 fn parse_timeout(timeout_str: &Option<String>) -> Result<Duration, String> {

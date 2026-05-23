@@ -13,6 +13,7 @@ mod receive;
 mod remove;
 mod search;
 mod send;
+mod sessions_helper;
 mod status;
 mod tags;
 mod upload;

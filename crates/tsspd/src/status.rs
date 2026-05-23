@@ -213,10 +213,16 @@ pub(crate) async fn readyz() -> impl IntoResponse {
 pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     match state.stats_provider.stats() {
         Ok(repository_stats) => {
-            let storage_bytes_used =
-                tokio::task::spawn_blocking(move || calculate_directory_size(&state.upload_temp_dir.parent().unwrap_or_else(|| state.upload_temp_dir.as_path())))
-                    .await
-                    .unwrap_or(0);
+            let storage_bytes_used = tokio::task::spawn_blocking(move || {
+                calculate_directory_size(
+                    &state
+                        .upload_temp_dir
+                        .parent()
+                        .unwrap_or_else(|| state.upload_temp_dir.as_path()),
+                )
+            })
+            .await
+            .unwrap_or(0);
 
             Json(StatusResponse {
                 schema_version: 1,

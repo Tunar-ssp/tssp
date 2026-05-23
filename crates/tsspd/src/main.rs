@@ -184,7 +184,8 @@ async fn run(cli: Cli) -> Result<(), String> {
     let session_service = SessionService::new(session_repository);
 
     let now = SystemClock.now();
-    let deleted = session_service.cleanup_expired_sessions(now)
+    let deleted = session_service
+        .cleanup_expired_sessions(now)
         .map_err(|error| format!("session cleanup failed: {error}"))?;
     if deleted > 0 {
         tracing::info!("startup: removed {} expired sessions", deleted);
@@ -339,12 +340,9 @@ mod tests {
         cli_args.port = 0;
         cli_args.bind = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
-        tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            async {
-                let _ = run(cli_args).await;
-            },
-        )
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            let _ = run(cli_args).await;
+        })
         .await
         .ok();
 
@@ -357,8 +355,7 @@ mod tests {
     fn cleanup_temp_uploads_removes_orphaned_files() {
         let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let temp_dir = temp.path().join("uploads");
-        std::fs::create_dir(&temp_dir)
-            .unwrap_or_else(|error| panic!("mkdir failed: {error}"));
+        std::fs::create_dir(&temp_dir).unwrap_or_else(|error| panic!("mkdir failed: {error}"));
 
         std::fs::write(temp_dir.join("orphan1.tmp"), b"data")
             .unwrap_or_else(|error| panic!("write failed: {error}"));
@@ -386,8 +383,7 @@ mod tests {
     fn cleanup_temp_uploads_ignores_subdirectories() {
         let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let temp_dir = temp.path().join("uploads");
-        std::fs::create_dir(&temp_dir)
-            .unwrap_or_else(|error| panic!("mkdir failed: {error}"));
+        std::fs::create_dir(&temp_dir).unwrap_or_else(|error| panic!("mkdir failed: {error}"));
 
         let subdir = temp_dir.join("subdir");
         std::fs::create_dir(&subdir).unwrap_or_else(|error| panic!("mkdir failed: {error}"));

@@ -10,6 +10,7 @@ mod delete;
 mod file;
 mod list;
 mod pins;
+mod public_sessions;
 mod rename;
 mod search;
 mod sessions;
@@ -149,9 +150,7 @@ async fn options_response() -> (axum::http::StatusCode, axum::http::header::Head
     let mut headers = axum::http::header::HeaderMap::new();
     headers.insert(
         axum::http::header::ALLOW,
-        axum::http::HeaderValue::from_static(
-            "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
-        ),
+        axum::http::HeaderValue::from_static("GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"),
     );
     (axum::http::StatusCode::NO_CONTENT, headers)
 }
@@ -172,12 +171,18 @@ pub fn build_router(state: HttpState) -> Router {
                 .options(options_response)
                 .layer(DefaultBodyLimit::disable()),
         )
-        .route("/api/v1/pins", get(pins::list_pins).options(options_response))
+        .route(
+            "/api/v1/pins",
+            get(pins::list_pins).options(options_response),
+        )
         .route(
             "/api/v1/pins/reorder",
             post(pins::reorder).options(options_response),
         )
-        .route("/api/v1/tags", get(tags::list_tags).options(options_response))
+        .route(
+            "/api/v1/tags",
+            get(tags::list_tags).options(options_response),
+        )
         .route(
             "/api/v1/files/{id}/tags",
             post(tags::add_tags).options(options_response),
@@ -223,9 +228,14 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/sessions/{token}/use",
             post(sessions::use_session_endpoint).options(options_response),
         )
+        .route("/s/{token}", get(public_sessions::get_send_session_page))
+        .route("/u/{token}", get(public_sessions::get_receive_session_page))
         .route("/healthz", get(status::healthz))
         .route("/readyz", get(status::readyz))
-        .route("/api/v1/status", get(status::status).options(options_response))
+        .route(
+            "/api/v1/status",
+            get(status::status).options(options_response),
+        )
         .fallback(web::web_fallback)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::very_permissive())

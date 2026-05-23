@@ -28,10 +28,11 @@ impl<R: SessionRepository> SessionService<R> {
     ) -> Result<TransferSession, RepositoryError> {
         #[allow(clippy::cast_possible_wrap)]
         let ttl = ttl_seconds as i64;
-        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl))
-            .map_err(|e| RepositoryError::OperationFailed {
+        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl)).map_err(|e| {
+            RepositoryError::OperationFailed {
                 message: format!("failed to calculate session expiration: {e}"),
-            })?;
+            }
+        })?;
 
         let file_id =
             tssp_domain::FileId::new(file_id).map_err(|e| RepositoryError::OperationFailed {
@@ -61,10 +62,11 @@ impl<R: SessionRepository> SessionService<R> {
     ) -> Result<TransferSession, RepositoryError> {
         #[allow(clippy::cast_possible_wrap)]
         let ttl = ttl_seconds as i64;
-        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl))
-            .map_err(|e| RepositoryError::OperationFailed {
+        let expires_at = UnixTimestamp::new(now.seconds().saturating_add(ttl)).map_err(|e| {
+            RepositoryError::OperationFailed {
                 message: format!("failed to calculate session expiration: {e}"),
-            })?;
+            }
+        })?;
 
         let session = TransferSession::new(token, SessionKind::Receive, now, expires_at, None)
             .map_err(|e| RepositoryError::OperationFailed {
