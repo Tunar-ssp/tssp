@@ -70,6 +70,7 @@ async fn shutdown_signal() {
     #[cfg(unix)]
     {
         use tokio::signal::unix::SignalKind;
+        #[allow(clippy::expect_used)]
         let mut sigterm = signal::unix::signal(SignalKind::terminate())
             .expect("failed to install SIGTERM handler");
 
