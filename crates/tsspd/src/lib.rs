@@ -59,9 +59,9 @@ pub struct HttpState {
 }
 
 impl HttpState {
-    /// Creates HTTP state using the current process start instant.
+    /// Creates a base HTTP state with static/placeholder providers.
     #[must_use]
-    pub fn new(started_at: Instant) -> Self {
+    pub fn new(started_at: Instant, upload_temp_dir: PathBuf) -> Self {
         Self {
             started_at,
             stats_provider: Arc::new(StaticMetadataStatsProvider),
@@ -70,102 +70,50 @@ impl HttpState {
             tag_provider: Arc::new(StaticFileTagProvider),
             pin_provider: Arc::new(StaticFilePinProvider),
             blob_reader: Arc::new(StaticBlobReader),
-            upload_temp_dir: std::env::temp_dir(),
-            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
-        }
-    }
-
-    /// Creates HTTP state with a real metadata stats provider and no upload service.
-    #[must_use]
-    pub fn with_stats_provider(
-        started_at: Instant,
-        stats_provider: Arc<dyn MetadataStatsProvider>,
-    ) -> Self {
-        Self::with_providers(
-            started_at,
-            stats_provider,
-            Arc::new(StaticFileUploadProvider),
-            std::env::temp_dir(),
-        )
-    }
-
-    /// Creates HTTP state with real providers.
-    #[must_use]
-    pub fn with_providers(
-        started_at: Instant,
-        stats_provider: Arc<dyn MetadataStatsProvider>,
-        upload_provider: Arc<dyn FileUploadProvider>,
-        upload_temp_dir: PathBuf,
-    ) -> Self {
-        Self {
-            started_at,
-            stats_provider,
-            upload_provider,
-            delete_provider: Arc::new(StaticFileDeleteProvider),
-            tag_provider: Arc::new(StaticFileTagProvider),
-            pin_provider: Arc::new(StaticFilePinProvider),
-            blob_reader: Arc::new(StaticBlobReader),
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
-    /// Creates HTTP state with real metadata, upload, and blob read providers.
+    /// Sets the metadata stats provider.
     #[must_use]
-    pub fn with_all_providers(
-        started_at: Instant,
-        stats_provider: Arc<dyn MetadataStatsProvider>,
-        upload_provider: Arc<dyn FileUploadProvider>,
-        blob_reader: Arc<dyn BlobReader + Send + Sync>,
-        upload_temp_dir: PathBuf,
-    ) -> Self {
-        Self {
-            started_at,
-            stats_provider,
-            upload_provider,
-            delete_provider: Arc::new(StaticFileDeleteProvider),
-            tag_provider: Arc::new(StaticFileTagProvider),
-            pin_provider: Arc::new(StaticFilePinProvider),
-            blob_reader,
-            upload_temp_dir,
-            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
-        }
-    }
-
-    /// Creates HTTP state with real metadata, upload, delete, and blob read providers.
-    #[must_use]
-    pub fn with_lifecycle_providers(
-        started_at: Instant,
-        stats_provider: Arc<dyn MetadataStatsProvider>,
-        upload_provider: Arc<dyn FileUploadProvider>,
-        delete_provider: Arc<dyn FileDeleteProvider>,
-        blob_reader: Arc<dyn BlobReader + Send + Sync>,
-        upload_temp_dir: PathBuf,
-    ) -> Self {
-        Self {
-            started_at,
-            stats_provider,
-            upload_provider,
-            delete_provider,
-            tag_provider: Arc::new(StaticFileTagProvider),
-            pin_provider: Arc::new(StaticFilePinProvider),
-            blob_reader,
-            upload_temp_dir,
-            storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
-        }
-    }
-
-    /// Returns state with a real tag provider.
-    #[must_use]
-    pub fn with_tag_provider(mut self, tag_provider: Arc<dyn FileTagProvider>) -> Self {
-        self.tag_provider = tag_provider;
+    pub fn with_stats_provider(mut self, provider: Arc<dyn MetadataStatsProvider>) -> Self {
+        self.stats_provider = provider;
         self
     }
 
-    /// Returns state with a real pin provider.
+    /// Sets the file upload provider.
     #[must_use]
-    pub fn with_pin_provider(mut self, pin_provider: Arc<dyn FilePinProvider>) -> Self {
-        self.pin_provider = pin_provider;
+    pub fn with_upload_provider(mut self, provider: Arc<dyn FileUploadProvider>) -> Self {
+        self.upload_provider = provider;
+        self
+    }
+
+    /// Sets the file delete provider.
+    #[must_use]
+    pub fn with_delete_provider(mut self, provider: Arc<dyn FileDeleteProvider>) -> Self {
+        self.delete_provider = provider;
+        self
+    }
+
+    /// Sets the file tag provider.
+    #[must_use]
+    pub fn with_tag_provider(mut self, provider: Arc<dyn FileTagProvider>) -> Self {
+        self.tag_provider = provider;
+        self
+    }
+
+    /// Sets the file pin provider.
+    #[must_use]
+    pub fn with_pin_provider(mut self, provider: Arc<dyn FilePinProvider>) -> Self {
+        self.pin_provider = provider;
+        self
+    }
+
+    /// Sets the blob reader provider.
+    #[must_use]
+    pub fn with_blob_reader(mut self, reader: Arc<dyn BlobReader + Send + Sync>) -> Self {
+        self.blob_reader = reader;
         self
     }
 }
@@ -255,7 +203,7 @@ mod tests {
 
     #[tokio::test]
     async fn health_endpoint_returns_plain_ok() {
-        let app = build_router(HttpState::new(Instant::now()));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir()));
         let response = app
             .oneshot(
                 Request::builder()
@@ -275,10 +223,8 @@ mod tests {
 
     #[tokio::test]
     async fn status_endpoint_returns_schema_version() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FixedStatsProvider)));
         let response = app
             .oneshot(
                 Request::builder()
@@ -302,10 +248,8 @@ mod tests {
 
     #[tokio::test]
     async fn status_endpoint_reports_metadata_failure() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FailingStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FailingStatsProvider)));
         let response = app
             .oneshot(
                 Request::builder()
@@ -328,14 +272,11 @@ mod tests {
     #[tokio::test]
     async fn upload_endpoint_accepts_single_multipart_file() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
-        let app = build_router(HttpState::with_providers(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-            Arc::new(EchoUploadProvider {
+        let app = build_router(HttpState::new(Instant::now(), temp.path().to_path_buf())
+            .with_stats_provider(Arc::new(FixedStatsProvider))
+            .with_upload_provider(Arc::new(EchoUploadProvider {
                 deduplicated: false,
-            }),
-            temp.path().to_path_buf(),
-        ));
+            })));
         let response = app
             .oneshot(multipart_request(
                 "--tssp\r\n\
@@ -377,12 +318,9 @@ mod tests {
     #[tokio::test]
     async fn upload_endpoint_returns_ok_for_deduplicated_content() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
-        let app = build_router(HttpState::with_providers(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-            Arc::new(EchoUploadProvider { deduplicated: true }),
-            temp.path().to_path_buf(),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), temp.path().to_path_buf())
+            .with_stats_provider(Arc::new(FixedStatsProvider))
+            .with_upload_provider(Arc::new(EchoUploadProvider { deduplicated: true })));
         let response = app
             .oneshot(multipart_request(
                 "--tssp\r\n\
@@ -408,14 +346,11 @@ mod tests {
     #[tokio::test]
     async fn upload_endpoint_rejects_missing_file_field() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
-        let app = build_router(HttpState::with_providers(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-            Arc::new(EchoUploadProvider {
+        let app = build_router(HttpState::new(Instant::now(), temp.path().to_path_buf())
+            .with_stats_provider(Arc::new(FixedStatsProvider))
+            .with_upload_provider(Arc::new(EchoUploadProvider {
                 deduplicated: false,
-            }),
-            temp.path().to_path_buf(),
-        ));
+            })));
         let response = app
             .oneshot(multipart_request(
                 "--tssp\r\n\
@@ -454,14 +389,11 @@ mod tests {
             SystemClock,
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository);
-        let app = build_router(HttpState::with_lifecycle_providers(
-            Instant::now(),
-            Arc::new(stats_provider),
-            Arc::new(ApplicationFileUploadProvider::new(upload_service)),
-            Arc::new(ApplicationFileDeleteProvider::new(delete_service)),
-            storage,
-            temp.path().join("http-upload-tmp"),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            .with_stats_provider(Arc::new(stats_provider))
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+            .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
+            .with_blob_reader(storage));
 
         let first = app
             .clone()
@@ -542,14 +474,11 @@ mod tests {
             SystemClock,
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository);
-        let app = build_router(HttpState::with_lifecycle_providers(
-            Instant::now(),
-            Arc::new(stats_provider),
-            Arc::new(ApplicationFileUploadProvider::new(upload_service)),
-            Arc::new(ApplicationFileDeleteProvider::new(delete_service)),
-            storage,
-            temp.path().join("http-upload-tmp"),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            .with_stats_provider(Arc::new(stats_provider))
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+            .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
+            .with_blob_reader(storage));
         let upload = app
             .clone()
             .oneshot(multipart_request(REAL_UPLOAD_BODY))
@@ -623,17 +552,12 @@ mod tests {
         );
         let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
         let tag_service = TagService::new(repository);
-        let app = build_router(
-            HttpState::with_lifecycle_providers(
-                Instant::now(),
-                Arc::new(stats_provider),
-                Arc::new(ApplicationFileUploadProvider::new(upload_service)),
-                Arc::new(ApplicationFileDeleteProvider::new(delete_service)),
-                storage,
-                temp.path().join("http-upload-tmp"),
-            )
-            .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service))),
-        );
+        let app = build_router(HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            .with_stats_provider(Arc::new(stats_provider))
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+            .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
+            .with_blob_reader(storage)
+            .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service))));
         let upload = app
             .clone()
             .oneshot(multipart_request(REAL_UPLOAD_BODY))
@@ -735,15 +659,12 @@ mod tests {
             FilesystemBlobStore::new(temp.path().join("storage"))
                 .unwrap_or_else(|error| panic!("blob store open failed: {error}")),
         );
-        let app = build_router(HttpState::with_all_providers(
-            Instant::now(),
-            Arc::new(SingleRecordStatsProvider),
-            Arc::new(EchoUploadProvider {
+        let app = build_router(HttpState::new(Instant::now(), temp.path().join("http-upload-tmp"))
+            .with_stats_provider(Arc::new(SingleRecordStatsProvider))
+            .with_upload_provider(Arc::new(EchoUploadProvider {
                 deduplicated: false,
-            }),
-            storage,
-            temp.path().join("http-upload-tmp"),
-        ));
+            }))
+            .with_blob_reader(storage));
 
         let response = app
             .oneshot(content_request("file-test", None))
@@ -757,10 +678,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_endpoint_rejects_zero_limit() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FixedStatsProvider)));
         let response = app
             .oneshot(list_request("?limit=0"))
             .await
@@ -773,10 +692,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_endpoint_rejects_limit_above_maximum() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FixedStatsProvider)));
         let response = app
             .oneshot(list_request("?limit=501"))
             .await
@@ -792,10 +709,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_endpoint_reports_metadata_failure() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FailingStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FailingStatsProvider)));
         let response = app
             .oneshot(list_request("?limit=1"))
             .await
@@ -808,10 +723,8 @@ mod tests {
 
     #[tokio::test]
     async fn file_endpoint_rejects_invalid_id() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FixedStatsProvider)));
         let response = app
             .oneshot(file_request("bad%20id"))
             .await
@@ -824,10 +737,8 @@ mod tests {
 
     #[tokio::test]
     async fn file_endpoint_returns_not_found() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FixedStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FixedStatsProvider)));
         let response = app
             .oneshot(file_request("file-test"))
             .await
@@ -840,10 +751,8 @@ mod tests {
 
     #[tokio::test]
     async fn file_endpoint_reports_metadata_failure() {
-        let app = build_router(HttpState::with_stats_provider(
-            Instant::now(),
-            Arc::new(FailingStatsProvider),
-        ));
+        let app = build_router(HttpState::new(Instant::now(), std::env::temp_dir())
+            .with_stats_provider(Arc::new(FailingStatsProvider)));
         let response = app
             .oneshot(file_request("file-test"))
             .await

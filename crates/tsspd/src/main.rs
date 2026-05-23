@@ -104,16 +104,13 @@ async fn run(cli: Cli) -> Result<(), String> {
     let listener = TcpListener::bind(address)
         .await
         .map_err(|error| bind_error_message(address, &error))?;
-    let state = HttpState::with_lifecycle_providers(
-        Instant::now(),
-        Arc::new(stats_provider),
-        Arc::new(upload_provider),
-        Arc::new(delete_provider),
-        storage,
-        http_upload_temp_dir,
-    )
-    .with_tag_provider(Arc::new(tag_provider))
-    .with_pin_provider(Arc::new(pin_provider));
+    let state = HttpState::new(Instant::now(), http_upload_temp_dir)
+        .with_stats_provider(Arc::new(stats_provider))
+        .with_upload_provider(Arc::new(upload_provider))
+        .with_delete_provider(Arc::new(delete_provider))
+        .with_tag_provider(Arc::new(tag_provider))
+        .with_pin_provider(Arc::new(pin_provider))
+        .with_blob_reader(storage);
     let router = build_router(state);
 
     println!("tsspd listening on http://{address}");

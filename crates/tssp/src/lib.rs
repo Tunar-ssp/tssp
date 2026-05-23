@@ -128,6 +128,10 @@ pub enum Command {
     Untag(TagArgs),
     /// Pin a file to favorites.
     Pin(PinArgs),
+    /// Unpin a file from favorites.
+    Unpin(IdArgs),
+    /// Manage pinned files.
+    Pins(PinsCommand),
     /// Delete a file from the daemon.
     Remove(RemoveArgs),
     /// Show full metadata for a file.
@@ -268,6 +272,31 @@ pub struct PinArgs {
     /// Insert at a specific pin position.
     #[arg(long, value_name = "N")]
     pub position: Option<u32>,
+}
+
+/// `tssp pins` subcommands.
+#[derive(Debug, Args)]
+pub struct PinsCommand {
+    /// Action to perform on pins.
+    #[command(subcommand)]
+    pub action: PinsAction,
+}
+
+/// Pin list and reorder actions.
+#[derive(Debug, Subcommand)]
+pub enum PinsAction {
+    /// List pinned files.
+    List,
+    /// Reorder pinned files (pass IDs in the new desired order).
+    Reorder(ReorderArgs),
+}
+
+/// Arguments for `tssp pins reorder`.
+#[derive(Debug, Args)]
+pub struct ReorderArgs {
+    /// File IDs in the exact order they should appear.
+    #[arg(required = true)]
+    pub ids: Vec<String>,
 }
 
 /// Arguments for `tssp remove`.

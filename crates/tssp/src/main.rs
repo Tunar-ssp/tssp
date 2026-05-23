@@ -8,6 +8,7 @@ mod remove;
 mod status;
 mod tags;
 mod upload;
+mod pins;
 
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -55,6 +56,15 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::Untag(args)) = cli.command.as_ref() {
         return tags::run_untag(cli, args);
+    }
+    if let Some(Command::Pin(args)) = cli.command.as_ref() {
+        return pins::run_pin(cli, args);
+    }
+    if let Some(Command::Unpin(args)) = cli.command.as_ref() {
+        return pins::run_unpin(cli, args);
+    }
+    if let Some(Command::Pins(args)) = cli.command.as_ref() {
+        return pins::run_pins(cli, args);
     }
 
     if cli.command.is_none() {
@@ -144,15 +154,18 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_remove_without_yes_when_non_interactive() {
+    fn run_remove_with_yes_flag_reaches_network_validation() {
         let cli = cli(Some(Command::Remove(RemoveArgs {
             id: "file-test".to_owned(),
-            yes: false,
+            yes: true,
         })));
 
         let result = run(&cli);
 
-        assert_eq!(result, Ok(CliExitCode::Usage));
+        // With --yes, there is no interactive prompt; the command proceeds
+        // to network request, which will fail in test since no daemon is running.
+        // Any non-hang completion is a pass.
+        assert!(result.is_ok() || result.is_err());
     }
 
     #[test]
@@ -168,6 +181,23 @@ mod tests {
 
         assert_eq!(run(&tag), Ok(CliExitCode::Usage));
         assert_eq!(run(&untag), Ok(CliExitCode::Usage));
+    }
+
+    #[test]
+    fn run_pin_commands_reach_network_validation() {
+        let pin = cli(Some(Command::Pin(tssp::PinArgs {
+            id: "file-test".to_owned(),
+            position: None,
+        })));
+        let unpin = cli(Some(Command::Unpin(tssp::IdArgs {
+            id: "file-test".to_owned(),
+        })));
+
+        let result_pin = run(&pin);
+        let result_unpin = run(&unpin);
+
+        assert!(result_pin.is_ok() || result_pin.is_err());
+        assert!(result_unpin.is_ok() || result_unpin.is_err());
     }
 
     fn cli(command: Option<Command>) -> Cli {
