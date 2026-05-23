@@ -294,6 +294,18 @@ pub trait FileRepository {
     ///
     /// Returns [`RepositoryError`] when the search query fails.
     fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, RepositoryError>;
+
+    /// Renames a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the file does not exist, or a
+    /// repository failure when the mutation cannot be committed.
+    fn rename_file(
+        &self,
+        id: &FileId,
+        new_name: &FileName,
+    ) -> Result<Option<FileRecord>, RepositoryError>;
 }
 
 impl<T> BlobStore for Arc<T>
@@ -399,6 +411,14 @@ where
 
     fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, RepositoryError> {
         self.as_ref().search_files(query)
+    }
+
+    fn rename_file(
+        &self,
+        id: &FileId,
+        new_name: &FileName,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref().rename_file(id, new_name)
     }
 }
 

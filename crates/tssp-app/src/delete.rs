@@ -232,6 +232,14 @@ mod tests {
         ) -> Result<Vec<FileRecord>, RepositoryError> {
             Ok(Vec::new())
         }
+
+        fn rename_file(
+            &self,
+            _id: &FileId,
+            _new_name: &FileName,
+        ) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
+        }
     }
 
     #[test]

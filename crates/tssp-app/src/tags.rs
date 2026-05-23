@@ -85,7 +85,7 @@ fn normalize_tags(tags: &[&str]) -> Result<Vec<Tag>, DomainError> {
 mod tests {
     use std::cell::RefCell;
 
-    use tssp_domain::{ContentHash, FileId, FileRecord, Tag, TagKey, UnixTimestamp};
+    use tssp_domain::{ContentHash, FileId, FileName, FileRecord, Tag, TagKey, UnixTimestamp};
     use tssp_ports::{
         DeletedFileRecord, FileRepository, NewFileRecord, PinOutcome, RepositoryError,
         RepositoryStats, TagMutationOutcome, TagSummary,
@@ -213,6 +213,14 @@ mod tests {
             _limit: u64,
         ) -> Result<Vec<FileRecord>, RepositoryError> {
             Ok(Vec::new())
+        }
+
+        fn rename_file(
+            &self,
+            _id: &FileId,
+            _new_name: &FileName,
+        ) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
         }
     }
 

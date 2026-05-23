@@ -279,6 +279,14 @@ mod tests {
         ) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
             Ok(vec![])
         }
+
+        fn rename_file(
+            &self,
+            _id: &tssp_domain::FileId,
+            _new_name: &tssp_domain::FileName,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
     }
 
     #[tokio::test]
@@ -392,6 +400,14 @@ mod tests {
             Err(tssp_ports::RepositoryError::OperationFailed {
                 message: "db error".into(),
             })
+        }
+
+        fn rename_file(
+            &self,
+            _id: &tssp_domain::FileId,
+            _new_name: &tssp_domain::FileName,
+        ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
         }
     }
 

@@ -632,6 +632,34 @@ impl FileRepository for SqliteFileRepository {
         }
         Ok(records)
     }
+
+    fn rename_file(
+        &self,
+        id: &FileId,
+        new_name: &FileName,
+    ) -> Result<Option<FileRecord>, RepositoryError> {
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_file_exists(&transaction, id)?;
+
+        transaction
+            .execute(
+                "UPDATE files SET name = ?1 WHERE id = ?2",
+                params![new_name.original(), id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        self.find_file(id)?
+            .ok_or_else(|| RepositoryError::OperationFailed {
+                message: "renamed file could not be read back".to_owned(),
+            })
+            .map(Some)
+    }
 }
 
 /// Errors raised while opening or migrating the `SQLite` adapter.
