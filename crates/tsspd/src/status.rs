@@ -377,4 +377,52 @@ mod tests {
         assert!(result.files.is_empty());
         assert!(result.next_cursor.is_none());
     }
+
+    #[test]
+    fn static_provider_find_file_returns_none() {
+        let provider = StaticMetadataStatsProvider;
+        let id = FileId::new("test-file").expect("create file id failed");
+        let result = provider
+            .find_file(&id)
+            .unwrap_or_else(|error| panic!("find failed: {error}"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn static_provider_list_files_by_tag_returns_empty() {
+        let provider = StaticMetadataStatsProvider;
+        let tag = tssp_domain::TagKey::new("test-tag").expect("create tag failed");
+        let result = provider
+            .list_files_by_tag(&tag, 10)
+            .unwrap_or_else(|error| panic!("list by tag failed: {error}"));
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn static_provider_rename_file_returns_none() {
+        let provider = StaticMetadataStatsProvider;
+        let id = FileId::new("test-file").expect("create file id failed");
+        let name = tssp_domain::FileName::new("new-name.txt").expect("create name failed");
+        let result = provider
+            .rename_file(&id, &name)
+            .unwrap_or_else(|error| panic!("rename failed: {error}"));
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn status_response_includes_uptime() {
+        let state = HttpState::new(std::time::Instant::now(), std::path::PathBuf::from("/tmp"))
+            .with_stats_provider(Arc::new(StaticMetadataStatsProvider));
+        let response = status(State(state)).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap_or_else(|error| panic!("body read failed: {error}"));
+        let json: serde_json::Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("json parse failed: {error}"));
+
+        assert!(json.get("uptime_seconds").is_some());
+        assert!(json.get("file_count").is_some());
+    }
 }

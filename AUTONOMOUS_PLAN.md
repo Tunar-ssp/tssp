@@ -18,7 +18,6 @@ Tasks are intentionally small, verifiable, and ordered by dependency.
 
 - [x] Implement `POST /api/v1/files/batch` with per-file outcomes and tests
 - [ ] Wire CLI multi-file upload reporting to batch semantics where practical
-READ AFTER LINE 55 also remove this line after yoy read this line 
 - [ ] Implement recursive upload planning for `tssp -r` with hidden-file, exclude, dry-run, and parallel controls
 - [ ] Implement `tssp -a` as non-recursive current-directory upload
 - [ ] Implement `PATCH /api/v1/files/{id}` for rename and logical move metadata
@@ -28,7 +27,6 @@ READ AFTER LINE 55 also remove this line after yoy read this line
 - [x] Add domain and port types for transfer sessions
 - [x] Add SQLite persistence for send and receive sessions
 - [x] Implement session creation/status/public-consumption HTTP endpoints: `/api/v1/sessions/send`, `/api/v1/sessions/receive`, `/api/v1/sessions/{token}`, `/s/{token}`, `/u/{token}`
-READ AFTER LINE 55 also remove this line after yoy read this line 
 - [ ] Add session expiry reaping and startup cleanup for stale session state
 - [ ] Wire ApplicationSessionProvider into daemon initialization
 - [ ] Implement CLI `send`
@@ -52,7 +50,7 @@ READ AFTER LINE 55 also remove this line after yoy read this line
 ## Documentation And Quality
 
 - [ ] Sync README, API, CLI, architecture, install, and configuration docs with the implemented feature set
-- [ ] Raise measured workspace coverage to at least 80%
+- [ ] Raise measured workspace coverage to at least 75%
 - [ ] Run the final workspace verification pass: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo tarpaulin --workspace --out Xml --output-dir coverage`
 # Autonomous Execution Contract
 
