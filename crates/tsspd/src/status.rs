@@ -7,7 +7,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
 use tssp_domain::{FileId, FileRecord, UnixTimestamp};
-use tssp_ports::{Clock, FileRepository, RepositoryStats};
+use tssp_ports::{Clock, FileRepository, ListQuery, PagedFiles, RepositoryStats};
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
@@ -19,6 +19,13 @@ pub trait MetadataStatsProvider: Send + Sync {
     ///
     /// Returns a short diagnostic when counts cannot be read.
     fn stats(&self) -> Result<RepositoryStats, String>;
+
+    /// Returns filtered and paginated files.
+    ///
+    /// # Errors
+    ///
+    /// Returns a short diagnostic when files cannot be listed.
+    fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, String>;
 
     /// Returns recent files.
     ///
@@ -61,6 +68,13 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
 
     fn list_files_recent(&self, _limit: u64) -> Result<Vec<FileRecord>, String> {
         Ok(Vec::new())
+    }
+
+    fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, String> {
+        Ok(PagedFiles {
+            files: self.list_files_recent(query.limit)?,
+            next_cursor: None,
+        })
     }
 
     fn find_file(&self, _id: &FileId) -> Result<Option<FileRecord>, String> {
@@ -108,6 +122,12 @@ where
     fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, String> {
         self.repository
             .list_files_recent(limit)
+            .map_err(|error| error.to_string())
+    }
+
+    fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, String> {
+        self.repository
+            .list_files(query)
             .map_err(|error| error.to_string())
     }
 

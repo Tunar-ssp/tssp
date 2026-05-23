@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "SQLite metadata adapter for TSSP"
 
 [dependencies]
+base64.workspace = true
 rusqlite.workspace = true
 thiserror.workspace = true
 tssp-domain = { path = "../tssp-domain" }

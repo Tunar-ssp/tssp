@@ -946,6 +946,16 @@ mod tests {
             })
         }
 
+        fn list_files(
+            &self,
+            _query: &tssp_ports::ListQuery,
+        ) -> Result<tssp_ports::PagedFiles, String> {
+            Ok(tssp_ports::PagedFiles {
+                files: Vec::new(),
+                next_cursor: None,
+            })
+        }
+
         fn list_files_recent(&self, _limit: u64) -> Result<Vec<tssp_domain::FileRecord>, String> {
             Ok(Vec::new())
         }
@@ -970,6 +980,13 @@ mod tests {
 
     impl MetadataStatsProvider for FailingStatsProvider {
         fn stats(&self) -> Result<RepositoryStats, String> {
+            Err("metadata database is unavailable".to_owned())
+        }
+
+        fn list_files(
+            &self,
+            _query: &tssp_ports::ListQuery,
+        ) -> Result<tssp_ports::PagedFiles, String> {
             Err("metadata database is unavailable".to_owned())
         }
 
@@ -1002,6 +1019,16 @@ mod tests {
                 tag_count: 0,
                 pinned_count: 0,
                 recent_upload_count: 0,
+            })
+        }
+
+        fn list_files(
+            &self,
+            _query: &tssp_ports::ListQuery,
+        ) -> Result<tssp_ports::PagedFiles, String> {
+            Ok(tssp_ports::PagedFiles {
+                files: vec![single_record()],
+                next_cursor: None,
             })
         }
 

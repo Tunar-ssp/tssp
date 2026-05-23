@@ -207,6 +207,12 @@ mod tests {
         ) -> Result<Option<tssp_ports::DeletedFileRecord>, tssp_ports::RepositoryError> {
             unimplemented!()
         }
+        fn list_files(
+            &self,
+            _query: &tssp_ports::ListQuery,
+        ) -> Result<tssp_ports::PagedFiles, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
         fn list_files_recent(
             &self,
             _limit: u64,
@@ -311,6 +317,12 @@ mod tests {
             &self,
             _id: &tssp_domain::FileId,
         ) -> Result<Option<tssp_ports::DeletedFileRecord>, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn list_files(
+            &self,
+            _query: &tssp_ports::ListQuery,
+        ) -> Result<tssp_ports::PagedFiles, tssp_ports::RepositoryError> {
             unimplemented!()
         }
         fn list_files_recent(

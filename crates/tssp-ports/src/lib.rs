@@ -59,6 +59,8 @@ pub struct ListQuery {
     pub tags: Vec<TagKey>,
     /// MIME type prefix filter (`"image"` matches `"image/png"`).
     pub mime_prefix: Option<String>,
+    /// Optional filename substring filter.
+    pub name_substring: Option<String>,
     /// Only return files uploaded at or after this timestamp.
     pub since: Option<UnixTimestamp>,
     /// Only return files uploaded at or before this timestamp.
@@ -77,6 +79,7 @@ impl Default for ListQuery {
             limit: 50,
             tags: Vec::new(),
             mime_prefix: None,
+            name_substring: None,
             since: None,
             until: None,
             pinned_only: false,
@@ -193,6 +196,13 @@ pub trait FileRepository {
     ///
     /// Returns [`RepositoryError`] when the delete transaction cannot complete.
     fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError>;
+
+    /// Returns filtered and paginated files according to the supplied query.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query or cursor cannot be applied.
+    fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError>;
 
     /// Returns recent files in descending order by upload time with an optional limit.
     ///
@@ -329,6 +339,10 @@ where
 
     fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
         self.as_ref().delete_file(id)
+    }
+
+    fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {
+        self.as_ref().list_files(query)
     }
 
     fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {

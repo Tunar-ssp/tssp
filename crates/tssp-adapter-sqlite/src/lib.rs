@@ -7,15 +7,17 @@
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-use rusqlite::{params, Connection, ErrorCode, Row};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
+use rusqlite::{params, params_from_iter, types::Value, Connection, ErrorCode, Row};
 use thiserror::Error;
 use tssp_domain::{
-    ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag, TagKey,
-    UnixTimestamp,
+    ContentHash, Cursor, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
+    TagKey, UnixTimestamp,
 };
 use tssp_ports::{
-    DeletedFileRecord, FileRepository, NewFileRecord, RepositoryError, RepositoryStats,
-    TagMutationOutcome, TagSummary,
+    DeletedFileRecord, FileRepository, ListQuery, ListSort, NewFileRecord, PagedFiles,
+    RepositoryError, RepositoryStats, TagMutationOutcome, TagSummary,
 };
 
 /// `SQLite` metadata repository.
@@ -167,23 +169,82 @@ impl FileRepository for SqliteFileRepository {
         }))
     }
 
-    fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {
+    fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {
+        if query.limit == 0 {
+            return Err(RepositoryError::OperationFailed {
+                message: "list limit must be greater than 0".to_owned(),
+            });
+        }
+        if query.limit > 500 {
+            return Err(RepositoryError::OperationFailed {
+                message: "list limit must not exceed 500".to_owned(),
+            });
+        }
+
         let connection = self.lock()?;
+        let mut sql = String::from(
+            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at
+             FROM files f",
+        );
+        let mut where_clauses = Vec::new();
+        let mut parameters = Vec::<Value>::new();
+
+        for (index, tag) in query.tags.iter().enumerate() {
+            where_clauses.push(format!(
+                "EXISTS (
+                    SELECT 1
+                    FROM file_tags ft{index}
+                    WHERE ft{index}.file_id = f.id
+                      AND ft{index}.tag_key = ?
+                )"
+            ));
+            parameters.push(Value::from(tag.as_str().to_owned()));
+        }
+
+        if let Some(mime_prefix) = &query.mime_prefix {
+            where_clauses.push("f.mime_type LIKE ?".to_owned());
+            parameters.push(Value::from(format!("{mime_prefix}%")));
+        }
+
+        if let Some(name_substring) = &query.name_substring {
+            where_clauses.push("instr(f.name, ?) > 0".to_owned());
+            parameters.push(Value::from(name_substring.clone()));
+        }
+
+        if let Some(since) = query.since {
+            where_clauses.push("f.uploaded_at >= ?".to_owned());
+            parameters.push(Value::from(since.seconds()));
+        }
+
+        if let Some(until) = query.until {
+            where_clauses.push("f.uploaded_at <= ?".to_owned());
+            parameters.push(Value::from(until.seconds()));
+        }
+
+        if query.pinned_only {
+            where_clauses.push("f.pinned_at IS NOT NULL".to_owned());
+        }
+
+        if let Some(cursor_filter) = cursor_filter(query.sort, query.after_cursor.as_ref())? {
+            where_clauses.push(cursor_filter.clause);
+            parameters.extend(cursor_filter.parameters);
+        }
+
+        if !where_clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&where_clauses.join(" AND "));
+        }
+
+        sql.push_str(" ORDER BY ");
+        sql.push_str(order_by_clause(query.sort));
+        sql.push_str(" LIMIT ?");
+        parameters.push(Value::from(list_limit_plus_one(query.limit)?));
+
         let mut statement = connection
-            .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at
-                 FROM files
-                 ORDER BY uploaded_at DESC, id DESC
-                 LIMIT ?1",
-            )
+            .prepare(&sql)
             .map_err(map_rusqlite_repository_error)?;
-
-        let limit_i64 = i64::try_from(limit).map_err(|error| RepositoryError::OperationFailed {
-            message: format!("list limit does not fit sqlite integer: {error}"),
-        })?;
-
         let mut rows = statement
-            .query(params![limit_i64])
+            .query(params_from_iter(parameters.iter()))
             .map_err(map_rusqlite_repository_error)?;
 
         let mut records = Vec::new();
@@ -193,7 +254,42 @@ impl FileRepository for SqliteFileRepository {
             record.tags = load_tags(&connection, &id)?;
             records.push(record);
         }
-        Ok(records)
+
+        let page_limit =
+            usize::try_from(query.limit).map_err(|error| RepositoryError::OperationFailed {
+                message: format!("list limit does not fit usize: {error}"),
+            })?;
+        let has_more = records.len() > page_limit;
+        if has_more {
+            records.truncate(page_limit);
+        }
+        let next_cursor = if has_more {
+            let record = records
+                .last()
+                .ok_or_else(|| RepositoryError::OperationFailed {
+                    message: "list pagination state became empty".to_owned(),
+                })?;
+            Some(encode_cursor(query.sort, record)?)
+        } else {
+            None
+        };
+
+        Ok(PagedFiles {
+            files: records,
+            next_cursor,
+        })
+    }
+
+    fn list_files_recent(&self, limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .list_files(&ListQuery {
+                limit,
+                ..ListQuery::default()
+            })?
+            .files)
     }
 
     fn list_files_by_tag(
@@ -201,34 +297,16 @@ impl FileRepository for SqliteFileRepository {
         tag: &tssp_domain::TagKey,
         limit: u64,
     ) -> Result<Vec<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
-        let mut statement = connection
-            .prepare(
-                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at
-                 FROM files f
-                 JOIN file_tags ft ON ft.file_id = f.id
-                 WHERE ft.tag_key = ?1
-                 ORDER BY f.uploaded_at DESC, f.id DESC
-                 LIMIT ?2",
-            )
-            .map_err(map_rusqlite_repository_error)?;
-
-        let limit_i64 = i64::try_from(limit).map_err(|error| RepositoryError::OperationFailed {
-            message: format!("list limit does not fit sqlite integer: {error}"),
-        })?;
-
-        let mut rows = statement
-            .query(params![tag.as_str(), limit_i64])
-            .map_err(map_rusqlite_repository_error)?;
-
-        let mut records = Vec::new();
-        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            let mut record = map_file_row(row)?;
-            let id = record.id.clone();
-            record.tags = load_tags(&connection, &id)?;
-            records.push(record);
+        if limit == 0 {
+            return Ok(Vec::new());
         }
-        Ok(records)
+        Ok(self
+            .list_files(&ListQuery {
+                limit,
+                tags: vec![tag.clone()],
+                ..ListQuery::default()
+            })?
+            .files)
     }
 
     fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError> {
@@ -793,6 +871,179 @@ fn load_tags(connection: &Connection, id: &FileId) -> Result<Vec<Tag>, Repositor
     Ok(tags)
 }
 
+fn order_by_clause(sort: ListSort) -> &'static str {
+    match sort {
+        ListSort::UploadedDesc => "f.uploaded_at DESC, f.id DESC",
+        ListSort::UploadedAsc => "f.uploaded_at ASC, f.id ASC",
+        ListSort::NameAsc => "f.name ASC, f.id ASC",
+        ListSort::NameDesc => "f.name DESC, f.id DESC",
+        ListSort::SizeDesc => "f.size_bytes DESC, f.id DESC",
+        ListSort::SizeAsc => "f.size_bytes ASC, f.id ASC",
+    }
+}
+
+struct CursorFilter {
+    clause: String,
+    parameters: Vec<Value>,
+}
+
+fn cursor_filter(
+    sort: ListSort,
+    cursor: Option<&Cursor>,
+) -> Result<Option<CursorFilter>, RepositoryError> {
+    let Some(cursor) = cursor else {
+        return Ok(None);
+    };
+
+    let (prefix, primary, id) = split_cursor(cursor)?;
+    if prefix != cursor_prefix(sort) {
+        return Err(invalid_cursor(
+            "cursor was created for a different sort order",
+        ));
+    }
+
+    let filter = match sort {
+        ListSort::UploadedDesc => CursorFilter {
+            clause: "(f.uploaded_at < ? OR (f.uploaded_at = ? AND f.id < ?))".to_owned(),
+            parameters: vec![
+                Value::from(parse_cursor_i64(primary, "uploaded_at")?),
+                Value::from(parse_cursor_i64(primary, "uploaded_at")?),
+                Value::from(id),
+            ],
+        },
+        ListSort::UploadedAsc => CursorFilter {
+            clause: "(f.uploaded_at > ? OR (f.uploaded_at = ? AND f.id > ?))".to_owned(),
+            parameters: vec![
+                Value::from(parse_cursor_i64(primary, "uploaded_at")?),
+                Value::from(parse_cursor_i64(primary, "uploaded_at")?),
+                Value::from(id),
+            ],
+        },
+        ListSort::NameAsc => CursorFilter {
+            clause: "(f.name > ? OR (f.name = ? AND f.id > ?))".to_owned(),
+            parameters: vec![
+                Value::from(decode_cursor_name(primary)?),
+                Value::from(decode_cursor_name(primary)?),
+                Value::from(id),
+            ],
+        },
+        ListSort::NameDesc => CursorFilter {
+            clause: "(f.name < ? OR (f.name = ? AND f.id < ?))".to_owned(),
+            parameters: vec![
+                Value::from(decode_cursor_name(primary)?),
+                Value::from(decode_cursor_name(primary)?),
+                Value::from(id),
+            ],
+        },
+        ListSort::SizeDesc => CursorFilter {
+            clause: "(f.size_bytes < ? OR (f.size_bytes = ? AND f.id < ?))".to_owned(),
+            parameters: vec![
+                Value::from(parse_cursor_size(primary)?),
+                Value::from(parse_cursor_size(primary)?),
+                Value::from(id),
+            ],
+        },
+        ListSort::SizeAsc => CursorFilter {
+            clause: "(f.size_bytes > ? OR (f.size_bytes = ? AND f.id > ?))".to_owned(),
+            parameters: vec![
+                Value::from(parse_cursor_size(primary)?),
+                Value::from(parse_cursor_size(primary)?),
+                Value::from(id),
+            ],
+        },
+    };
+
+    Ok(Some(filter))
+}
+
+fn cursor_prefix(sort: ListSort) -> &'static str {
+    match sort {
+        ListSort::UploadedDesc => "ud",
+        ListSort::UploadedAsc => "ua",
+        ListSort::NameAsc => "na",
+        ListSort::NameDesc => "nd",
+        ListSort::SizeDesc => "sd",
+        ListSort::SizeAsc => "sa",
+    }
+}
+
+fn split_cursor(cursor: &Cursor) -> Result<(&str, &str, String), RepositoryError> {
+    let mut parts = cursor.as_str().split('.');
+    let prefix = parts
+        .next()
+        .ok_or_else(|| invalid_cursor("missing cursor prefix"))?;
+    let primary = parts
+        .next()
+        .ok_or_else(|| invalid_cursor("missing cursor value"))?;
+    let id = parts
+        .next()
+        .ok_or_else(|| invalid_cursor("missing cursor id"))?;
+    if parts.next().is_some() {
+        return Err(invalid_cursor("cursor has too many parts"));
+    }
+
+    let parsed_id = FileId::new(id).map_err(|error| invalid_cursor(error.to_string()))?;
+    Ok((prefix, primary, parsed_id.as_str().to_owned()))
+}
+
+fn parse_cursor_i64(value: &str, field: &str) -> Result<i64, RepositoryError> {
+    value
+        .parse::<i64>()
+        .map_err(|error| invalid_cursor(format!("invalid {field} value: {error}")))
+}
+
+fn parse_cursor_size(value: &str) -> Result<i64, RepositoryError> {
+    let size = value
+        .parse::<u64>()
+        .map_err(|error| invalid_cursor(format!("invalid size value: {error}")))?;
+    i64::try_from(size)
+        .map_err(|error| invalid_cursor(format!("size value does not fit sqlite integer: {error}")))
+}
+
+fn decode_cursor_name(value: &str) -> Result<String, RepositoryError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(value)
+        .map_err(|error| invalid_cursor(format!("invalid name value: {error}")))?;
+    String::from_utf8(bytes)
+        .map_err(|error| invalid_cursor(format!("name value is not valid utf-8: {error}")))
+}
+
+fn encode_cursor(sort: ListSort, record: &FileRecord) -> Result<Cursor, RepositoryError> {
+    let primary = match sort {
+        ListSort::UploadedDesc | ListSort::UploadedAsc => record.uploaded_at.seconds().to_string(),
+        ListSort::NameAsc | ListSort::NameDesc => {
+            URL_SAFE_NO_PAD.encode(record.name.original().as_bytes())
+        }
+        ListSort::SizeDesc | ListSort::SizeAsc => record.size.bytes().to_string(),
+    };
+    Cursor::new(format!(
+        "{}.{}.{}",
+        cursor_prefix(sort),
+        primary,
+        record.id.as_str()
+    ))
+    .map_err(|error| RepositoryError::OperationFailed {
+        message: format!("could not encode pagination cursor: {error}"),
+    })
+}
+
+fn list_limit_plus_one(limit: u64) -> Result<i64, RepositoryError> {
+    let fetch_limit = limit
+        .checked_add(1)
+        .ok_or_else(|| RepositoryError::OperationFailed {
+            message: "list limit overflowed".to_owned(),
+        })?;
+    i64::try_from(fetch_limit).map_err(|error| RepositoryError::OperationFailed {
+        message: format!("list limit does not fit sqlite integer: {error}"),
+    })
+}
+
+fn invalid_cursor(message: impl Into<String>) -> RepositoryError {
+    RepositoryError::OperationFailed {
+        message: format!("invalid cursor: {}", message.into()),
+    }
+}
+
 fn count<P>(connection: &Connection, sql: &str, params: P) -> Result<u64, RepositoryError>
 where
     P: rusqlite::Params,
@@ -871,9 +1122,10 @@ fn map_rusqlite_repository_error(error: rusqlite::Error) -> RepositoryError {
 mod tests {
     use tempfile::tempdir;
     use tssp_domain::{
-        ContentHash, FileId, FileName, FileSize, MimeType, StorageHandle, Tag, UnixTimestamp,
+        ContentHash, Cursor, FileId, FileName, FileSize, MimeType, StorageHandle, Tag, TagKey,
+        UnixTimestamp,
     };
-    use tssp_ports::{FileRepository, NewFileRecord, RepositoryError};
+    use tssp_ports::{FileRepository, ListQuery, ListSort, NewFileRecord, RepositoryError};
 
     use super::SqliteFileRepository;
 
@@ -1021,6 +1273,166 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].id.as_str(), "3");
         assert_eq!(list[1].id.as_str(), "2");
+    }
+
+    #[test]
+    fn list_files_applies_filters_and_cursor_pagination() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+
+        let mut earliest = new_file("file-1", &["Docs", "Family"], 1_000);
+        earliest.name = filename("report-alpha.png");
+        earliest.mime_type = mime_type("image/png");
+        earliest.pinned_at = Some(1);
+        repository
+            .insert_file(earliest)
+            .unwrap_or_else(|error| panic!("first insert failed: {error}"));
+
+        let mut second = new_file("file-2", &["Docs", "Family"], 2_000);
+        second.name = filename("report-beta.png");
+        second.mime_type = mime_type("image/png");
+        second.pinned_at = Some(2);
+        repository
+            .insert_file(second)
+            .unwrap_or_else(|error| panic!("second insert failed: {error}"));
+
+        let mut wrong_tags = new_file("file-3", &["Docs"], 1_500);
+        wrong_tags.name = filename("report-missing-tag.png");
+        wrong_tags.mime_type = mime_type("image/png");
+        wrong_tags.pinned_at = Some(3);
+        repository
+            .insert_file(wrong_tags)
+            .unwrap_or_else(|error| panic!("third insert failed: {error}"));
+
+        let mut wrong_mime = new_file("file-4", &["Docs", "Family"], 1_600);
+        wrong_mime.name = filename("report-text.txt");
+        wrong_mime.mime_type = mime_type("text/plain");
+        wrong_mime.pinned_at = Some(4);
+        repository
+            .insert_file(wrong_mime)
+            .unwrap_or_else(|error| panic!("fourth insert failed: {error}"));
+
+        let mut unpinned = new_file("file-5", &["Docs", "Family"], 1_700);
+        unpinned.name = filename("report-unpinned.png");
+        unpinned.mime_type = mime_type("image/png");
+        unpinned.pinned_at = None;
+        repository
+            .insert_file(unpinned)
+            .unwrap_or_else(|error| panic!("fifth insert failed: {error}"));
+
+        let query = ListQuery {
+            limit: 1,
+            tags: vec![tag_key("Docs"), tag_key("Family")],
+            mime_prefix: Some("image".to_owned()),
+            name_substring: Some("report".to_owned()),
+            since: Some(timestamp(900)),
+            until: Some(timestamp(2_100)),
+            pinned_only: true,
+            sort: ListSort::UploadedAsc,
+            after_cursor: None,
+        };
+
+        let first_page = repository
+            .list_files(&query)
+            .unwrap_or_else(|error| panic!("first list failed: {error}"));
+        assert_eq!(first_page.files.len(), 1);
+        assert_eq!(first_page.files[0].id.as_str(), "file-1");
+        assert!(first_page.next_cursor.is_some());
+
+        let second_page = repository
+            .list_files(&ListQuery {
+                after_cursor: first_page.next_cursor,
+                ..query
+            })
+            .unwrap_or_else(|error| panic!("second list failed: {error}"));
+        assert_eq!(second_page.files.len(), 1);
+        assert_eq!(second_page.files[0].id.as_str(), "file-2");
+        assert!(second_page.next_cursor.is_none());
+    }
+
+    #[test]
+    fn list_files_supports_name_and_size_sorts() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+
+        let mut alpha = new_file("alpha", &[], 1_000);
+        alpha.name = filename("alpha.txt");
+        alpha.size = FileSize::new(20);
+        alpha.pinned_at = None;
+        repository
+            .insert_file(alpha)
+            .unwrap_or_else(|error| panic!("alpha insert failed: {error}"));
+
+        let mut gamma = new_file("gamma", &[], 1_100);
+        gamma.name = filename("gamma.txt");
+        gamma.size = FileSize::new(30);
+        gamma.pinned_at = None;
+        repository
+            .insert_file(gamma)
+            .unwrap_or_else(|error| panic!("gamma insert failed: {error}"));
+
+        let mut beta = new_file("beta", &[], 1_200);
+        beta.name = filename("beta.txt");
+        beta.size = FileSize::new(10);
+        beta.pinned_at = None;
+        repository
+            .insert_file(beta)
+            .unwrap_or_else(|error| panic!("beta insert failed: {error}"));
+
+        let by_name = repository
+            .list_files(&ListQuery {
+                limit: 10,
+                sort: ListSort::NameAsc,
+                ..ListQuery::default()
+            })
+            .unwrap_or_else(|error| panic!("name list failed: {error}"));
+        assert_eq!(by_name.files.len(), 3);
+        assert_eq!(by_name.files[0].name.original(), "alpha.txt");
+        assert_eq!(by_name.files[1].name.original(), "beta.txt");
+        assert_eq!(by_name.files[2].name.original(), "gamma.txt");
+
+        let by_size = repository
+            .list_files(&ListQuery {
+                limit: 10,
+                sort: ListSort::SizeDesc,
+                ..ListQuery::default()
+            })
+            .unwrap_or_else(|error| panic!("size list failed: {error}"));
+        assert_eq!(by_size.files.len(), 3);
+        assert_eq!(by_size.files[0].size.bytes(), 30);
+        assert_eq!(by_size.files[1].size.bytes(), 20);
+        assert_eq!(by_size.files[2].size.bytes(), 10);
+    }
+
+    #[test]
+    fn list_files_rejects_invalid_cursor() {
+        let repository = SqliteFileRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("repository open failed: {error}"));
+        repository
+            .insert_file(new_file("file-1", &[], 1_000))
+            .unwrap_or_else(|error| panic!("insert failed: {error}"));
+
+        let result = repository.list_files(&ListQuery {
+            limit: 10,
+            sort: ListSort::UploadedAsc,
+            after_cursor: Some(
+                Cursor::new("ua.bad-value.file-1")
+                    .unwrap_or_else(|cursor_error| panic!("cursor parse failed: {cursor_error}")),
+            ),
+            ..ListQuery::default()
+        });
+        let error = match result {
+            Ok(page) => panic!(
+                "expected invalid cursor error, got {} files",
+                page.files.len()
+            ),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            RepositoryError::OperationFailed { message } if message.starts_with("invalid cursor:")
+        ));
     }
 
     #[test]
@@ -1420,5 +1832,9 @@ mod tests {
 
     fn tag_value(value: &str) -> Tag {
         Tag::new(value).unwrap_or_else(|error| panic!("invalid tag: {error}"))
+    }
+
+    fn tag_key(value: &str) -> TagKey {
+        TagKey::new(value).unwrap_or_else(|error| panic!("invalid tag key: {error}"))
     }
 }

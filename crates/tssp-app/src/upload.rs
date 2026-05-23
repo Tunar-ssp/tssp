@@ -323,6 +323,16 @@ mod tests {
             Ok(None)
         }
 
+        fn list_files(
+            &self,
+            _query: &tssp_ports::ListQuery,
+        ) -> Result<tssp_ports::PagedFiles, RepositoryError> {
+            Ok(tssp_ports::PagedFiles {
+                files: Vec::new(),
+                next_cursor: None,
+            })
+        }
+
         fn list_files_recent(&self, _limit: u64) -> Result<Vec<FileRecord>, RepositoryError> {
             Ok(Vec::new())
         }

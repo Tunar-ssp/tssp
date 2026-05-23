@@ -1589,6 +1589,7 @@ dependencies = [
 name = "tssp-adapter-sqlite"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "rusqlite",
  "tempfile",
  "thiserror",
