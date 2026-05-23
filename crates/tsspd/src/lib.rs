@@ -12,6 +12,7 @@ mod list;
 mod pins;
 mod rename;
 mod search;
+mod sessions;
 mod status;
 mod tags;
 mod upload;
@@ -33,6 +34,7 @@ pub use delete::{
 };
 pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};
 pub use search::{FileSearchProvider, RepositoryFileSearchProvider};
+pub use sessions::{SessionProvider, SessionResponse};
 pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
 pub use tags::{ApplicationFileTagProvider, FileTagProvider, HttpTagError, HttpTagMutation};
 pub use upload::{
@@ -44,6 +46,7 @@ use content::StaticBlobReader;
 use delete::StaticFileDeleteProvider;
 use pins::StaticFilePinProvider;
 use search::StaticFileSearchProvider;
+use sessions::StaticSessionProvider;
 use status::StaticMetadataStatsProvider;
 use tags::StaticFileTagProvider;
 use upload::StaticFileUploadProvider;
@@ -58,6 +61,7 @@ pub struct HttpState {
     tag_provider: Arc<dyn FileTagProvider>,
     pin_provider: Arc<dyn FilePinProvider>,
     search_provider: Arc<dyn search::FileSearchProvider>,
+    session_provider: Arc<dyn SessionProvider>,
     blob_reader: Arc<dyn BlobReader + Send + Sync>,
     upload_temp_dir: PathBuf,
     storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
@@ -75,6 +79,7 @@ impl HttpState {
             tag_provider: Arc::new(StaticFileTagProvider),
             pin_provider: Arc::new(StaticFilePinProvider),
             search_provider: Arc::new(StaticFileSearchProvider),
+            session_provider: Arc::new(StaticSessionProvider),
             blob_reader: Arc::new(StaticBlobReader),
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -129,6 +134,13 @@ impl HttpState {
         self.search_provider = provider;
         self
     }
+
+    /// Sets the session provider.
+    #[must_use]
+    pub fn with_session_provider(mut self, provider: Arc<dyn SessionProvider>) -> Self {
+        self.session_provider = provider;
+        self
+    }
 }
 
 /// Builds the daemon router.
@@ -163,6 +175,22 @@ pub fn build_router(state: HttpState) -> Router {
                 .patch(rename::rename_file),
         )
         .route("/api/v1/search", get(search::search_files))
+        .route(
+            "/api/v1/sessions/send",
+            post(sessions::create_send_session),
+        )
+        .route(
+            "/api/v1/sessions/receive",
+            post(sessions::create_receive_session),
+        )
+        .route(
+            "/api/v1/sessions/{token}",
+            get(sessions::get_session),
+        )
+        .route(
+            "/api/v1/sessions/{token}/use",
+            post(sessions::use_session_endpoint),
+        )
         .route("/healthz", get(status::healthz))
         .route("/readyz", get(status::readyz))
         .route("/api/v1/status", get(status::status))
