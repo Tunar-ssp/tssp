@@ -828,3 +828,52 @@ select:focus {
 .tag-chips-text-input::placeholder {
   color: var(--text-muted);
 }
+
+/* ── Upload queue ────────────────────────────────────────────────────── */
+.upload-queue {
+  margin: 8px 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 0.82rem;
+}
+
+.upload-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.upload-queue-row:last-child {
+  border-bottom: none;
+}
+
+.upload-queue-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.upload-queue-size {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.upload-queue-status {
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 500;
+  min-width: 72px;
+  text-align: right;
+}
+
+.upload-queue-status.pending { color: var(--text-muted); }
+.upload-queue-status.uploading { color: var(--accent); }
+.upload-queue-status.done { color: var(--success, #4ade80); }
+.upload-queue-status.failed { color: var(--danger); }

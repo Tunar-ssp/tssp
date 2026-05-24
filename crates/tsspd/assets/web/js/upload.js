@@ -5,26 +5,32 @@ window.Tssp = window.Tssp || {};
 
   T.uploadFiles = async function uploadFiles(fileList) {
     if (!fileList || !fileList.length) return;
-    const progress = T.$("#upload-progress");
+    const queue = T.$("#upload-queue");
     const folder = (T.$("#upload-folder")?.value || "").trim();
     const pinned = T.$("#upload-pin")?.checked || false;
     const tagInput = T.$("#upload-tags")?.value || "";
-    const tags = tagInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
+    const tags = tagInput.split(",").map((t) => t.trim()).filter(Boolean);
 
-    T.showBanner(`Uploading ${fileList.length} file(s)…`, "info");
-    if (progress) {
-      progress.classList.remove("hidden");
-      progress.textContent = `Preparing ${fileList.length} file(s)…`;
-    }
-    let ok = 0;
     const files = Array.from(fileList);
-    for (const file of files) {
-      if (progress) {
-        progress.textContent = `Uploading ${ok + 1} of ${files.length}: ${file.name}`;
-      }
+
+    if (queue) {
+      queue.classList.remove("hidden");
+      queue.innerHTML = files
+        .map((f, i) =>
+          `<div class="upload-queue-row" id="uq-${i}">
+            <span class="upload-queue-name" title="${T.escapeHtml(f.name)}">${T.escapeHtml(f.name)}</span>
+            <span class="upload-queue-size">${T.escapeHtml(T.formatBytes(f.size))}</span>
+            <span class="upload-queue-status pending" id="uqs-${i}">Queued</span>
+          </div>`
+        )
+        .join("");
+    }
+
+    let ok = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const statusEl = T.$(`#uqs-${i}`);
+      if (statusEl) { statusEl.textContent = "Uploading…"; statusEl.className = "upload-queue-status uploading"; }
       const fd = new FormData();
       fd.append("file", file);
       if (folder) fd.append("folder", folder);
@@ -33,20 +39,20 @@ window.Tssp = window.Tssp || {};
       try {
         await T.api("/files", { method: "POST", body: fd });
         ok++;
+        if (statusEl) { statusEl.textContent = "Done"; statusEl.className = "upload-queue-status done"; }
       } catch (e) {
-        T.showBanner(`Upload failed: ${e.message}`, "error");
-        if (progress) {
-          progress.textContent = `Upload failed: ${e.message}`;
-        }
-        return;
+        if (statusEl) { statusEl.textContent = `Failed: ${e.message}`; statusEl.className = "upload-queue-status failed"; }
       }
     }
-    T.showBanner(`Uploaded ${ok} file(s)`, "success");
-    if (progress) {
-      progress.textContent = `Uploaded ${ok} file(s)`;
-      setTimeout(() => progress.classList.add("hidden"), 3500);
+
+    const failed = files.length - ok;
+    if (failed === 0) {
+      T.showBanner(`Uploaded ${ok} file${ok !== 1 ? "s" : ""}`, "success");
+    } else {
+      T.showBanner(`${ok} uploaded, ${failed} failed`, "error");
     }
-    setTimeout(() => T.showBanner(""), 3000);
+    if (queue) setTimeout(() => { queue.classList.add("hidden"); queue.innerHTML = ""; }, 4000);
+
     T.loadFiles();
     T.loadFolderTree();
     if (T.$("#view-images") && !T.$("#view-images").classList.contains("hidden")) {
