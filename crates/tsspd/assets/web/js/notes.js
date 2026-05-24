@@ -303,6 +303,7 @@ window.Tssp = window.Tssp || {};
 	      callout: "> [!NOTE]\n> Important context or decision.\n",
 	      code: "```text\npaste code or command output here\n```\n",
 	      table: "| Item | Status | Notes |\n| --- | --- | --- |\n| Example | Open | Add details |\n",
+	      divider: "\n---\n\n",
 	    };
 	    insertAtCursor(blocks[kind] || "");
 	  };
@@ -704,15 +705,8 @@ window.Tssp = window.Tssp || {};
 
 	  T.duplicateNote = async function duplicateNote(id) {
 	    try {
-	      const note = await T.api("/notes/" + encodeURIComponent(id));
-	      await T.api("/notes", {
+	      await T.api("/notes/" + encodeURIComponent(id) + "/duplicate", {
 	        method: "POST",
-	        body: JSON.stringify({
-	          title: `${note.title || "Untitled"} copy`,
-	          body: note.body || "",
-	          tags: note.tags || [],
-	          pin: false,
-	        }),
 	      });
 	      T.showBanner("Note duplicated", "success");
 	      T.loadNotes();

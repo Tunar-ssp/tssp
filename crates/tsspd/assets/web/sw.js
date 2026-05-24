@@ -1,6 +1,6 @@
 /* Minimal offline shell cache for TSSP dashboard */
-const CACHE = "tssp-v7";
-const VERSION = "2026-05-24-4";
+const CACHE = "tssp-v8";
+const VERSION = "2026-05-24-5";
 const withVersion = (path) => `${path}?v=${VERSION}`;
 
 const ASSETS = [
@@ -23,6 +23,7 @@ const ASSETS = [
   withVersion("/assets/js/features/search.js"),
   withVersion("/assets/js/features/media.js"),
   withVersion("/assets/js/features/public.js"),
+  withVersion("/assets/js/features/command_palette.js"),
   withVersion("/assets/js/features/workspaces.js"),
   withVersion("/assets/js/files.js"),
   withVersion("/assets/js/notes.js"),

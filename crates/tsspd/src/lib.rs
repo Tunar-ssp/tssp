@@ -20,6 +20,7 @@ mod list;
 #[allow(dead_code)]
 mod mdns;
 mod metrics;
+mod move_file;
 mod notes;
 mod pins;
 mod public_api;

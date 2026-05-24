@@ -120,3 +120,40 @@ async fn delete_note_is_idempotent_from_client_view() {
         StatusCode::NOT_FOUND
     );
 }
+
+#[tokio::test]
+async fn duplicate_note_creates_a_new_record_with_same_body_and_tags() {
+    let repository = SqliteFileRepository::open_in_memory()
+        .unwrap_or_else(|error| panic!("open failed: {error}"));
+    let app = note_router(repository);
+
+    let create = Request::builder()
+        .method("POST")
+        .uri("/api/v1/notes")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            r##"{"title":"Weekly plan","body":"# Weekly\n\nDo the thing","tags":["ideas","ops"],"pin":true}"##,
+        ))
+        .unwrap_or_else(|error| panic!("request failed: {error}"));
+    let created = app.clone().oneshot(create).await.unwrap();
+    let created_body = response_json(created).await;
+    let id = created_body["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("missing id"))
+        .to_owned();
+
+    let duplicate = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/notes/{id}/duplicate"))
+        .body(axum::body::Body::empty())
+        .unwrap_or_else(|error| panic!("request failed: {error}"));
+    let duplicated = app.clone().oneshot(duplicate).await.unwrap();
+    assert_eq!(duplicated.status(), StatusCode::CREATED);
+
+    let duplicated_body = response_json(duplicated).await;
+    assert_ne!(duplicated_body["id"], created_body["id"]);
+    assert_eq!(duplicated_body["body"], created_body["body"]);
+    assert_eq!(duplicated_body["tags"], created_body["tags"]);
+    assert_eq!(duplicated_body["title"], "Weekly plan copy");
+    assert!(duplicated_body["pinned_at"].is_null());
+}

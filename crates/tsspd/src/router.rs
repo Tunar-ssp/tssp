@@ -84,6 +84,10 @@ pub fn build_router(state: HttpState) -> Router {
                 .options(options_response),
         )
         .route(
+            "/api/v1/files/{id}/folder",
+            axum::routing::patch(crate::move_file::move_file_to_folder).options(options_response),
+        )
+        .route(
             "/api/v1/files/{id}/visibility",
             axum::routing::patch(crate::visibility::patch_file_visibility)
                 .options(options_response),
@@ -124,6 +128,10 @@ pub fn build_router(state: HttpState) -> Router {
                 .put(crate::notes::update_note)
                 .delete(crate::notes::delete_note)
                 .options(options_response),
+        )
+        .route(
+            "/api/v1/notes/{id}/duplicate",
+            post(crate::notes::duplicate_note).options(options_response),
         )
         .route(
             "/api/v1/notes/{id}/tags",
@@ -205,6 +213,10 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/admin/system",
             get(crate::admin::admin_system).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/activity",
+            get(crate::admin::admin_activity).options(options_response),
         )
         .route(
             "/api/v1/admin/files",
@@ -325,6 +337,9 @@ pub fn build_router(state: HttpState) -> Router {
                 .options(options_response),
         )
         .route("/p/{token}", get(crate::public_api::public_download))
+        .route("/app-v2", get(crate::web::serve_web_v2_index))
+        .route("/app-v2/", get(crate::web::serve_web_v2_index))
+        .route("/app-v2/{*path}", get(crate::web::serve_web_v2_path))
         .route("/assets/{*path}", get(crate::web::serve_asset))
         .fallback(crate::web::web_fallback)
         .layer(middleware::from_fn_with_state(

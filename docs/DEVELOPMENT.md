@@ -30,9 +30,41 @@ cargo run -p tsspd -- --data-dir /tmp/tssp-dev
 cargo run -p tsspd -- --data-dir /tmp/tssp-dev --check-config
 ```
 
+## Frontend Migration Workspace
+
+The legacy dashboard still lives under `crates/tsspd/assets/web/`, but the
+maintainable replacement is being scaffolded in `frontend/`.
+
+```sh
+# Install frontend dependencies
+cd frontend
+npm install
+
+# Run the new frontend against the local Rust daemon
+npm run dev
+
+# Type-check the new frontend
+npm run check
+
+# Build the new frontend bundle
+npm run build
+```
+
+Current migration contract:
+
+- `frontend/` is the source of truth for the new web UI.
+- During migration, production Rust serving remains on the legacy bundle.
+- The Vite build currently targets `crates/tsspd/assets/web-v2/` to avoid
+  clobbering the live legacy dashboard before parity is reached.
+- The preview bundle is served under `/app-v2/` so it does not conflict with
+  the legacy `/assets/*` surface.
+- After feature parity and smoke checks, the Rust asset serving path can be
+  flipped from `assets/web/` to the built frontend bundle.
+
 ## Project Layout
 
 ```
+frontend/               New Svelte + Vite + TypeScript web app
 crates/
   tssp-domain/         Value objects and validation (no I/O)
   tssp-ports/          Port traits: FileRepository, BlobStore, Clock, etc.

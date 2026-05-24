@@ -2,6 +2,11 @@
 
 > Local-first personal cloud. Self-hosted on Orange Pi. Fast, private, serious.
 
+Implementation note:
+- Product goals live in this file.
+- The maintainable frontend architecture and migration execution live in [ROADMAPWEB.md](./ROADMAPWEB.md).
+- New source now starts in `frontend/`, with cutover to the Rust-served bundle after parity.
+
 ---
 
 ## Product Vision

@@ -1,5 +1,9 @@
 /target/
 /node_modules/
+/frontend/node_modules/
+/frontend/.svelte-kit/
+/frontend/dist/
+/crates/tsspd/assets/web-v2/
 /web/tssp-web/.svelte-kit/
 /web/tssp-web/build/
 *.log

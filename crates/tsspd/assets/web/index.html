@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0d0d0f">
   <title>TSSP Storage</title>
-  <link rel="stylesheet" href="/assets/css/tokens.css?v=2026-05-24-7">
-  <link rel="stylesheet" href="/assets/css/base.css?v=2026-05-24-7">
-  <link rel="stylesheet" href="/assets/css/layout.css?v=2026-05-24-7">
-  <link rel="stylesheet" href="/assets/css/components.css?v=2026-05-24-7">
-  <link rel="stylesheet" href="/assets/css/views.css?v=2026-05-24-7">
-  <link rel="stylesheet" href="/assets/css/mobile.css?v=2026-05-24-7">
-  <link rel="stylesheet" href="/assets/css/product.css?v=2026-05-24-7">
-  <link rel="manifest" href="/assets/manifest.webmanifest?v=2026-05-24-7">
+  <link rel="stylesheet" href="/assets/css/tokens.css?v=2026-05-24-8">
+  <link rel="stylesheet" href="/assets/css/base.css?v=2026-05-24-8">
+  <link rel="stylesheet" href="/assets/css/layout.css?v=2026-05-24-8">
+  <link rel="stylesheet" href="/assets/css/components.css?v=2026-05-24-8">
+  <link rel="stylesheet" href="/assets/css/views.css?v=2026-05-24-8">
+  <link rel="stylesheet" href="/assets/css/mobile.css?v=2026-05-24-8">
+  <link rel="stylesheet" href="/assets/css/product.css?v=2026-05-24-8">
+  <link rel="manifest" href="/assets/manifest.webmanifest?v=2026-05-24-8">
 </head>
 <body>
   <div id="boot-screen" class="boot-screen" aria-live="polite">
@@ -72,6 +72,9 @@
         <kbd class="top-search-kbd">Ctrl K</kbd>
       </div>
       <div class="top-bar-actions">
+        <div id="top-ctx-actions" class="top-ctx-actions">
+          <!-- contextual per-view actions injected by JS -->
+        </div>
         <span class="status-pill"><span class="status-dot"></span><span id="auth-status">Checking</span></span>
         <button type="button" class="btn btn-text" id="logout-btn" hidden>Logout</button>
         <button type="button" class="icon-btn icon-refresh" id="refresh-btn" title="Refresh current view" aria-label="Refresh current view"></button>
@@ -188,14 +191,23 @@
             <div><span class="summary-label">Public</span><strong id="object-public">—</strong></div>
           </div>
 
-          <div class="upload-bar">
-            <span class="upload-bar-label">Upload target</span>
-            <input type="text" id="upload-folder" placeholder="Folder path (e.g. photos/vacation)" aria-label="Upload folder">
-            <input type="text" id="upload-tags" placeholder="Tags (comma-separated)" aria-label="Upload tags">
-            <label class="chip-toggle">
-              <input type="checkbox" id="upload-pin">
-              Pin on upload
-            </label>
+          <div class="upload-bar" id="upload-bar">
+            <button type="button" class="upload-bar-toggle" id="upload-bar-toggle" title="Toggle upload options">
+              <span class="upload-bar-toggle-label">Upload options</span>
+              <span class="upload-bar-toggle-icon">▾</span>
+            </button>
+            <div class="upload-bar-fields" id="upload-bar-fields">
+              <label class="upload-field-label">Folder
+                <input type="text" id="upload-folder" placeholder="e.g. photos/vacation" aria-label="Upload folder">
+              </label>
+              <label class="upload-field-label">Tags
+                <input type="text" id="upload-tags" placeholder="comma-separated" aria-label="Upload tags">
+              </label>
+              <label class="chip-toggle">
+                <input type="checkbox" id="upload-pin">
+                Pin on upload
+              </label>
+            </div>
           </div>
           <div id="upload-queue" class="upload-queue hidden" role="status" aria-live="polite"></div>
 
@@ -262,6 +274,22 @@
             <div><span class="summary-label">Total size</span><strong id="sharing-size">—</strong></div>
             <div><span class="summary-label">Access</span><strong>Public LAN</strong></div>
           </div>
+          <div class="public-filter-bar">
+            <input id="public-search" type="search" placeholder="Search shared files" autocomplete="off" class="public-search-input">
+            <select id="public-kind" aria-label="Shared file type">
+              <option value="all">All types</option>
+              <option value="image">Images</option>
+              <option value="video">Videos</option>
+              <option value="document">Documents</option>
+              <option value="other">Other files</option>
+            </select>
+            <select id="public-sort" aria-label="Sort shared files">
+              <option value="newest">Newest shared first</option>
+              <option value="name">Name A-Z</option>
+              <option value="size">Largest first</option>
+            </select>
+            <button type="button" class="btn btn-text btn-sm" data-view-jump="objects">Open Cloud Drive</button>
+          </div>
           <div id="public-grid" class="public-grid">
             <div id="public-body" class="empty-state compact">Loading public links...</div>
           </div>
@@ -270,11 +298,16 @@
         <section id="view-videos" class="view hidden">
           <div class="page-header product-page-header">
             <div>
+              <nav class="breadcrumb" aria-label="Breadcrumb">
+                <button type="button" class="breadcrumb-link" data-view-jump="objects">Cloud Drive</button>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">Videos</span>
+              </nav>
               <h2>Videos</h2>
               <p class="page-subtitle">Playable video objects with preview, share, and download actions.</p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-secondary" data-view-jump="objects">Upload video</button>
+              <button type="button" class="btn btn-secondary" data-upload-trigger>Upload video</button>
             </div>
           </div>
           <div id="video-grid" class="image-grid">
@@ -285,11 +318,16 @@
         <section id="view-documents" class="view hidden">
           <div class="page-header product-page-header">
             <div>
+              <nav class="breadcrumb" aria-label="Breadcrumb">
+                <button type="button" class="breadcrumb-link" data-view-jump="objects">Cloud Drive</button>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">Documents</span>
+              </nav>
               <h2>Documents</h2>
               <p class="page-subtitle">PDFs, text, source, and office-style files.</p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-secondary" data-view-jump="objects">Upload document</button>
+              <button type="button" class="btn btn-secondary" data-upload-trigger>Upload document</button>
             </div>
           </div>
           <div id="documents-grid" class="document-grid"></div>
@@ -303,46 +341,64 @@
           </div>
         </section>
 
-        <section id="view-workspaces" class="view hidden">
-          <div class="page-header">
-            <div>
-              <h2>Workspaces</h2>
-              <p class="page-subtitle">Scripts and text files — stored, not executed</p>
-            </div>
-            <div class="page-actions">
-              <button type="button" class="btn btn-primary" id="new-workspace-btn">New workspace</button>
+        <section id="view-workspaces" class="view view-fullscreen hidden">
+          <div class="ide-shell">
+            <aside class="ide-sidebar">
+              <div class="ide-sidebar-header">
+                <span class="ide-sidebar-section">EXPLORER</span>
+                <button type="button" class="ide-hdr-btn" id="ws-new-file-btn" title="New file (Ctrl+N)">＋</button>
+              </div>
+              <div class="ide-search-bar">
+                <input id="workspaces-search" type="search" placeholder="Filter files…" autocomplete="off" class="ide-search-input">
+              </div>
+              <div class="ide-file-list" id="ide-file-list"></div>
+            </aside>
+            <div class="ide-body">
+              <div class="ide-tab-bar" id="ide-tab-bar">
+                <div class="ide-tabs" id="ide-tabs">
+                  <span class="ide-tabs-empty">No files open</span>
+                </div>
+              </div>
+              <div class="ide-editor-wrap" id="ide-editor-wrap">
+                <div class="ide-welcome" id="ide-welcome">
+                  <div class="ide-welcome-inner">
+                    <div class="ide-welcome-logo">⌨</div>
+                    <h3>Workspace</h3>
+                    <p>Pick a file from the explorer or create a new one</p>
+                    <button type="button" class="btn btn-primary" id="ide-new-file-cta">New file</button>
+                  </div>
+                </div>
+                <div class="ide-editor hidden" id="ide-editor">
+                  <textarea id="ide-textarea" class="ide-code" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" data-gramm="false"></textarea>
+                </div>
+              </div>
+              <div class="ide-status-bar">
+                <span class="ide-status-left">
+                  <span id="ide-lang-badge">Plain Text</span>
+                </span>
+                <span class="ide-status-right">
+                  <span id="ide-cursor-pos">Ln 1, Col 1</span>
+                  <span id="ide-char-count">0 chars</span>
+                  <span id="ide-save-status">All saved</span>
+                </span>
+              </div>
             </div>
           </div>
-          <div class="notes-filter-bar">
-            <input id="workspaces-search" type="search" placeholder="Filter workspaces…" autocomplete="off" class="notes-search-input">
-            <select id="workspaces-lang-filter" class="filter-select" aria-label="Language filter">
-              <option value="">All languages</option>
-              <option value="markdown">Markdown</option>
-              <option value="javascript">JavaScript</option>
-              <option value="typescript">TypeScript</option>
-              <option value="python">Python</option>
-              <option value="rust">Rust</option>
-              <option value="shell">Shell</option>
-              <option value="sql">SQL</option>
-              <option value="json">JSON</option>
-              <option value="yaml">YAML</option>
-              <option value="toml">TOML</option>
-              <option value="html">HTML</option>
-              <option value="css">CSS</option>
-              <option value="text">Text</option>
-            </select>
-          </div>
-          <div id="workspaces-grid"></div>
         </section>
 
         <section id="view-images" class="view hidden">
           <div class="page-header product-page-header">
             <div>
+              <nav class="breadcrumb" aria-label="Breadcrumb">
+                <button type="button" class="breadcrumb-link" data-view-jump="objects">Cloud Drive</button>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">Images</span>
+              </nav>
               <h2>Images</h2>
               <p class="page-subtitle">A gallery view for screenshots, photos, and image assets.</p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-secondary" data-view-jump="objects">Upload image</button>
+              <button type="button" class="btn btn-secondary" data-upload-trigger>Upload image</button>
             </div>
           </div>
           <div class="image-grid" id="image-grid"></div>
@@ -387,13 +443,14 @@
             </div>
           </div>
           <div class="note-block-toolbar" aria-label="Note block tools">
-            <button type="button" data-note-insert="heading">Heading</button>
-            <button type="button" data-note-insert="todo">Checklist</button>
-            <button type="button" data-note-insert="bullet">Bullets</button>
-            <button type="button" data-note-insert="numbered">Numbers</button>
-            <button type="button" data-note-insert="callout">Callout</button>
-            <button type="button" data-note-insert="code">Code</button>
-            <button type="button" data-note-insert="table">Table</button>
+            <button type="button" data-note-insert="heading" title="## Heading">H1</button>
+            <button type="button" data-note-insert="todo" title="- [ ] Checklist">Todo</button>
+            <button type="button" data-note-insert="bullet" title="- Bullet list">• List</button>
+            <button type="button" data-note-insert="numbered" title="1. Numbered list">1. List</button>
+            <button type="button" data-note-insert="callout" title="> ! Callout">Callout</button>
+            <button type="button" data-note-insert="code" title="``` Code block">Code</button>
+            <button type="button" data-note-insert="table" title="Table block">Table</button>
+            <button type="button" data-note-insert="divider" title="--- Divider">—</button>
           </div>
           <form id="note-form" class="note-full-form">
             <div class="note-full-meta">
@@ -478,6 +535,7 @@
             </label>
             <button type="button" class="btn btn-text btn-sm" id="search-clear-filters">Clear filters</button>
           </div>
+          <div id="search-recent" class="search-recent"></div>
           <div id="search-results" class="search-results">
             <div id="search-body" class="empty-state compact">
               <strong>Start with the global search bar</strong>
@@ -497,6 +555,7 @@
             <button type="button" class="admin-tab active" data-admin-tab="overview">Overview</button>
             <button type="button" class="admin-tab" data-admin-tab="access">Users & sessions</button>
             <button type="button" class="admin-tab" data-admin-tab="files">Files</button>
+            <button type="button" class="admin-tab" data-admin-tab="sharing">Sharing</button>
             <button type="button" class="admin-tab" data-admin-tab="maintenance">Maintenance</button>
             <button type="button" class="admin-tab" data-admin-tab="console">Safe console</button>
           </div>
@@ -571,6 +630,25 @@
                   <button type="button" class="btn btn-text btn-sm" id="admin-bulk-clear">Clear selection</button>
                 </div>
                 <div id="admin-files">Loading...</div>
+              </div>
+            </div>
+            <div class="admin-panel hidden" data-admin-panel="sharing">
+              <div class="admin-grid">
+                <div class="admin-card admin-card-wide">
+                  <div class="admin-card-head">
+                    <div>
+                      <h3>Public links</h3>
+                      <p class="page-subtitle">Audit active shares, copy links, open QR codes, and revoke exposure fast.</p>
+                    </div>
+                    <div class="admin-card-head-actions">
+                      <input id="admin-sharing-search" type="search" placeholder="Filter public links..." autocomplete="off" class="admin-files-search-input">
+                    </div>
+                  </div>
+                  <div id="admin-sharing-summary" class="admin-sharing-summary">
+                    <div class="empty-state compact">Loading sharing summary…</div>
+                  </div>
+                  <div id="admin-sharing-list">Loading...</div>
+                </div>
               </div>
             </div>
             <div class="admin-panel hidden" data-admin-panel="maintenance">
@@ -796,27 +874,27 @@
     </div>
   </div>
 
-  <script src="/assets/js/api.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/ui/format.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/ui/render.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/ui/toast.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/ui/dialogs.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/state.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/upload.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/features/overview.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/features/search.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/features/command_palette.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/features/media.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/features/public.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/features/workspaces.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/files.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/notes.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/admin.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/editor.js?v=2026-05-24-7" defer></script>
-  <script src="/assets/js/app.js?v=2026-05-24-7" defer></script>
+  <script src="/assets/js/api.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/ui/format.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/ui/render.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/ui/toast.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/ui/dialogs.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/state.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/upload.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/features/overview.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/features/search.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/features/command_palette.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/features/media.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/features/public.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/features/workspaces.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/files.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/notes.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/admin.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/editor.js?v=2026-05-24-8" defer></script>
+  <script src="/assets/js/app.js?v=2026-05-24-8" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/assets/sw.js?v=2026-05-24-7", {
+      navigator.serviceWorker.register("/assets/sw.js?v=2026-05-24-8", {
         scope: "/",
         updateViaCache: "none",
       }).catch(() => {});

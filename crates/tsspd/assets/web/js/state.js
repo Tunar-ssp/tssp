@@ -89,6 +89,24 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  // Views where the upload button should be visible
+  const UPLOAD_VIEWS = new Set(["objects", "images", "videos", "documents"]);
+  // Views that take full screen (no padding, no page chrome on main)
+  const FULLSCREEN_VIEWS = new Set(["workspaces", "editor"]);
+
+  const CTX_ACTIONS = {
+    notes: () => `<button type="button" class="btn btn-primary btn-sm" id="ctx-new-note">+ Note</button>`,
+    workspaces: () => `<button type="button" class="btn btn-primary btn-sm" id="ctx-new-file">+ File</button>`,
+    overview: () => "",
+    admin: () => "",
+    objects: () => "",
+    images: () => "",
+    videos: () => "",
+    documents: () => "",
+    public: () => "",
+    search: () => "",
+  };
+
   T.setView = function setView(name) {
     if (!T.$(`#view-${name}`)) {
       name = "objects";
@@ -99,6 +117,25 @@ window.Tssp = window.Tssp || {};
     T.$$(".view").forEach((v) => v.classList.add("hidden"));
     const section = T.$(`#view-${name}`);
     if (section) section.classList.remove("hidden");
+
+    // Show/hide upload button based on view
+    const uploadBtn = T.$("#upload-btn");
+    if (uploadBtn) uploadBtn.style.display = UPLOAD_VIEWS.has(name) ? "" : "none";
+
+    // Contextual top-bar actions
+    const ctxEl = T.$("#top-ctx-actions");
+    if (ctxEl) {
+      const fn = CTX_ACTIONS[name];
+      ctxEl.innerHTML = fn ? fn() : "";
+      // Bind dynamically injected buttons
+      ctxEl.querySelector("#ctx-new-note")?.addEventListener("click", () => T.openNoteDialog?.(null));
+      ctxEl.querySelector("#ctx-new-file")?.addEventListener("click", () => T.openWorkspaceDialog?.());
+    }
+
+    // Full-screen views: tell main element
+    const main = T.$("#main");
+    if (main) main.classList.toggle("main-fullscreen", FULLSCREEN_VIEWS.has(name));
+
     if (name !== "note-editor" && location.hash !== `#${name}`) {
       history.replaceState(null, "", `#${name}`);
     }
@@ -133,7 +170,7 @@ window.Tssp = window.Tssp || {};
     else if (view === "videos") T.loadVideos?.();
     else if (view === "documents") T.loadDocuments?.();
     else if (view === "public") T.loadPublic?.();
-    else if (view === "workspaces") T.loadWorkspaces?.();
+    else if (view === "workspaces") { T.loadWorkspaces?.(); }
     else if (view === "admin") T.loadAdmin?.();
     else if (view === "editor") T.loadEditor?.();
   };

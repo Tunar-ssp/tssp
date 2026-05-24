@@ -82,6 +82,10 @@ pub(crate) const JS_FEATURE_PUBLIC: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/features/public.js"
 ));
+pub(crate) const JS_FEATURE_COMMAND_PALETTE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/features/command_palette.js"
+));
 pub(crate) const JS_FEATURE_WORKSPACES: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/features/workspaces.js"
@@ -106,13 +110,13 @@ pub(crate) const JS_APP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
 pub(crate) const LEGACY_APP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/app.js"));
-pub(crate) const LEGACY_APP_CSS: &str = r#"@import url("/assets/css/tokens.css?v=2026-05-24-4");
-@import url("/assets/css/base.css?v=2026-05-24-4");
-@import url("/assets/css/layout.css?v=2026-05-24-4");
-@import url("/assets/css/components.css?v=2026-05-24-4");
-@import url("/assets/css/views.css?v=2026-05-24-4");
-@import url("/assets/css/mobile.css?v=2026-05-24-4");
-@import url("/assets/css/product.css?v=2026-05-24-4");
+pub(crate) const LEGACY_APP_CSS: &str = r#"@import url("/assets/css/tokens.css?v=2026-05-24-5");
+@import url("/assets/css/base.css?v=2026-05-24-5");
+@import url("/assets/css/layout.css?v=2026-05-24-5");
+@import url("/assets/css/components.css?v=2026-05-24-5");
+@import url("/assets/css/views.css?v=2026-05-24-5");
+@import url("/assets/css/mobile.css?v=2026-05-24-5");
+@import url("/assets/css/product.css?v=2026-05-24-5");
 "#;
 
 pub(crate) const HTML_CSP: &str =
@@ -149,6 +153,10 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "js/features/public.js" => {
             Some((JS_FEATURE_PUBLIC, "application/javascript; charset=utf-8"))
         }
+        "js/features/command_palette.js" => Some((
+            JS_FEATURE_COMMAND_PALETTE,
+            "application/javascript; charset=utf-8",
+        )),
         "js/features/workspaces.js" => Some((
             JS_FEATURE_WORKSPACES,
             "application/javascript; charset=utf-8",

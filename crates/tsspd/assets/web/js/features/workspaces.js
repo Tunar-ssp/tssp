@@ -3,153 +3,326 @@ window.Tssp = window.Tssp || {};
 (function (T) {
   "use strict";
 
-T.allWorkspaces = [];
+  // ── IDE state ─────────────────────────────────────────────────────────────
 
-  function renderWorkspaceCards() {
-    const container = T.$("#workspaces-grid");
-    if (!container) return;
-    const query = (T.$("#workspaces-search")?.value || "").toLowerCase().trim();
-    const lang = (T.$("#workspaces-lang-filter")?.value || "").toLowerCase();
-    let items = T.allWorkspaces.slice();
-    if (lang) items = items.filter((w) => (w.language || "").toLowerCase() === lang);
-    if (query) items = items.filter((w) =>
-      (w.name || "").toLowerCase().includes(query) || (w.body || "").toLowerCase().includes(query)
-    );
-    if (!items.length) {
-      if (T.allWorkspaces.length === 0) {
-        container.innerHTML = `<div class="notes-empty-hero">
-          <div class="notes-empty-icon">⌨️</div>
-          <div class="notes-empty-title">No workspaces yet</div>
-          <div class="notes-empty-sub">Create a workspace to store scripts, configs, and text files with syntax highlighting.</div>
-          <button type="button" class="btn btn-primary" id="ws-empty-cta">New workspace</button>
-        </div>`;
-        container.querySelector("#ws-empty-cta")?.addEventListener("click", () => T.openWorkspaceDialog(null));
-      } else {
-        container.innerHTML = '<div class="notes-empty-state">No workspaces match your filters.</div>';
-      }
-      return;
-    }
-    const langColors = {
-      rust: "var(--orange)", python: "var(--blue)", js: "var(--yellow)",
-      javascript: "var(--yellow)", typescript: "var(--blue)", json: "var(--cyan)",
-      yaml: "var(--green)", toml: "var(--orange)", bash: "var(--green)",
-      sh: "var(--green)", html: "var(--red)", css: "var(--violet)",
-      sql: "var(--cyan)", markdown: "var(--text-muted)", md: "var(--text-muted)",
-    };
-    container.innerHTML = `<div class="workspace-cards">${items
-      .map((workspace) => {
-        const id = T.escapeHtml(workspace.id);
-        const lang = (workspace.language || "text").toLowerCase();
-        const lineCount = (workspace.body || "").split("\n").filter(Boolean).length;
-        const charCount = (workspace.body || "").length;
-        const preview = (workspace.body || "").trim().split("\n").slice(0, 3).join("\n");
-        const langColor = langColors[lang] || "var(--text-dim)";
-        return `<article class="workspace-card">
-          <div class="workspace-card-head">
-            <div class="workspace-card-title-row">
-              <strong class="workspace-card-name">${T.escapeHtml(workspace.name)}</strong>
-              <span class="workspace-lang-badge" style="color:${langColor}">${T.escapeHtml(workspace.language || "text")}</span>
-            </div>
-            <div class="workspace-card-meta">${lineCount} lines · ${charCount} chars · <span title="${T.escapeHtml(T.formatDate(workspace.updated_at))}">${T.escapeHtml(T.formatRelativeTime(workspace.updated_at) || T.formatDate(workspace.updated_at))}</span></div>
-          </div>
-          ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : '<div class="workspace-card-empty">Empty file</div>'}
-          <div class="workspace-card-actions">
-            <button type="button" class="btn btn-primary btn-sm" data-ws-open-editor="${id}">Open in editor</button>
-            <button type="button" class="btn btn-secondary btn-sm" data-ws-edit="${id}">Settings</button>
-            <button type="button" class="btn btn-text btn-sm btn-danger" data-ws-del="${id}">Delete</button>
-          </div>
-        </article>`;
-      })
-      .join("")}</div>`;
-  }
+  let allFiles = [];       // all workspaces from server
+  let openTabs = [];       // [{id, name, language, body, dirty, origBody}]
+  let activeId = null;     // currently focused tab id
+  let saveTimer = null;
+
+  // ── Boot / load ───────────────────────────────────────────────────────────
 
   T.loadWorkspaces = async function loadWorkspaces() {
-    const container = T.$("#workspaces-grid");
-    if (!container) return;
-    container.innerHTML = '<div class="notes-loading">Loading workspaces…</div>';
+    const list = T.$("#ide-file-list");
+    if (!list) return;
+    list.innerHTML = '<div class="ide-file-loading">Loading…</div>';
     try {
       const data = await T.api("/workspaces");
-      T.allWorkspaces = data.workspaces || [];
-      renderWorkspaceCards();
-      const searchEl = T.$("#workspaces-search");
-      const langEl = T.$("#workspaces-lang-filter");
-      if (searchEl && !searchEl.dataset.bound) {
-        searchEl.dataset.bound = "1";
-        searchEl.addEventListener("input", renderWorkspaceCards);
+      allFiles = data.workspaces || [];
+      renderFileList();
+      // Re-bind search
+      const s = T.$("#workspaces-search");
+      if (s && !s.dataset.bound) {
+        s.dataset.bound = "1";
+        s.addEventListener("input", renderFileList);
       }
-      if (langEl && !langEl.dataset.bound) {
-        langEl.dataset.bound = "1";
-        langEl.addEventListener("change", renderWorkspaceCards);
-      }
-    } catch (error) {
-      container.innerHTML = `<div class="notes-empty-state">${T.escapeHtml(error.message)}</div>`;
+    } catch (e) {
+      if (list) list.innerHTML = `<div class="ide-file-error">${T.escapeHtml(e.message)}</div>`;
     }
   };
 
-  T.openWorkspaceDialog = function openWorkspaceDialog(workspace, options) {
-    T.workspaceDialogSource = options?.source || "workspaces";
-    T.editingWorkspaceId = workspace ? workspace.id : null;
-    T.$("#workspace-dialog-title").textContent = workspace ? "Edit workspace" : "New workspace";
-    T.$("#workspace-name-input").value = workspace ? workspace.name || "" : "";
-    const langEl = T.$("#workspace-language-input");
-    if (langEl) langEl.value = workspace ? workspace.language || "text" : "text";
-    T.$("#workspace-body-input").value = workspace ? workspace.body || "" : "";
-    T.$("#workspace-dialog").showModal();
+  // ── File tree ─────────────────────────────────────────────────────────────
+
+  const langIcons = {
+    rust: "rs", python: "py", javascript: "js", typescript: "ts",
+    json: "{}",  yaml: "yml", toml: "tom", bash: "sh", sh: "sh",
+    html: "htm", css: "css", sql: "sql", markdown: "md", md: "md",
+    text: "txt",
+  };
+  const langColors = {
+    rust: "var(--orange)", python: "var(--blue)", javascript: "var(--yellow)",
+    typescript: "var(--blue)", json: "var(--cyan)", yaml: "var(--green)",
+    toml: "var(--orange)", bash: "var(--green)", sh: "var(--green)",
+    html: "var(--red)", css: "var(--violet)", sql: "var(--cyan)",
+    markdown: "var(--text-muted)", md: "var(--text-muted)", text: "var(--text-dim)",
+  };
+
+  function renderFileList() {
+    const container = T.$("#ide-file-list");
+    if (!container) return;
+    const q = (T.$("#workspaces-search")?.value || "").toLowerCase();
+    const items = q ? allFiles.filter(f =>
+      (f.name || "").toLowerCase().includes(q) ||
+      (f.language || "").toLowerCase().includes(q)
+    ) : allFiles;
+
+    if (!items.length) {
+      container.innerHTML = allFiles.length === 0
+        ? `<div class="ide-file-empty">No files yet.<br>Press ＋ to create one.</div>`
+        : `<div class="ide-file-empty">No matches.</div>`;
+      return;
+    }
+
+    container.innerHTML = items.map(f => {
+      const lang = (f.language || "text").toLowerCase();
+      const icon = langIcons[lang] || "txt";
+      const color = langColors[lang] || "var(--text-dim)";
+      const isActive = f.id === activeId;
+      const tab = openTabs.find(t => t.id === f.id);
+      const dirty = tab?.dirty ? ' ide-file-dirty' : '';
+      return `<button type="button" class="ide-file-item${isActive ? " active" : ""}${dirty}" data-ide-open="${T.escapeHtml(f.id)}" title="${T.escapeHtml(f.name)}">
+        <span class="ide-file-icon" style="color:${color}">${icon}</span>
+        <span class="ide-file-name">${T.escapeHtml(f.name)}</span>
+        <span class="ide-file-actions-inline">
+          <span class="ide-file-del" data-ide-del="${T.escapeHtml(f.id)}" title="Delete">×</span>
+        </span>
+      </button>`;
+    }).join("");
+  }
+
+  // ── Tab management ────────────────────────────────────────────────────────
+
+  function renderTabs() {
+    const bar = T.$("#ide-tabs");
+    if (!bar) return;
+    if (!openTabs.length) {
+      bar.innerHTML = '<span class="ide-tabs-empty">No files open</span>';
+      return;
+    }
+    bar.innerHTML = openTabs.map(tab => {
+      const dirty = tab.dirty ? '<span class="ide-tab-dot"></span>' : '';
+      return `<button type="button" class="ide-tab${tab.id === activeId ? " active" : ""}" data-ide-tab="${T.escapeHtml(tab.id)}">
+        ${T.escapeHtml(tab.name)}${dirty}
+        <span class="ide-tab-close" data-ide-close="${T.escapeHtml(tab.id)}" title="Close">×</span>
+      </button>`;
+    }).join("");
+  }
+
+  function openFile(id) {
+    const file = allFiles.find(f => f.id === id);
+    if (!file) return;
+
+    // If already open, just switch to it
+    if (!openTabs.find(t => t.id === id)) {
+      openTabs.push({ id: file.id, name: file.name, language: file.language || "text", body: file.body || "", origBody: file.body || "", dirty: false });
+    }
+    activeId = id;
+    renderTabs();
+    renderFileList();
+    showEditor(id);
+  }
+
+  function closeTab(id) {
+    const tab = openTabs.find(t => t.id === id);
+    if (tab?.dirty) {
+      if (!confirm(`"${tab.name}" has unsaved changes. Discard?`)) return;
+    }
+    openTabs = openTabs.filter(t => t.id !== id);
+    if (activeId === id) {
+      activeId = openTabs.length ? openTabs[openTabs.length - 1].id : null;
+    }
+    renderTabs();
+    renderFileList();
+    if (activeId) showEditor(activeId);
+    else showWelcome();
+  }
+
+  function showEditor(id) {
+    const tab = openTabs.find(t => t.id === id);
+    if (!tab) return;
+    const welcome = T.$("#ide-welcome");
+    const editor = T.$("#ide-editor");
+    const textarea = T.$("#ide-textarea");
+    if (!textarea) return;
+    welcome?.classList.add("hidden");
+    editor?.classList.remove("hidden");
+    textarea.value = tab.body;
+    updateStatusBar(tab);
+    textarea.focus();
+  }
+
+  function showWelcome() {
+    T.$("#ide-welcome")?.classList.remove("hidden");
+    T.$("#ide-editor")?.classList.add("hidden");
+  }
+
+  function updateStatusBar(tab) {
+    if (!tab) return;
+    const langEl = T.$("#ide-lang-badge");
+    const posEl = T.$("#ide-cursor-pos");
+    const charEl = T.$("#ide-char-count");
+    const savedEl = T.$("#ide-save-status");
+    if (langEl) langEl.textContent = (tab.language || "text");
+    if (charEl) charEl.textContent = `${(tab.body || "").length} chars`;
+    if (savedEl) savedEl.textContent = tab.dirty ? "Unsaved changes" : "All saved";
+    if (posEl) posEl.textContent = "Ln 1, Col 1";
+  }
+
+  function updateCursorPos(textarea) {
+    const posEl = T.$("#ide-cursor-pos");
+    if (!posEl) return;
+    const val = textarea.value.substring(0, textarea.selectionStart);
+    const lines = val.split("\n");
+    posEl.textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
+  }
+
+  // ── Save ──────────────────────────────────────────────────────────────────
+
+  async function saveTab(id) {
+    const tab = openTabs.find(t => t.id === id);
+    if (!tab || !tab.dirty) return;
+    const savedEl = T.$("#ide-save-status");
+    if (savedEl) savedEl.textContent = "Saving…";
+    try {
+      await T.api("/workspaces/" + encodeURIComponent(id), {
+        method: "PUT",
+        body: JSON.stringify({ name: tab.name, language: tab.language, body: tab.body }),
+      });
+      tab.origBody = tab.body;
+      tab.dirty = false;
+      renderTabs();
+      renderFileList();
+      if (savedEl) savedEl.textContent = "All saved";
+    } catch (e) {
+      if (savedEl) savedEl.textContent = "Save failed";
+      T.showBanner(e.message, "error");
+    }
+  }
+
+  // ── Create / delete ───────────────────────────────────────────────────────
+
+  async function createNewFile() {
+    const name = prompt("File name (e.g. notes.md, script.py):");
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    const ext = trimmed.split(".").pop().toLowerCase();
+    const extToLang = { md: "markdown", py: "python", js: "javascript", ts: "typescript",
+      rs: "rust", sh: "bash", yml: "yaml", yaml: "yaml", toml: "toml", json: "json",
+      html: "html", css: "css", sql: "sql", txt: "text" };
+    const language = extToLang[ext] || "text";
+    try {
+      const created = await T.api("/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: trimmed, language, body: "" }),
+      });
+      await T.loadWorkspaces();
+      openFile(created.id);
+    } catch (e) {
+      T.showBanner(e.message, "error");
+    }
+  }
+
+  async function deleteFile(id) {
+    const file = allFiles.find(f => f.id === id);
+    if (!confirm(`Delete "${file?.name || id}"?`)) return;
+    try {
+      await T.api("/workspaces/" + encodeURIComponent(id), { method: "DELETE" });
+      openTabs = openTabs.filter(t => t.id !== id);
+      if (activeId === id) {
+        activeId = openTabs.length ? openTabs[openTabs.length - 1].id : null;
+        if (activeId) showEditor(activeId); else showWelcome();
+      }
+      await T.loadWorkspaces();
+      renderTabs();
+      T.showBanner("File deleted", "success");
+    } catch (e) {
+      T.showBanner(e.message, "error");
+    }
+  }
+
+  // ── Public API (used by app.js and other code) ─────────────────────────────
+
+  T.openWorkspaceDialog = function openWorkspaceDialog() {
+    createNewFile();
   };
 
   T.saveWorkspace = async function saveWorkspace() {
-    const payload = {
-      name: T.$("#workspace-name-input").value.trim(),
-      language: (T.$("#workspace-language-input").value || "text").trim(),
-      body: T.$("#workspace-body-input").value,
-    };
-    if (!payload.name) {
-      T.showBanner("Workspace name is required", "error");
-      return;
-    }
-    try {
-      let savedId = T.editingWorkspaceId;
-      if (savedId) {
-        await T.api("/workspaces/" + encodeURIComponent(savedId), {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        const created = await T.api("/workspaces", { method: "POST", body: JSON.stringify(payload) });
-        savedId = created.id;
-      }
-      T.$("#workspace-dialog").close();
-      T.showBanner("Workspace saved", "success");
-      T.loadWorkspaces();
-      if (typeof T.loadEditorWorkspaces === "function") {
-        await T.loadEditorWorkspaces();
-      }
-      if (T.workspaceDialogSource === "editor" && savedId && typeof T.openEditorWorkspace === "function") {
-        await T.openEditorWorkspace(savedId);
-      }
-    } catch (error) {
-      T.showBanner(error.message, "error");
-    }
-  };
-
-  T.openWorkspace = async function openWorkspace(id) {
-    try {
-      const workspace = await T.api("/workspaces/" + encodeURIComponent(id));
-      T.openWorkspaceDialog(workspace);
-    } catch (error) {
-      T.showBanner(error.message, "error");
-    }
+    if (activeId) await saveTab(activeId);
   };
 
   T.deleteWorkspace = async function deleteWorkspace(id) {
-    if (!confirm("Delete this workspace?")) return;
-    try {
-      await T.api("/workspaces/" + encodeURIComponent(id), { method: "DELETE" });
-      T.showBanner("Workspace deleted", "success");
-      T.loadWorkspaces();
-    } catch (error) {
-      T.showBanner(error.message, "error");
+    await deleteFile(id);
+  };
+
+  T.openWorkspace = function openWorkspace(id) {
+    openFile(id);
+  };
+
+  // ── Event binding ─────────────────────────────────────────────────────────
+
+  T.bindWorkspaceIDE = function bindWorkspaceIDE() {
+    // File list: open / delete
+    T.$("#ide-file-list")?.addEventListener("click", (e) => {
+      const del = e.target.closest("[data-ide-del]");
+      if (del) { e.stopPropagation(); deleteFile(del.dataset.ideDel); return; }
+      const open = e.target.closest("[data-ide-open]");
+      if (open) openFile(open.dataset.ideOpen);
+    });
+
+    // Tab bar: switch / close
+    T.$("#ide-tabs")?.addEventListener("click", (e) => {
+      const close = e.target.closest("[data-ide-close]");
+      if (close) { e.stopPropagation(); closeTab(close.dataset.ideClose); return; }
+      const tab = e.target.closest("[data-ide-tab]");
+      if (tab) { activeId = tab.dataset.ideTab; renderTabs(); renderFileList(); showEditor(activeId); }
+    });
+
+    // New file buttons
+    T.$("#ws-new-file-btn")?.addEventListener("click", createNewFile);
+    T.$("#ide-new-file-cta")?.addEventListener("click", createNewFile);
+
+    // Textarea: track changes, autosave, cursor
+    const textarea = T.$("#ide-textarea");
+    if (textarea) {
+      textarea.addEventListener("input", () => {
+        const tab = openTabs.find(t => t.id === activeId);
+        if (!tab) return;
+        tab.body = textarea.value;
+        tab.dirty = tab.body !== tab.origBody;
+        const saved = T.$("#ide-save-status");
+        if (saved) saved.textContent = tab.dirty ? "Unsaved changes" : "All saved";
+        const char = T.$("#ide-char-count");
+        if (char) char.textContent = `${tab.body.length} chars`;
+        renderTabs();
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => { if (tab.dirty) saveTab(activeId); }, 1200);
+      });
+
+      textarea.addEventListener("keydown", (e) => {
+        // Ctrl+S — save immediately
+        if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+          e.preventDefault();
+          clearTimeout(saveTimer);
+          saveTab(activeId);
+          return;
+        }
+        // Tab key inserts 2 spaces
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          textarea.value = textarea.value.substring(0, start) + "  " + textarea.value.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start + 2;
+          const tab = openTabs.find(t => t.id === activeId);
+          if (tab) { tab.body = textarea.value; tab.dirty = true; renderTabs(); }
+        }
+      });
+
+      textarea.addEventListener("keyup", () => updateCursorPos(textarea));
+      textarea.addEventListener("click", () => updateCursorPos(textarea));
+      textarea.addEventListener("select", () => updateCursorPos(textarea));
     }
+
+    // Ctrl+N creates new file when workspace view is active
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        const ws = T.$("#view-workspaces");
+        if (ws && !ws.classList.contains("hidden")) {
+          e.preventDefault();
+          createNewFile();
+        }
+      }
+    });
   };
 
 })(window.Tssp);

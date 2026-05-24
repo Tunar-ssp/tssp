@@ -19,6 +19,6 @@ pub(crate) use provider::StaticNoteProvider;
 pub use response::NoteRecordResponse;
 
 pub(crate) use handlers::{
-    add_note_tags, create_note, delete_note, export_notes, get_note, list_notes, pin_note,
-    remove_note_tag, replace_note_tags, unpin_note, update_note,
+    add_note_tags, create_note, delete_note, duplicate_note, export_notes, get_note, list_notes,
+    pin_note, remove_note_tag, replace_note_tags, unpin_note, update_note,
 };

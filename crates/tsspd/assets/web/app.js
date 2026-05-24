@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "2026-05-24-4";
+  const VERSION = "2026-05-24-5";
   const MODULES = [
     "/assets/js/api.js?v=" + VERSION,
     "/assets/js/ui/format.js?v=" + VERSION,
@@ -14,6 +14,7 @@
     "/assets/js/features/search.js?v=" + VERSION,
     "/assets/js/features/media.js?v=" + VERSION,
     "/assets/js/features/public.js?v=" + VERSION,
+    "/assets/js/features/command_palette.js?v=" + VERSION,
     "/assets/js/features/workspaces.js?v=" + VERSION,
     "/assets/js/files.js?v=" + VERSION,
     "/assets/js/notes.js?v=" + VERSION,

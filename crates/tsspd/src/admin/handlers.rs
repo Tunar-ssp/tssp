@@ -7,7 +7,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_adapter_system::SystemClock;
 use tssp_ports::Clock;
-use tssp_ports::ListQuery;
+use tssp_ports::{ListQuery, NoteListQuery};
 
 use crate::admin::system::collect_system_snapshot;
 use crate::upload::FileRecordResponse;
@@ -44,6 +44,136 @@ pub struct AdminFilesQuery {
     pub folder: Option<String>,
     #[serde(default, rename = "type")]
     pub mime_prefix: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdminActivityQuery {
+    #[serde(default = "default_limit")]
+    pub limit: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminActivityResponse {
+    pub schema_version: u8,
+    pub items: Vec<AdminActivityItem>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminActivityItem {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+    pub detail: String,
+    pub occurred_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}
+
+fn admin_activity_error(code: &'static str, message: String) -> axum::response::Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: ErrorBody { code, message },
+        }),
+    )
+        .into_response()
+}
+
+fn collect_file_activity(
+    state: &HttpState,
+    limit: u64,
+) -> Result<Vec<AdminActivityItem>, (&'static str, String)> {
+    state
+        .stats_provider
+        .list_files(&ListQuery {
+            limit,
+            ..ListQuery::default()
+        })
+        .map(|page| {
+            page.files
+                .into_iter()
+                .map(|file| AdminActivityItem {
+                    kind: "file".to_owned(),
+                    id: file.id.as_str().to_owned(),
+                    title: file.name.original().to_owned(),
+                    detail: if file.folder_path.is_empty() {
+                        "Bucket root".to_owned()
+                    } else {
+                        file.folder_path.clone()
+                    },
+                    occurred_at: file.uploaded_at.seconds(),
+                    visibility: Some(file.visibility.as_str().to_owned()),
+                    size_bytes: Some(file.size.bytes()),
+                    language: None,
+                })
+                .collect()
+        })
+        .map_err(|message| ("admin_activity_files_failed", message))
+}
+
+fn collect_note_activity(
+    state: &HttpState,
+    limit: u64,
+) -> Result<Vec<AdminActivityItem>, (&'static str, String)> {
+    state
+        .note_provider
+        .list_notes(NoteListQuery {
+            limit,
+            ..NoteListQuery::default()
+        })
+        .map(|page| {
+            page.notes
+                .into_iter()
+                .map(|note| AdminActivityItem {
+                    kind: "note".to_owned(),
+                    id: note.id.as_str().to_owned(),
+                    title: note.title.as_str().to_owned(),
+                    detail: if note.tags.is_empty() {
+                        "Updated note".to_owned()
+                    } else {
+                        note.tags
+                            .iter()
+                            .map(|tag| tag.display().to_owned())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    },
+                    occurred_at: note.updated_at.seconds(),
+                    visibility: None,
+                    size_bytes: None,
+                    language: None,
+                })
+                .collect()
+        })
+        .map_err(|error| {
+            (
+                "admin_activity_notes_failed",
+                format!("note activity query failed: {error:?}"),
+            )
+        })
+}
+
+fn collect_workspace_activity(state: &HttpState) -> Vec<AdminActivityItem> {
+    state
+        .workspaces
+        .as_deref()
+        .and_then(|store| store.list_all().ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|workspace| AdminActivityItem {
+            kind: "workspace".to_owned(),
+            id: workspace.id.clone(),
+            title: workspace.name.clone(),
+            detail: workspace.language.clone(),
+            occurred_at: workspace.updated_at,
+            visibility: None,
+            size_bytes: None,
+            language: Some(workspace.language),
+        })
+        .collect()
 }
 
 fn default_limit() -> u64 {
@@ -114,6 +244,42 @@ pub async fn admin_system(State(state): State<HttpState>) -> impl IntoResponse {
         )
             .into_response(),
     }
+}
+
+/// `GET /api/v1/admin/activity`
+pub async fn admin_activity(
+    State(state): State<HttpState>,
+    Query(params): Query<AdminActivityQuery>,
+) -> impl IntoResponse {
+    let limit = params.limit.clamp(1, 100);
+    let mut items = match collect_file_activity(&state, limit) {
+        Ok(items) => items,
+        Err((code, message)) => return admin_activity_error(code, message),
+    };
+    let note_items = match collect_note_activity(&state, limit) {
+        Ok(items) => items,
+        Err((code, message)) => return admin_activity_error(code, message),
+    };
+    items.extend(note_items);
+    items.extend(collect_workspace_activity(&state));
+
+    items.sort_by(|left, right| {
+        right
+            .occurred_at
+            .cmp(&left.occurred_at)
+            .then_with(|| left.kind.cmp(&right.kind))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    items.truncate(limit as usize);
+
+    (
+        StatusCode::OK,
+        Json(AdminActivityResponse {
+            schema_version: 1,
+            items,
+        }),
+    )
+        .into_response()
 }
 
 /// `GET /api/v1/admin/files`

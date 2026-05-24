@@ -153,6 +153,43 @@ pub(crate) async fn delete_note(
     }
 }
 
+pub(crate) async fn duplicate_note(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+) -> Response {
+    let note_id = match parse_note_id(id) {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+    let provider = state.note_provider.clone();
+
+    let existing =
+        match run_blocking(provider.clone(), move |provider| provider.get_note(note_id)).await {
+            Ok(record) => record,
+            Err(response) => return response,
+        };
+
+    let request = CreateNoteRequest {
+        title: Some(format!("{} copy", existing.title.as_str())),
+        body: existing.body.as_str().to_owned(),
+        tags: existing
+            .tags
+            .iter()
+            .map(|tag| tag.display().to_owned())
+            .collect(),
+        pin: false,
+    };
+
+    match run_blocking(provider, move |provider| provider.create_note(request)).await {
+        Ok(record) => (
+            StatusCode::CREATED,
+            Json(NoteRecordResponse::from_record(&record)),
+        )
+            .into_response(),
+        Err(response) => response,
+    }
+}
+
 pub(crate) async fn add_note_tags(
     State(state): State<HttpState>,
     Path(id): Path<String>,

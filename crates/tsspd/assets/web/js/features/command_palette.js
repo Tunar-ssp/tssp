@@ -229,6 +229,14 @@ window.Tssp = window.Tssp || {};
     });
   };
 
+  T.getCommandPaletteRecents = function getCommandPaletteRecents() {
+    return readRecents();
+  };
+
+  T.rememberRecentQuery = function rememberRecentQuery(query) {
+    rememberQuery(query);
+  };
+
   T.bindCommandPalette = function bindCommandPalette() {
     const palette = T.$("#command-palette");
     const input = T.$("#command-input");

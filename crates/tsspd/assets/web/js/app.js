@@ -361,12 +361,8 @@
       const openEditorWs = ev.target.closest("[data-ws-open-editor]");
       if (openEditorWs) {
         const wsId = openEditorWs.dataset.wsOpenEditor;
-        if (typeof T.openEditorWorkspace === "function") {
-          T.setView("editor");
-          T.openEditorWorkspace(wsId);
-        } else {
-          T.setView("editor");
-        }
+        T.setView("workspaces");
+        if (typeof T.openWorkspace === "function") T.openWorkspace(wsId);
         return;
       }
       const editWorkspace = ev.target.closest("[data-ws-edit]");
@@ -440,7 +436,20 @@
     if (typeof T.bindUpload === "function") T.bindUpload();
     if (typeof T.bindEditorEvents === "function") T.bindEditorEvents();
     if (typeof T.bindCommandPalette === "function") T.bindCommandPalette();
+    if (typeof T.bindWorkspaceIDE === "function") T.bindWorkspaceIDE();
     T.setAdminTab("overview");
+
+    // Upload bar toggle
+    T.$("#upload-bar-toggle")?.addEventListener("click", () => {
+      const fields = T.$("#upload-bar-fields");
+      const icon = T.$("#upload-bar-toggle")?.querySelector(".upload-bar-toggle-icon");
+      if (!fields) return;
+      const open = !fields.classList.contains("hidden");
+      fields.classList.toggle("hidden", open);
+      if (icon) icon.textContent = open ? "▾" : "▴";
+    });
+    // Start collapsed
+    T.$("#upload-bar-fields")?.classList.add("hidden");
   }
 
   try {
