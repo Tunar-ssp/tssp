@@ -146,7 +146,14 @@ window.Tssp = window.Tssp || {};
             extra = `${vis}${tags}`;
             actions = `<button type="button" class="btn btn-text btn-sm" data-preview-file="${id}">Preview</button><a class="btn btn-text btn-sm" href="${T.fileDownloadUrl(result.id)}" download>Download</a>`;
           } else if (type === "note") {
-            detail = T.escapeHtml((result.body || "").trim().replace(/^#+\s+/gm, "").slice(0, 120));
+            detail = T.escapeHtml((result.body || "")
+            .trim()
+            .replace(/^#+\s+/gm, "")
+            .replace(/\*\*?([^*]+)\*\*?/g, "$1")
+            .replace(/`([^`]+)`/g, "$1")
+            .replace(/\n+/g, " ")
+            .trim()
+            .slice(0, 120));
             extra = tags;
             actions = `<button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Open</button>`;
           } else if (type === "workspace") {

@@ -170,7 +170,19 @@ window.Tssp = window.Tssp || {};
   function noteCard(note) {
     const id = T.escapeHtml(note.id);
     const pinned = note.pinned_at != null;
-    const preview = (note.body || "").trim().replace(/^#+\s+/gm, "").slice(0, 180);
+    const preview = (note.body || "")
+      .trim()
+      .replace(/^#+\s+/gm, "")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/~~([^~]+)~~/g, "$1")
+      .replace(/^\s*[-*]\s+/gm, "")
+      .replace(/^\s*\d+\.\s+/gm, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\n+/g, " ")
+      .trim()
+      .slice(0, 180);
     const tags = T.tagsHtml(note.tags);
     const dateStr = T.escapeHtml(T.formatDate(note.updated_at));
     const wordCount = (note.body || "").trim().split(/\s+/).filter(Boolean).length;
