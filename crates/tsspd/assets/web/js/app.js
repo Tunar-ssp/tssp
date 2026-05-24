@@ -82,6 +82,19 @@
       if (typeof T.loadFiles === "function") T.loadFiles();
     });
 
+    T.$("#new-folder-btn")?.addEventListener("click", () => {
+      const name = prompt("New folder name (e.g. photos/2025):");
+      if (!name || !name.trim()) return;
+      const path = name.trim().replace(/^\/|\/$/g, "");
+      T.currentFolder = path;
+      const breadcrumb = T.$("#breadcrumb-folder");
+      if (breadcrumb) breadcrumb.textContent = path;
+      const uploadFolder = T.$("#upload-folder");
+      if (uploadFolder) uploadFolder.value = path;
+      T.showBanner(`Switched to folder "${path}" — upload files to create it`, "info");
+      if (typeof T.loadFolderTree === "function") T.loadFolderTree();
+    });
+
     T.$("#files-sort")?.addEventListener("change", () => {
       if (typeof T.loadFiles === "function") T.loadFiles();
     });

@@ -224,6 +224,13 @@
   margin-top: 14px;
 }
 
+.folder-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
 .folder-panel h3 {
   margin: 4px 8px 8px;
   font-size: 11px;
