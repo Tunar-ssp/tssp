@@ -86,7 +86,7 @@ window.Tssp = window.Tssp || {};
     } else if (view === "notes") T.loadNotes();
     else if (view === "overview") T.loadOverview();
     else if (view === "images") T.loadImages();
-    else if (view === "videos") T.loadTypedFiles("video", "videos-body");
+    else if (view === "videos") T.loadVideos();
     else if (view === "documents") T.loadDocuments();
     else if (view === "public") T.loadPublic();
     else if (view === "workspaces") T.loadWorkspaces();

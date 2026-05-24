@@ -85,6 +85,27 @@
   object-fit: cover;
 }
 
+.video-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.video-card .media-open {
+  position: relative;
+}
+
+.video-play-icon {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.video-play-icon .image-card-overlay-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
 .media-card-footer {
   display: grid;
   gap: 4px;

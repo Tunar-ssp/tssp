@@ -219,6 +219,49 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.loadVideos = async function loadVideos() {
+    const grid = T.$("#video-grid");
+    grid.innerHTML = '<div class="empty-state compact">Loading videos…</div>';
+    try {
+      const data = await T.api("/files?type=video/&limit=200");
+      const files = data.files || [];
+      if (!files.length) {
+        grid.innerHTML =
+          '<div class="empty-state"><strong>No videos yet</strong><p>Upload video files and they will appear here.</p></div>';
+        return;
+      }
+      grid.innerHTML = files
+        .map((file) => {
+          const id = T.escapeHtml(file.id);
+          const nextVis = file.visibility === "public" ? "private" : "public";
+          const src = T.escapeHtml(T.fileInlineUrl(file.id));
+          return `<article class="image-card video-card">
+            <button type="button" class="media-open" data-preview-file="${id}" aria-label="Preview ${T.escapeHtml(file.name)}">
+              <video class="video-thumb" src="${src}" preload="metadata" muted playsinline tabindex="-1"></video>
+              <div class="image-card-overlay video-play-icon">
+                <span class="image-card-overlay-icon">▶</span>
+              </div>
+            </button>
+            <div class="media-card-footer">
+              <strong class="media-card-name" title="${T.escapeHtml(file.name)}">${T.escapeHtml(file.name)}</strong>
+              <div class="media-card-meta">
+                <span>${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>
+                ${T.stateBadge(file.visibility)}
+              </div>
+              <div class="media-card-actions">
+                <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="${nextVis}">${nextVis === "public" ? "Make public" : "Make private"}</button>
+                <a class="btn btn-text btn-sm" href="${T.fileDownloadUrl(file.id)}" download>Download</a>
+                <button type="button" class="btn btn-text btn-sm btn-danger" data-delete-file="${id}">Delete</button>
+              </div>
+            </div>
+          </article>`;
+        })
+        .join("");
+    } catch (error) {
+      grid.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;
+    }
+  };
+
   // Typed file lists (audio, video, etc.)
 
   T.loadTypedFiles = async function loadTypedFiles(mimePrefix, bodyId) {
