@@ -3,8 +3,9 @@ window.Tssp = window.Tssp || {};
 (function (T) {
   "use strict";
 
-T.loadImages = async function loadImages() {
+  T.loadImages = async function loadImages() {
     const grid = T.$("#image-grid");
+    if (!grid) return;
     grid.innerHTML = '<div class="empty-state compact">Loading images…</div>';
     try {
       const data = await T.api("/files?type=image/&limit=200");
@@ -28,6 +29,7 @@ T.loadImages = async function loadImages() {
             <div class="media-card-footer">
               <strong class="media-card-name" title="${T.escapeHtml(file.name)}">${T.escapeHtml(file.name)}</strong>
               <div class="media-card-meta">
+                <span>${T.escapeHtml(file.folder_path || "Bucket root")}</span>
                 <span>${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>
                 ${T.stateBadge(file.visibility)}
               </div>
@@ -47,6 +49,7 @@ T.loadImages = async function loadImages() {
 
   T.loadVideos = async function loadVideos() {
     const grid = T.$("#video-grid");
+    if (!grid) return;
     grid.innerHTML = '<div class="empty-state compact">Loading videos…</div>';
     try {
       const data = await T.api("/files?type=video/&limit=200");
@@ -71,6 +74,7 @@ T.loadImages = async function loadImages() {
             <div class="media-card-footer">
               <strong class="media-card-name" title="${T.escapeHtml(file.name)}">${T.escapeHtml(file.name)}</strong>
               <div class="media-card-meta">
+                <span>${T.escapeHtml(file.folder_path || "Bucket root")}</span>
                 <span>${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>
                 ${T.stateBadge(file.visibility)}
               </div>
@@ -92,6 +96,7 @@ T.loadImages = async function loadImages() {
 
   T.loadTypedFiles = async function loadTypedFiles(mimePrefix, bodyId) {
     const body = T.$(`#${bodyId}`);
+    if (!body) return;
     body.innerHTML = T.tableMessage(4, "Loading objects…");
     const params = new URLSearchParams({ limit: "200", type: `${mimePrefix}/` });
     try {
@@ -126,7 +131,9 @@ T.loadImages = async function loadImages() {
 
   T.loadDocuments = async function loadDocuments() {
     const body = T.$("#documents-body");
-    body.innerHTML = T.tableMessage(6, "Loading documents…");
+    const grid = T.$("#documents-grid");
+    if (body) body.innerHTML = T.tableMessage(6, "Loading documents...");
+    if (grid) grid.innerHTML = '<div class="empty-state compact">Loading documents...</div>';
     try {
       // Fetch application/ and text/ separately; backend MIME filter is prefix-based
       const [appData, textData] = await Promise.all([
@@ -141,10 +148,33 @@ T.loadImages = async function loadImages() {
         return !mime.startsWith("image/") && !mime.startsWith("video/") && !mime.startsWith("audio/");
       });
       if (!files.length) {
-        body.innerHTML = T.tableMessage(6, "No documents yet.");
+        if (body) body.innerHTML = T.tableMessage(6, "No documents yet.");
+        if (grid) {
+          grid.innerHTML =
+            '<div class="empty-state"><strong>No documents yet</strong><span>Upload PDFs, text files, or source documents from Cloud Drive.</span><div class="empty-actions"><button type="button" class="btn btn-secondary" data-view-jump="objects">Upload document</button></div></div>';
+        }
         return;
       }
-      body.innerHTML = files
+      if (grid) {
+        grid.innerHTML = files
+          .map((file) => {
+            const id = T.escapeHtml(file.id);
+            return `<article class="document-card">
+              <span class="file-kind-icon ${T.escapeHtml(T.fileKindClass(file))}" aria-hidden="true">${T.escapeHtml(T.fileKindIcon(file))}</span>
+              <div class="document-card-main">
+                <strong>${T.escapeHtml(file.name)}</strong>
+                <div class="row-meta">${T.escapeHtml(file.folder_path || "Bucket root")} · ${T.escapeHtml(file.mime_type || "unknown")} · ${T.escapeHtml(T.formatBytes(file.size_bytes))}</div>
+                <div class="document-card-tags">${T.tagsHtml(file.tags)}${T.stateBadge(file.visibility)}</div>
+              </div>
+              <div class="document-card-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-preview-file="${id}">Preview</button>
+                <a class="btn btn-secondary btn-sm" href="${T.fileDownloadUrl(file.id)}" download>Download</a>
+              </div>
+            </article>`;
+          })
+          .join("");
+      }
+      if (body) body.innerHTML = files
         .map((file) => {
           const id = T.escapeHtml(file.id);
           return `<tr>
@@ -161,7 +191,8 @@ T.loadImages = async function loadImages() {
         })
         .join("");
     } catch (error) {
-      body.innerHTML = T.tableMessage(6, error.message);
+      if (body) body.innerHTML = T.tableMessage(6, error.message);
+      if (grid) grid.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;
     }
   };
 

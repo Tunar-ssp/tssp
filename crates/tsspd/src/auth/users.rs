@@ -71,7 +71,7 @@ impl UserStore {
             UserStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
         })?;
 
-        run_users_migration(&connection)?;
+        initialize_user_schema(&connection)?;
         Ok(Self { pool })
     }
 
@@ -342,7 +342,7 @@ impl UserStore {
     }
 }
 
-fn run_users_migration(connection: &Connection) -> Result<(), UserStoreError> {
+pub(crate) fn initialize_user_schema(connection: &Connection) -> Result<(), UserStoreError> {
     let applied: i64 = connection.query_row(
         "SELECT COUNT(*) FROM schema_migrations WHERE version = ?1",
         params![MIGRATION_VERSION],

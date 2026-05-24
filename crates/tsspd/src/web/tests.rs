@@ -3,10 +3,12 @@
 #![allow(clippy::unwrap_used)]
 
 use axum::body::Body;
-use axum::http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS,
+};
 use axum::http::{Request, StatusCode};
 
-use super::assets::INDEX_HTML;
+use super::assets::{INDEX_HTML, SERVICE_WORKER};
 use super::{serve_asset, web_fallback};
 
 #[tokio::test]
@@ -19,6 +21,26 @@ async fn serve_asset_returns_modular_css() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     assert!(ct.contains("text/css"));
+}
+
+#[tokio::test]
+async fn serve_asset_returns_service_worker_with_no_cache_header() {
+    let response = serve_asset(axum::extract::Path("sw.js".to_owned())).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-cache")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("service-worker-allowed")
+            .and_then(|v| v.to_str().ok()),
+        Some("/")
+    );
 }
 
 #[tokio::test]
@@ -44,12 +66,35 @@ async fn web_fallback_serves_index_with_security_headers() {
             .and_then(|v| v.to_str().ok()),
         Some("nosniff")
     );
+    assert_eq!(
+        headers.get(CACHE_CONTROL).and_then(|v| v.to_str().ok()),
+        Some("no-store, max-age=0")
+    );
     let body = axum::body::to_bytes(response.into_body(), 256_000)
         .await
         .unwrap_or_else(|e| panic!("body read: {e}"));
     let text = String::from_utf8_lossy(&body);
     assert!(text.contains("TSSP"));
     assert!(text.contains("/assets/js/app.js"));
+}
+
+#[tokio::test]
+async fn web_fallback_rejects_api_routes() {
+    let state = crate::HttpState::test_http_state(std::env::temp_dir());
+    let app = axum::Router::new().fallback(web_fallback).with_state(state);
+    let response = tower::util::ServiceExt::oneshot(
+        app,
+        Request::get("/api/v1/files").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("request failed: {e}"));
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn serve_asset_missing_returns_not_found() {
+    let response = serve_asset(axum::extract::Path("missing/asset.js".to_owned())).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -95,6 +140,49 @@ async fn index_does_not_load_pro_js() {
     assert!(INDEX_HTML.contains("ui/format.js"));
     assert!(INDEX_HTML.contains("features/search.js"));
     assert!(!INDEX_HTML.contains("views.js"));
+    assert!(!INDEX_HTML.contains("/assets/app.js"));
+}
+
+#[tokio::test]
+async fn service_worker_cache_list_matches_current_assets() {
+    for path in [
+        "/assets/css/tokens.css",
+        "/assets/css/base.css",
+        "/assets/css/layout.css",
+        "/assets/css/components.css",
+        "/assets/css/views.css",
+        "/assets/css/mobile.css",
+        "/assets/css/product.css",
+        "/assets/manifest.webmanifest",
+        "/assets/js/api.js",
+        "/assets/js/ui/format.js",
+        "/assets/js/ui/render.js",
+        "/assets/js/ui/toast.js",
+        "/assets/js/ui/dialogs.js",
+        "/assets/js/state.js",
+        "/assets/js/upload.js",
+        "/assets/js/features/overview.js",
+        "/assets/js/features/search.js",
+        "/assets/js/features/media.js",
+        "/assets/js/features/public.js",
+        "/assets/js/features/workspaces.js",
+        "/assets/js/files.js",
+        "/assets/js/notes.js",
+        "/assets/js/admin.js",
+        "/assets/js/editor.js",
+        "/assets/js/app.js",
+        "/assets/app.js",
+        "/assets/app.css",
+    ] {
+        assert!(
+            SERVICE_WORKER.contains(path),
+            "service worker cache list should include {path}"
+        );
+    }
+    assert!(!SERVICE_WORKER.contains("/assets/js/pro.js"));
+    assert!(!SERVICE_WORKER.contains("/assets/js/views.js"));
+    assert!(SERVICE_WORKER.contains("/assets/app.js"));
+    assert!(SERVICE_WORKER.contains("/assets/app.css"));
 }
 
 #[tokio::test]

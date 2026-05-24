@@ -10,12 +10,16 @@ use axum::extract::Path;
 use axum::http::header::{
     CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS,
 };
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 
 use assets::{asset, HTML_CSP, INDEX_HTML};
 
-fn response_with_bytes(bytes: &str, mime: &str, cacheable: bool) -> Response<Body> {
+fn response_with_bytes(
+    bytes: &str,
+    mime: &str,
+    cache_control: Option<&'static str>,
+) -> Response<Body> {
     let mut response = Response::new(Body::from(bytes.as_bytes().to_vec()));
     *response.status_mut() = StatusCode::OK;
     let headers = response.headers_mut();
@@ -24,11 +28,8 @@ fn response_with_bytes(bytes: &str, mime: &str, cacheable: bool) -> Response<Bod
         HeaderValue::from_str(mime).unwrap_or_else(|_| HeaderValue::from_static("text/plain")),
     );
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-    if cacheable {
-        headers.insert(
-            CACHE_CONTROL,
-            HeaderValue::from_static("public, max-age=86400, immutable"),
-        );
+    if let Some(cache_control) = cache_control {
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static(cache_control));
     }
     response
 }
@@ -42,7 +43,19 @@ pub(crate) async fn serve_asset(Path(path): Path<String>) -> Response<Body> {
     let Some((bytes, mime)) = asset(normalized) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    response_with_bytes(bytes, mime, true)
+    let cache_control = if matches!(normalized, "sw.js" | "app.js" | "app.css") {
+        Some("no-cache")
+    } else {
+        Some("public, max-age=86400, immutable")
+    };
+    let mut response = response_with_bytes(bytes, mime, cache_control);
+    if normalized == "sw.js" {
+        response.headers_mut().insert(
+            HeaderName::from_static("service-worker-allowed"),
+            HeaderValue::from_static("/"),
+        );
+    }
+    response
 }
 
 /// SPA fallback: static assets, otherwise `index.html`.
@@ -65,7 +78,19 @@ pub(crate) async fn web_fallback(
     if let Some(rest) = path.strip_prefix("/assets/") {
         if !rest.is_empty() && !rest.contains("..") {
             if let Some((bytes, mime)) = asset(rest) {
-                return response_with_bytes(bytes, mime, true);
+                let cache_control = if matches!(rest, "sw.js" | "app.js" | "app.css") {
+                    Some("no-cache")
+                } else {
+                    Some("public, max-age=86400, immutable")
+                };
+                let mut response = response_with_bytes(bytes, mime, cache_control);
+                if rest == "sw.js" {
+                    response.headers_mut().insert(
+                        HeaderName::from_static("service-worker-allowed"),
+                        HeaderValue::from_static("/"),
+                    );
+                }
+                return response;
             }
         }
         return StatusCode::NOT_FOUND.into_response();
@@ -83,5 +108,9 @@ fn serve_index_html() -> Response<Body> {
     );
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(HTML_CSP));
+    headers.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static("no-store, max-age=0"),
+    );
     response
 }

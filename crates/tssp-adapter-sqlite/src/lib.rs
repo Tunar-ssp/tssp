@@ -17,7 +17,7 @@ use std::path::Path;
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, params_from_iter, types::Value};
+use rusqlite::{params, params_from_iter, types::Value, Connection};
 use tssp_domain::{ContentHash, FileId, FileName, FileRecord, Tag, TagKey, UnixTimestamp};
 use tssp_ports::{
     DeletedFileRecord, FileRepository, ListQuery, NewFileRecord, PagedFiles, RepositoryError,
@@ -63,9 +63,7 @@ impl SqliteFileRepository {
             .get()
             .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
-        connection::configure_connection(&connection)?;
-        connection::run_integrity_check(&connection)?;
-        migrations::run_migrations(&connection)?;
+        initialize_connection(&connection)?;
 
         Ok(Self { pool })
     }
@@ -87,9 +85,7 @@ impl SqliteFileRepository {
             .get()
             .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
-        connection::configure_connection(&connection)?;
-        connection::run_integrity_check(&connection)?;
-        migrations::run_migrations(&connection)?;
+        initialize_connection(&connection)?;
 
         Ok(Self { pool })
     }
@@ -101,6 +97,21 @@ impl SqliteFileRepository {
                 message: format!("metadata connection pool failure: {error}"),
             })
     }
+}
+
+/// Configures and migrates an existing `SQLite` connection.
+///
+/// This is used by startup code that already owns the pool and only needs the schema
+/// to be ready before repositories start executing queries.
+///
+/// # Errors
+///
+/// Returns [`SqliteRepositoryError`] if configuration, integrity checks, or migrations fail.
+pub fn initialize_connection(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    connection::configure_connection(connection)?;
+    connection::run_integrity_check(connection)?;
+    migrations::run_migrations(connection)?;
+    Ok(())
 }
 
 impl FileRepository for SqliteFileRepository {

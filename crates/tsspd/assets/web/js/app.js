@@ -2,6 +2,17 @@
   "use strict";
   const T = window.Tssp;
 
+  T.setAdminTab = function setAdminTab(name) {
+    T.$$(".admin-tab").forEach((button) => {
+      button.classList.toggle("active", button.dataset.adminTab === name);
+      button.setAttribute("aria-selected", button.dataset.adminTab === name ? "true" : "false");
+    });
+    T.$$(".admin-panel").forEach((panel) => {
+      panel.classList.toggle("hidden", panel.dataset.adminPanel !== name);
+      panel.classList.toggle("active", panel.dataset.adminPanel === name);
+    });
+  };
+
   function bindEvents() {
     T.$("#login-form")?.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -48,6 +59,10 @@
       T.$("#side-nav")?.classList.toggle("open");
     });
 
+    T.$$(".admin-tab").forEach((button) => {
+      button.addEventListener("click", () => T.setAdminTab(button.dataset.adminTab));
+    });
+
     T.$("#logout-btn")?.addEventListener("click", async () => {
       try {
         await fetch(T.API + "/auth/logout", { method: "POST", credentials: "same-origin" });
@@ -74,6 +89,9 @@
     T.$("#global-search")?.addEventListener("input", (ev) => {
       const q = ev.target.value.trim();
       clearTimeout(T.searchTimer);
+      if (q && T.$(".nav-item.active")?.dataset.view !== "search") {
+        T.setView("search");
+      }
       if (typeof T.runSearch === "function") {
         T.searchTimer = setTimeout(() => T.runSearch(q), T.SEARCH_DEBOUNCE_MS);
       }
@@ -220,6 +238,11 @@
       const bulkAction = ev.target.closest("[data-bulk-action]");
       if (bulkAction && typeof T.bulkFileAction === "function") {
         T.bulkFileAction(bulkAction.dataset.bulkAction);
+        return;
+      }
+      const viewJump = ev.target.closest("[data-view-jump]");
+      if (viewJump && typeof T.setView === "function") {
+        T.setView(viewJump.dataset.viewJump);
         return;
       }
       const previewFile = ev.target.closest("[data-preview-file]");
@@ -387,6 +410,7 @@
 
     if (typeof T.bindUpload === "function") T.bindUpload();
     if (typeof T.bindEditorEvents === "function") T.bindEditorEvents();
+    T.setAdminTab("overview");
   }
 
   try {
@@ -397,6 +421,10 @@
     });
   } catch (err) {
     console.error("Initialization failed:", err);
-    document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#08080b;color:#ececf1;font-family:system-ui;padding:24px"><div style="max-width:480px;text-align:center"><h2 style="color:#f87171;margin-bottom:12px">Dashboard failed to load</h2><p style="color:#9b9ba6;margin-bottom:16px">A JavaScript initialisation error prevented the app from starting.</p><pre style="background:#15151b;border:1px solid #282832;border-radius:8px;padding:14px;text-align:left;overflow:auto;font-size:12px;color:#fbbf24">${T.escapeHtml(err?.stack || err?.message || String(err))}</pre><button onclick="location.reload()" style="margin-top:18px;padding:10px 20px;background:#a855f7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">Reload</button></div></div>`;
+    T.showBootError(
+      "Dashboard failed to load",
+      "A JavaScript initialisation error prevented the app from starting.",
+      err?.stack || err?.message || String(err),
+    );
   }
 })();

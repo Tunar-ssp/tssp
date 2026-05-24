@@ -10,7 +10,7 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use std::net::SocketAddr;
     use tower::ServiceExt;
-    use tssp_adapter_sqlite::SqliteFileRepository;
+    use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository};
     use tssp_domain::{UserId, UserName, UserRole};
 
     use crate::auth::devices::DeviceStore;
@@ -47,6 +47,31 @@ mod tests {
             )))
             .with_auth(auth);
         (temp, build_router(state))
+    }
+
+    #[test]
+    fn startup_initializer_prepares_auth_tables_for_direct_store_use() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = temp.path().join("metadata.sqlite3");
+        let _repo = SqliteFileRepository::open(&db).expect("repo");
+
+        let manager = r2d2_sqlite::SqliteConnectionManager::file(&db);
+        let pool = r2d2::Pool::builder()
+            .max_size(1)
+            .build(manager)
+            .expect("pool");
+        let connection = pool.get().expect("connection");
+        initialize_connection(&connection).expect("metadata init");
+        crate::auth::initialize_database(&connection).expect("auth init");
+        drop(connection);
+
+        let users = UserStore::new(pool.clone());
+        let store = AuthStore::new(pool.clone());
+        let devices = DeviceStore::new(pool);
+
+        assert_eq!(users.count_users().expect("count"), 0);
+        assert!(store.password_hash().expect("hash").is_none());
+        assert_eq!(devices.cleanup_expired(1_000).expect("cleanup"), 0);
     }
 
     async fn json_request(

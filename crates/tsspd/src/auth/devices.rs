@@ -72,7 +72,7 @@ impl DeviceStore {
             DeviceStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
         })?;
 
-        run_devices_migration(&connection)?;
+        initialize_device_schema(&connection)?;
         Ok(Self { pool })
     }
 
@@ -258,7 +258,7 @@ fn map_device_row(row: &rusqlite::Row<'_>) -> Result<TrustedDevice, DeviceStoreE
     })
 }
 
-fn run_devices_migration(connection: &Connection) -> Result<(), DeviceStoreError> {
+pub(crate) fn initialize_device_schema(connection: &Connection) -> Result<(), DeviceStoreError> {
     let applied: i64 = connection.query_row(
         "SELECT COUNT(*) FROM schema_migrations WHERE version = ?1",
         params![MIGRATION_VERSION],

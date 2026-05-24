@@ -9,6 +9,92 @@ window.Tssp = window.Tssp || {};
   T.$ = (sel, root = document) => root.querySelector(sel);
   T.$$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+  T.hideBootScreen = function hideBootScreen() {
+    const boot = T.$("#boot-screen");
+    boot?.classList.add("hidden");
+  };
+
+  T.showBootError = function showBootError(title, message, details = "") {
+    const boot = T.$("#boot-screen");
+    if (!boot) {
+      return;
+    }
+
+    const titleNode = T.$("#boot-title");
+    const messageNode = T.$("#boot-message");
+    const detailsNode = T.$("#boot-details");
+
+    if (titleNode) {
+      titleNode.textContent = title;
+    }
+    if (messageNode) {
+      messageNode.textContent = message;
+    }
+    if (detailsNode) {
+      if (details) {
+        detailsNode.textContent = details;
+        detailsNode.classList.remove("hidden");
+      } else {
+        detailsNode.textContent = "";
+        detailsNode.classList.add("hidden");
+      }
+    }
+
+    T.$("#login-screen")?.classList.add("hidden");
+    T.$("#app")?.classList.add("hidden");
+    boot.classList.remove("hidden");
+    document.body.dataset.tsspBootReady = "0";
+  };
+
+  T.markBootReady = function markBootReady() {
+    document.body.dataset.tsspBootReady = "1";
+    T.hideBootScreen();
+  };
+
+  T.resetServiceWorker = async function resetServiceWorker() {
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      }
+      if ("caches" in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+      }
+      location.reload();
+    } catch (error) {
+      T.showBootError(
+        "Unable to reset cache",
+        "The browser cache could not be cleared automatically.",
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      );
+    }
+  };
+
+  window.addEventListener("error", (event) => {
+    if (document.body.dataset.tsspBootReady === "1") {
+      return;
+    }
+    const error = event.error instanceof Error ? event.error : null;
+    T.showBootError(
+      "Dashboard failed to load",
+      "An unexpected error occurred while starting the UI.",
+      error ? `${error.name}: ${error.message}` : String(event.message || "Unknown error"),
+    );
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    if (document.body.dataset.tsspBootReady === "1") {
+      return;
+    }
+    const reason = event.reason instanceof Error ? event.reason : null;
+    T.showBootError(
+      "Dashboard failed to load",
+      "A background task failed while starting the UI.",
+      reason ? `${reason.name}: ${reason.message}` : String(event.reason || "Unknown rejection"),
+    );
+  });
+
   T.escapeHtml = function escapeHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")

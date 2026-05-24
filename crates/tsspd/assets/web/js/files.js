@@ -6,10 +6,14 @@ window.Tssp = window.Tssp || {};
   function updateObjectSummary(files) {
     const total = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
     const publicCount = files.filter((file) => file.visibility === "public").length;
-    T.$("#object-folder-label").textContent = T.currentFolder || "Bucket root";
-    T.$("#object-count").textContent = String(files.length);
-    T.$("#object-storage").textContent = T.formatBytes(total);
-    T.$("#object-public").textContent = String(publicCount);
+    const folderLabel = T.$("#object-folder-label");
+    const objectCount = T.$("#object-count");
+    const storage = T.$("#object-storage");
+    const publicNode = T.$("#object-public");
+    if (folderLabel) folderLabel.textContent = T.currentFolder || "Bucket root";
+    if (objectCount) objectCount.textContent = String(files.length);
+    if (storage) storage.textContent = T.formatBytes(total);
+    if (publicNode) publicNode.textContent = String(publicCount);
   }
 
   function fileRow(file) {
@@ -24,7 +28,10 @@ window.Tssp = window.Tssp || {};
     return `<tr data-file-row="${id}">
       <td class="col-select"><input type="checkbox" data-file-select="${id}" ${checked} aria-label="Select ${T.escapeHtml(file.name || file.id)}"></td>
       <td>
-        <div class="file-name">${pin}<strong>${T.escapeHtml(file.name || file.id)}</strong></div>
+        <div class="file-name">
+          <span class="file-kind-icon ${T.escapeHtml(T.fileKindClass(file))}" aria-hidden="true">${T.escapeHtml(T.fileKindIcon(file))}</span>
+          <span class="file-name-main"><strong>${T.escapeHtml(file.name || file.id)}</strong>${pin}</span>
+        </div>
         <div class="row-meta">${folder}${T.tagsHtml(file.tags)}${T.stateBadge(file.visibility)}</div>
       </td>
       <td class="mono">${T.escapeHtml(T.formatBytes(file.size_bytes))}</td>
@@ -142,6 +149,7 @@ window.Tssp = window.Tssp || {};
           (folder) =>
             `<div class="folder-item${folder.path === T.currentFolder ? " active" : ""}">
               <button type="button" class="folder-btn" data-folder="${T.escapeHtml(folder.path)}">
+                <span class="folder-glyph" aria-hidden="true"></span>
                 <span class="folder-label">${T.escapeHtml(folder.label)}</span>
                 <span class="folder-count mono">${folder.count}</span>
               </button>
@@ -200,7 +208,7 @@ window.Tssp = window.Tssp || {};
         renderTree(items, false);
       } catch {
         tree.innerHTML =
-          '<div class="folder-item active"><button type="button" class="folder-btn" data-folder=""><span class="folder-label">Bucket root</span><span class="folder-count mono">—</span></button></div>';
+          '<div class="folder-item active"><button type="button" class="folder-btn" data-folder=""><span class="folder-glyph" aria-hidden="true"></span><span class="folder-label">Bucket root</span><span class="folder-count mono">-</span></button></div>';
       }
     }
   };
@@ -250,6 +258,7 @@ window.Tssp = window.Tssp || {};
 
   T.loadFiles = async function loadFiles() {
     const body = T.$("#files-body");
+    if (!body) return;
     body.innerHTML = T.tableMessage(6, "Loading objects…");
     const params = new URLSearchParams({ limit: "200" });
     if (T.$("#pinned-only")?.checked) params.set("pinned", "true");

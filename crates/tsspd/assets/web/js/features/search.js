@@ -19,10 +19,15 @@ T.searchQueryString = function searchQueryString(q) {
 
   T.runSearch = async function runSearch(q) {
     const body = T.$("#search-body");
+    const resultsEl = T.$("#search-results") || body;
     const sub = T.$("#search-subtitle");
+    if (!resultsEl) return;
     if (!q || q.length < 1) {
-      sub.textContent = "Type in the search bar above";
-      body.innerHTML = T.tableMessage(4, "Enter a query to search");
+      if (sub) sub.textContent = "Find files, notes, and workspaces from one place.";
+      if (resultsEl) {
+        resultsEl.innerHTML =
+          '<div id="search-body" class="empty-state compact"><strong>Start with the global search bar</strong><span>Use filters here to narrow by kind, tags, MIME type, visibility, or pin state.</span></div>';
+      }
       return;
     }
     const filterParts = [];
@@ -32,25 +37,32 @@ T.searchQueryString = function searchQueryString(q) {
     if (T.$("#search-type")?.value.trim()) filterParts.push("type");
     if (T.$("#search-visibility")?.value) filterParts.push(T.$("#search-visibility").value);
     if (T.$("#search-pinned")?.checked) filterParts.push("pinned");
-    sub.textContent =
-      filterParts.length > 0
-        ? `Results for "${q}" (${filterParts.join(", ")})`
-        : `Results for "${q}"`;
-    body.innerHTML = T.tableMessage(4, "Searching…");
+    if (sub) {
+      sub.textContent =
+        filterParts.length > 0
+          ? `Results for "${q}" (${filterParts.join(", ")})`
+          : `Results for "${q}"`;
+    }
+    if (resultsEl) resultsEl.innerHTML = '<div class="empty-state compact">Searching...</div>';
     T.setView("search");
     try {
       const searchData = await T.api("/search?" + T.searchQueryString(q));
       const results = searchData.results || [];
       if (!results.length) {
-        sub.textContent = `No matches for "${q}"`;
-        body.innerHTML = T.tableMessage(4, "No matches");
+        if (sub) sub.textContent = `No matches for "${q}"`;
+        if (resultsEl) {
+          resultsEl.innerHTML =
+            '<div id="search-body" class="empty-state compact"><strong>No matches</strong><span>Try a broader query or clear filters.</span></div>';
+        }
         return;
       }
       const countLabel = `${searchData.result_count ?? results.length} result${results.length !== 1 ? "s" : ""}`;
-      sub.textContent = filterParts.length > 0
-        ? `${countLabel} for "${q}" (${filterParts.join(", ")})`
-        : `${countLabel} for "${q}"`;
-      body.innerHTML = results
+      if (sub) {
+        sub.textContent = filterParts.length > 0
+          ? `${countLabel} for "${q}" (${filterParts.join(", ")})`
+          : `${countLabel} for "${q}"`;
+      }
+      resultsEl.innerHTML = results
         .map((result) => {
           const type = result.type || "item";
           const name = T.escapeHtml(result.title || result.name || result.id);
@@ -74,7 +86,7 @@ T.searchQueryString = function searchQueryString(q) {
               .trim()
               .slice(0, 120);
             detail = T.escapeHtml(rawSnippet);
-            extra = (result.pinned ? `<span title="Pinned">📌</span> ` : "") + tags;
+            extra = (result.pinned ? '<span class="pin" title="Pinned">*</span> ' : "") + tags;
             actions = `<button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Open</button>`;
           } else if (type === "workspace") {
             detail = T.escapeHtml((result.snippet || "").slice(0, 120));
@@ -82,16 +94,21 @@ T.searchQueryString = function searchQueryString(q) {
             actions = `<button type="button" class="btn btn-text btn-sm" data-ws-edit="${id}">Open</button>`;
           }
           const typeLabel = { file: "File", note: "Note", workspace: "Workspace" }[type] || type;
-          return `<tr>
-            <td><span class="search-result-type search-type-${T.escapeHtml(type)}">${T.escapeHtml(typeLabel)}</span></td>
-            <td><div class="search-result-name"><strong>${name}</strong></div>${detail ? `<div class="row-meta">${detail}</div>` : ""}</td>
-            <td>${extra}</td>
-            <td class="col-actions">${actions}</td>
-          </tr>`;
+          return `<article class="search-result-card">
+            <div class="search-result-main">
+              <span class="search-result-type search-type-${T.escapeHtml(type)}">${T.escapeHtml(typeLabel)}</span>
+              <div class="search-result-name"><strong>${name}</strong></div>
+              ${detail ? `<div class="row-meta">${detail}</div>` : ""}
+              ${extra ? `<div class="search-result-extra">${extra}</div>` : ""}
+            </div>
+            <div class="search-result-actions">${actions}</div>
+          </article>`;
         })
         .join("");
     } catch (error) {
-      body.innerHTML = T.tableMessage(4, error.message);
+      if (resultsEl) {
+        resultsEl.innerHTML = `<div id="search-body" class="empty-state error">${T.escapeHtml(error.message)}</div>`;
+      }
     }
   };
 

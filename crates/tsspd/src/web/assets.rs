@@ -35,6 +35,10 @@ pub(crate) const CSS_MOBILE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/css/mobile.css"
 ));
+pub(crate) const CSS_PRODUCT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/css/product.css"
+));
 
 pub(crate) const JS_API: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/api.js"));
@@ -100,6 +104,16 @@ pub(crate) const JS_EDITOR: &str = include_str!(concat!(
 ));
 pub(crate) const JS_APP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
+pub(crate) const LEGACY_APP: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/app.js"));
+pub(crate) const LEGACY_APP_CSS: &str = r#"@import url("/assets/css/tokens.css?v=2026-05-24-4");
+@import url("/assets/css/base.css?v=2026-05-24-4");
+@import url("/assets/css/layout.css?v=2026-05-24-4");
+@import url("/assets/css/components.css?v=2026-05-24-4");
+@import url("/assets/css/views.css?v=2026-05-24-4");
+@import url("/assets/css/mobile.css?v=2026-05-24-4");
+@import url("/assets/css/product.css?v=2026-05-24-4");
+"#;
 
 pub(crate) const HTML_CSP: &str =
     "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; \
@@ -117,6 +131,7 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "css/components.css" => Some((CSS_COMPONENTS, "text/css; charset=utf-8")),
         "css/views.css" => Some((CSS_VIEWS, "text/css; charset=utf-8")),
         "css/mobile.css" => Some((CSS_MOBILE, "text/css; charset=utf-8")),
+        "css/product.css" => Some((CSS_PRODUCT, "text/css; charset=utf-8")),
         "js/api.js" => Some((JS_API, "application/javascript; charset=utf-8")),
         "js/ui/format.js" => Some((JS_UI_FORMAT, "application/javascript; charset=utf-8")),
         "js/ui/render.js" => Some((JS_UI_RENDER, "application/javascript; charset=utf-8")),
@@ -143,6 +158,8 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "js/admin.js" => Some((JS_ADMIN, "application/javascript; charset=utf-8")),
         "js/editor.js" => Some((JS_EDITOR, "application/javascript; charset=utf-8")),
         "js/app.js" => Some((JS_APP, "application/javascript; charset=utf-8")),
+        "app.js" => Some((LEGACY_APP, "application/javascript; charset=utf-8")),
+        "app.css" => Some((LEGACY_APP_CSS, "text/css; charset=utf-8")),
         _ => None,
     }
 }

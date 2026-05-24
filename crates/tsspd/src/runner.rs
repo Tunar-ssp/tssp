@@ -9,7 +9,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use tokio::net::TcpListener;
 use tssp_adapter_fs::FilesystemBlobStore;
-use tssp_adapter_sqlite::{SqliteFileRepository, SqliteSessionRepository};
+use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository, SqliteSessionRepository};
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
 use tssp_app::{
@@ -18,7 +18,10 @@ use tssp_app::{
 use tssp_ports::Clock;
 use tsspd::workspaces::WorkspaceStore;
 use tsspd::{
-    auth::{AuthService, AuthStore, DeviceStore, UserStore},
+    auth::{
+        initialize_database as initialize_auth_database, AuthService, AuthStore, DeviceStore,
+        UserStore,
+    },
     bind_error_message, build_router, run_startup_integrity_scan, spawn_advertisement,
     ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
     ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
@@ -352,6 +355,15 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     warn_if_insecure_bind(&settings);
     let paths = prepare_runtime_paths(&settings)?;
     let pool = create_connection_pool(&paths.metadata_path)?;
+    {
+        let connection = pool
+            .get()
+            .map_err(|error| format!("could not initialize metadata database: {error}"))?;
+        initialize_connection(&connection)
+            .map_err(|error| format!("could not initialize metadata database: {error}"))?;
+        initialize_auth_database(&connection)
+            .map_err(|error| format!("could not initialize auth database: {error}"))?;
+    }
     let repository = open_repository(pool.clone());
     run_integrity_check(&paths.metadata_path)
         .map_err(|error| format!("database integrity check failed: {error}"))?;

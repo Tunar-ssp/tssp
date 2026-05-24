@@ -25,16 +25,29 @@ window.Tssp = window.Tssp || {};
   T.editorDocumentDialogMode = "create";
 
   T.showLogin = function showLogin() {
-    T.$("#login-screen").classList.remove("hidden");
-    T.$("#login-screen").setAttribute("aria-hidden", "false");
-    T.$("#app").classList.add("hidden");
+    T.$("#login-screen")?.classList.remove("hidden");
+    T.$("#login-screen")?.setAttribute("aria-hidden", "false");
+    T.$("#app")?.classList.add("hidden");
+    T.markBootReady();
   };
 
   T.showApp = function showApp() {
-    T.$("#login-screen").classList.add("hidden");
-    T.$("#login-screen").setAttribute("aria-hidden", "true");
-    T.$("#app").classList.remove("hidden");
-    T.refreshCurrentView();
+    T.$("#login-screen")?.classList.add("hidden");
+    T.$("#login-screen")?.setAttribute("aria-hidden", "true");
+    T.$("#app")?.classList.remove("hidden");
+    try {
+      if (typeof T.refreshCurrentView === "function") {
+        T.refreshCurrentView();
+      }
+    } catch (error) {
+      T.showBootError(
+        "Dashboard failed to load",
+        "The main dashboard view could not be rendered.",
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      );
+      return;
+    }
+    T.markBootReady();
   };
 
   T.probeAuth = async function probeAuth() {
@@ -54,7 +67,12 @@ window.Tssp = window.Tssp || {};
           T.showLogin();
           return;
         }
+        const authStatus = T.$("#auth-status");
+        if (authStatus) authStatus.textContent = "Signed in";
         T.$("#logout-btn")?.removeAttribute("hidden");
+      } else {
+        const authStatus = T.$("#auth-status");
+        if (authStatus) authStatus.textContent = "Open local";
       }
       T.showApp();
     } catch {
@@ -63,34 +81,51 @@ window.Tssp = window.Tssp || {};
   };
 
   T.setView = function setView(name) {
+    if (!T.$(`#view-${name}`)) {
+      name = "objects";
+    }
     T.$$(".nav-item").forEach((a) => {
       a.classList.toggle("active", a.dataset.view === name);
     });
     T.$$(".view").forEach((v) => v.classList.add("hidden"));
     const section = T.$(`#view-${name}`);
     if (section) section.classList.remove("hidden");
+    if (name !== "note-editor" && location.hash !== `#${name}`) {
+      history.replaceState(null, "", `#${name}`);
+    }
     if (name === "search" || name === "note-editor") return;
-    T.refreshView(name);
+    if (typeof T.refreshView === "function") {
+      T.refreshView(name);
+    }
   };
 
   T.refreshCurrentView = function refreshCurrentView() {
+    const hashView = location.hash ? location.hash.slice(1) : "";
     const active = T.$(".nav-item.active");
-    const view = active ? active.dataset.view : "objects";
-    T.refreshView(view);
+    const view = T.$(`#view-${hashView}`) && hashView !== "note-editor"
+      ? hashView
+      : active?.dataset.view || "objects";
+    if (view !== active?.dataset.view) {
+      T.setView(view);
+      return;
+    }
+    if (typeof T.refreshView === "function") {
+      T.refreshView(view);
+    }
   };
 
   T.refreshView = function refreshView(view) {
     if (view === "objects") {
-      T.loadFolderTree();
-      T.loadFiles();
-    } else if (view === "notes") T.loadNotes();
-    else if (view === "overview") T.loadOverview();
-    else if (view === "images") T.loadImages();
-    else if (view === "videos") T.loadVideos();
-    else if (view === "documents") T.loadDocuments();
-    else if (view === "public") T.loadPublic();
-    else if (view === "workspaces") T.loadWorkspaces();
-    else if (view === "admin") T.loadAdmin();
-    else if (view === "editor") T.loadEditor();
+      T.loadFolderTree?.();
+      T.loadFiles?.();
+    } else if (view === "notes") T.loadNotes?.();
+    else if (view === "overview") T.loadOverview?.();
+    else if (view === "images") T.loadImages?.();
+    else if (view === "videos") T.loadVideos?.();
+    else if (view === "documents") T.loadDocuments?.();
+    else if (view === "public") T.loadPublic?.();
+    else if (view === "workspaces") T.loadWorkspaces?.();
+    else if (view === "admin") T.loadAdmin?.();
+    else if (view === "editor") T.loadEditor?.();
   };
 })(window.Tssp);

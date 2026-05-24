@@ -9,9 +9,10 @@ use tssp_domain::{
 };
 use tssp_ports::{
     FileRepository, ListQuery, ListSort, NewFileRecord, NoteRepository, RepositoryError, SearchHit,
+    SessionRepository,
 };
 
-use crate::SqliteFileRepository;
+use crate::{initialize_connection, SqliteFileRepository, SqliteSessionRepository};
 
 #[test]
 fn open_file_database_runs_migrations() {
@@ -21,6 +22,31 @@ fn open_file_database_runs_migrations() {
     let repository = SqliteFileRepository::open(path);
 
     assert!(repository.is_ok());
+}
+
+#[test]
+fn initialize_connection_prepares_empty_database_for_session_cleanup() {
+    let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+    let path = temp.path().join("metadata.sqlite3");
+    let manager = r2d2_sqlite::SqliteConnectionManager::file(&path);
+    let pool = r2d2::Pool::builder()
+        .max_size(1)
+        .build(manager)
+        .unwrap_or_else(|error| panic!("pool build failed: {error}"));
+
+    let connection = pool
+        .get()
+        .unwrap_or_else(|error| panic!("pool get failed: {error}"));
+    initialize_connection(&connection)
+        .unwrap_or_else(|error| panic!("initialization failed: {error}"));
+    drop(connection);
+
+    let repository = SqliteSessionRepository::new(pool);
+    let deleted = repository
+        .cleanup_expired_sessions(timestamp(1_700_000_000))
+        .unwrap_or_else(|error| panic!("cleanup failed: {error}"));
+
+    assert_eq!(deleted, 0);
 }
 
 #[test]

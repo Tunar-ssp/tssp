@@ -6,15 +6,35 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0d0d0f">
   <title>TSSP Storage</title>
-  <link rel="stylesheet" href="/assets/css/tokens.css">
-  <link rel="stylesheet" href="/assets/css/base.css">
-  <link rel="stylesheet" href="/assets/css/layout.css">
-  <link rel="stylesheet" href="/assets/css/components.css">
-  <link rel="stylesheet" href="/assets/css/views.css">
-  <link rel="stylesheet" href="/assets/css/mobile.css">
-  <link rel="manifest" href="/assets/manifest.webmanifest">
+  <link rel="stylesheet" href="/assets/css/tokens.css?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/base.css?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/layout.css?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/components.css?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/views.css?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/mobile.css?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/product.css?v=2026-05-24-4">
+  <link rel="manifest" href="/assets/manifest.webmanifest?v=2026-05-24-4">
 </head>
 <body>
+  <div id="boot-screen" class="boot-screen" aria-live="polite">
+    <div class="boot-card">
+      <div class="boot-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <p class="boot-eyebrow">TSSP Storage</p>
+          <h1 id="boot-title">Loading dashboard</h1>
+        </div>
+      </div>
+      <p id="boot-message" class="boot-message">Preparing the web app and checking authentication state.</p>
+      <pre id="boot-details" class="boot-details hidden"></pre>
+      <div class="boot-actions">
+        <button type="button" class="btn btn-primary" id="boot-reload" onclick="location.reload()">Reload</button>
+        <button type="button" class="btn btn-secondary" id="boot-reset-cache" onclick="window.Tssp?.resetServiceWorker?.()">Reset cache</button>
+      </div>
+      <p class="boot-hint">If this keeps happening, clear the site data or unregister the service worker from browser settings.</p>
+    </div>
+  </div>
+
   <div id="login-screen" class="login-screen hidden" aria-hidden="true">
     <div class="login-card">
       <div class="login-brand">
@@ -48,17 +68,17 @@
         <div class="product-lockup">
           <span class="brand-mark sm" aria-hidden="true"></span>
           <span class="product-name">TSSP</span>
-          <span class="product-divider">/</span>
-          <span class="product-context">Storage</span>
+          <span class="product-context">Local Cloud</span>
         </div>
       </div>
       <div class="top-bar-search">
         <span class="search-icon" aria-hidden="true"></span>
-        <input id="global-search" type="search" placeholder="Search… (Ctrl+K)" autocomplete="off" title="Search files, notes and workspaces (Ctrl+K)">
+        <input id="global-search" type="search" placeholder="Search files, notes, workspaces" autocomplete="off" title="Search files, notes and workspaces (Ctrl+K)">
       </div>
       <div class="top-bar-actions">
+        <span class="status-pill"><span class="status-dot"></span><span id="auth-status">Checking</span></span>
         <button type="button" class="btn btn-text" id="logout-btn" hidden>Logout</button>
-        <button type="button" class="btn btn-text" id="refresh-btn">Refresh</button>
+        <button type="button" class="icon-btn icon-refresh" id="refresh-btn" title="Refresh current view" aria-label="Refresh current view"></button>
         <button type="button" class="btn btn-primary" id="upload-btn">Upload</button>
         <input type="file" id="upload-input" hidden multiple>
       </div>
@@ -66,41 +86,63 @@
 
     <div class="shell">
       <nav class="side-nav" id="side-nav" aria-label="Primary">
+        <div class="side-nav-head">
+          <div class="side-nav-title">Storage Console</div>
+          <div class="side-nav-subtitle">Private LAN dashboard</div>
+        </div>
+        <div class="nav-section">Cloud Drive</div>
         <a href="#objects" class="nav-item active" data-view="objects">
-          <span>Objects</span>
+          <span class="nav-icon nav-icon-drive"></span>
+          <span>Files</span>
         </a>
         <a href="#images" class="nav-item" data-view="images">
+          <span class="nav-icon nav-icon-image"></span>
           <span>Images</span>
         </a>
         <a href="#videos" class="nav-item" data-view="videos">
+          <span class="nav-icon nav-icon-video"></span>
           <span>Videos</span>
         </a>
         <a href="#documents" class="nav-item" data-view="documents">
+          <span class="nav-icon nav-icon-doc"></span>
           <span>Documents</span>
         </a>
-        <a href="#notes" class="nav-item" data-view="notes">
-          <span>Notes</span>
-        </a>
-        <a href="#workspaces" class="nav-item" data-view="workspaces">
-          <span>Workspaces</span>
-        </a>
         <a href="#public" class="nav-item" data-view="public">
-          <span>Public</span>
+          <span class="nav-icon nav-icon-public"></span>
+          <span>Public links</span>
         </a>
         <a href="#search" class="nav-item" data-view="search">
+          <span class="nav-icon nav-icon-search"></span>
           <span>Search</span>
         </a>
-        <div class="nav-section">Monitoring</div>
-        <a href="#overview" class="nav-item" data-view="overview">
-          <span>Overview</span>
+        <div class="nav-section">Knowledge</div>
+        <a href="#notes" class="nav-item" data-view="notes">
+          <span class="nav-icon nav-icon-note"></span>
+          <span>Notes</span>
         </a>
-        <a href="#admin" class="nav-item" data-view="admin">
-          <span>Admin</span>
+        <div class="nav-section">Workspace</div>
+        <a href="#workspaces" class="nav-item" data-view="workspaces">
+          <span class="nav-icon nav-icon-workspace"></span>
+          <span>Workspaces</span>
         </a>
         <a href="#editor" class="nav-item admin-only hidden" data-view="editor">
+          <span class="nav-icon nav-icon-editor"></span>
           <span>Editor</span>
           <span class="nav-badge">admin</span>
         </a>
+        <div class="nav-section">Operations</div>
+        <a href="#overview" class="nav-item" data-view="overview">
+          <span class="nav-icon nav-icon-overview"></span>
+          <span>Overview</span>
+        </a>
+        <a href="#admin" class="nav-item" data-view="admin">
+          <span class="nav-icon nav-icon-admin"></span>
+          <span>Admin</span>
+        </a>
+        <div class="side-nav-foot">
+          <span class="status-dot"></span>
+          <span>Local-first storage</span>
+        </div>
       </nav>
 
       <main class="main" id="main">
@@ -116,14 +158,15 @@
         </section>
 
         <section id="view-objects" class="view">
-          <div class="page-header">
+          <div class="page-header product-page-header">
             <div>
               <nav class="breadcrumb" aria-label="Breadcrumb">
-                <span>tssp</span>
+                <span>Cloud Drive</span>
                 <span class="breadcrumb-sep">/</span>
                 <span class="breadcrumb-current" id="breadcrumb-folder">default</span>
               </nav>
-              <h2>Objects</h2>
+              <h2>Files</h2>
+              <p class="page-subtitle">Browse, upload, preview, and share stored objects.</p>
             </div>
             <div class="page-actions">
               <select id="files-sort" class="filter-select" aria-label="Sort files by">
@@ -149,6 +192,7 @@
           </div>
 
           <div class="upload-bar">
+            <span class="upload-bar-label">Upload target</span>
             <input type="text" id="upload-folder" placeholder="Folder path (e.g. photos/vacation)" aria-label="Upload folder">
             <input type="text" id="upload-tags" placeholder="Tags (comma-separated)" aria-label="Upload tags">
             <label class="chip-toggle">
@@ -165,8 +209,8 @@
             </aside>
             <div class="objects-main">
               <div class="drop-zone" id="drop-zone">
-                <strong>Drop files here</strong>
-                <span>or click to browse — uploads go to the selected folder</span>
+                <strong>Drop files to upload</strong>
+                <span>Selected folder and tags above will be applied.</span>
               </div>
               <div class="bulk-toolbar hidden" id="bulk-toolbar">
                 <strong id="bulk-count">0 selected</strong>
@@ -203,31 +247,29 @@
         </section>
 
         <section id="view-public" class="view hidden">
-          <div class="page-header">
-            <h2>Public area</h2>
-            <p class="page-subtitle">Files shared with anyone who can reach this cloud</p>
+          <div class="page-header product-page-header">
+            <div>
+              <h2>Public links</h2>
+              <p class="page-subtitle">Objects intentionally shared with anyone who can reach this cloud.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" data-view-jump="objects">Manage files</button>
+            </div>
           </div>
-          <div class="table-card">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Size</th>
-                  <th scope="col">Link</th>
-                  <th scope="col" class="col-actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="public-body">
-                <tr><td colspan="4" class="table-empty">Loading…</td></tr>
-              </tbody>
-            </table>
+          <div id="public-grid" class="public-grid">
+            <div id="public-body" class="empty-state compact">Loading public links...</div>
           </div>
         </section>
 
         <section id="view-videos" class="view hidden">
-          <div class="page-header">
-            <h2>Videos</h2>
-            <p class="page-subtitle">Video objects in your bucket</p>
+          <div class="page-header product-page-header">
+            <div>
+              <h2>Videos</h2>
+              <p class="page-subtitle">Playable video objects with preview, share, and download actions.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" data-view-jump="objects">Upload video</button>
+            </div>
           </div>
           <div id="video-grid" class="image-grid">
             <div class="empty-state compact">Loading videos…</div>
@@ -235,11 +277,17 @@
         </section>
 
         <section id="view-documents" class="view hidden">
-          <div class="page-header">
-            <h2>Documents</h2>
-            <p class="page-subtitle">PDFs, text, and office-style files</p>
+          <div class="page-header product-page-header">
+            <div>
+              <h2>Documents</h2>
+              <p class="page-subtitle">PDFs, text, source, and office-style files.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" data-view-jump="objects">Upload document</button>
+            </div>
           </div>
-          <div class="table-card">
+          <div id="documents-grid" class="document-grid"></div>
+          <div class="table-card documents-table-fallback">
             <table class="data-table">
               <thead>
                 <tr><th>Name</th><th>Type</th><th>Size</th><th>Folder</th><th>Updated</th><th class="col-actions">Actions</th></tr>
@@ -282,18 +330,23 @@
         </section>
 
         <section id="view-images" class="view hidden">
-          <div class="page-header">
-            <h2>Images</h2>
-            <p class="page-subtitle">Gallery of image objects in your bucket</p>
+          <div class="page-header product-page-header">
+            <div>
+              <h2>Images</h2>
+              <p class="page-subtitle">A gallery view for screenshots, photos, and image assets.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" data-view-jump="objects">Upload image</button>
+            </div>
           </div>
           <div class="image-grid" id="image-grid"></div>
         </section>
 
         <section id="view-notes" class="view hidden">
-          <div class="page-header">
+          <div class="page-header product-page-header">
             <div>
               <h2>Notes</h2>
-              <p class="page-subtitle" id="notes-count">Loading…</p>
+              <p class="page-subtitle" id="notes-count">Loading...</p>
             </div>
             <div class="page-actions">
               <a class="btn btn-secondary" href="/api/v1/notes/export" download="notes-export.ndjson" title="Download all notes as NDJSON">Export</a>
@@ -301,7 +354,7 @@
             </div>
           </div>
           <div class="notes-filter-bar">
-            <input id="notes-local-search" type="search" placeholder="Search notes…" autocomplete="off" class="notes-search-input">
+            <input id="notes-local-search" type="search" placeholder="Search notes by title or body" autocomplete="off" class="notes-search-input">
             <label class="chip-toggle">
               <input type="checkbox" id="notes-pinned-filter">
               Pinned only
@@ -367,9 +420,11 @@
         </section>
 
         <section id="view-search" class="view hidden">
-          <div class="page-header">
-            <h2>Search</h2>
-            <p class="page-subtitle" id="search-subtitle">Type in the search bar above</p>
+          <div class="page-header product-page-header">
+            <div>
+              <h2>Search</h2>
+              <p class="page-subtitle" id="search-subtitle">Find files, notes, and workspaces from one place.</p>
+            </div>
           </div>
           <div class="search-filters" id="search-filters" role="search">
             <label class="filter-field">
@@ -403,96 +458,141 @@
             </label>
             <button type="button" class="btn btn-text btn-sm" id="search-clear-filters">Clear filters</button>
           </div>
-          <div class="table-card">
-            <table class="data-table" id="search-table">
-              <thead>
-                <tr>
-                  <th scope="col">Type</th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Details</th>
-                  <th scope="col" class="col-actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="search-body">
-                <tr><td colspan="4" class="table-empty">Enter a query to search</td></tr>
-              </tbody>
-            </table>
+          <div id="search-results" class="search-results">
+            <div id="search-body" class="empty-state compact">
+              <strong>Start with the global search bar</strong>
+              <span>Use filters here to narrow by kind, tags, MIME type, visibility, or pin state.</span>
+            </div>
           </div>
         </section>
 
         <section id="view-admin" class="view hidden">
-          <div class="page-header">
+          <div class="page-header product-page-header">
             <div>
-              <h2>Admin</h2>
-              <p class="page-subtitle">Users, devices, files, and maintenance for the Orange Pi host.</p>
+              <h2>Admin Console</h2>
+              <p class="page-subtitle">Access control, storage operations, diagnostics, and safe maintenance.</p>
             </div>
           </div>
-          <div class="admin-grid">
-            <div class="admin-card">
-              <h3>Storage overview</h3>
-              <div id="admin-overview">Loading…</div>
-            </div>
-            <div class="admin-card">
-              <h3>System</h3>
-              <div id="admin-system">Loading…</div>
-            </div>
-            <div class="admin-card">
-              <h3>Users</h3>
-              <form id="admin-create-user-form" class="inline-form">
-                <input id="admin-user-name" type="text" placeholder="Name" autocomplete="off" required>
-                <input id="admin-user-code" type="password" placeholder="Access code" autocomplete="new-password" required>
-                <select id="admin-user-role" aria-label="Role">
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-                <button type="submit" class="btn btn-secondary btn-sm">Create</button>
-              </form>
-              <div id="admin-users">Loading…</div>
-            </div>
-            <div class="admin-card">
-              <h3>Trusted devices</h3>
-              <div id="admin-devices">Loading…</div>
-            </div>
-            <div class="admin-card admin-card-wide">
-              <h3>Active sessions</h3>
-              <div id="admin-sessions">Loading…</div>
-            </div>
-            <div class="admin-card admin-card-wide">
-              <div class="admin-card-head">
-                <h3>Files</h3>
-                <div class="admin-card-head-actions">
-                  <input id="admin-files-search" type="search" placeholder="Filter files…" autocomplete="off" class="admin-files-search-input">
-                  <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh-files">Refresh</button>
+          <div class="admin-tabs" role="tablist" aria-label="Admin sections">
+            <button type="button" class="admin-tab active" data-admin-tab="overview">Overview</button>
+            <button type="button" class="admin-tab" data-admin-tab="access">Users & sessions</button>
+            <button type="button" class="admin-tab" data-admin-tab="files">Files</button>
+            <button type="button" class="admin-tab" data-admin-tab="maintenance">Maintenance</button>
+            <button type="button" class="admin-tab" data-admin-tab="console">Safe console</button>
+          </div>
+          <div class="admin-panels">
+            <div class="admin-panel active" data-admin-panel="overview">
+              <div class="admin-grid admin-grid-overview">
+                <div class="admin-card admin-card-wide">
+                  <div class="admin-card-head">
+                    <h3>Storage overview</h3>
+                    <span class="admin-section-label">Bucket state</span>
+                  </div>
+                  <div id="admin-overview">Loading...</div>
+                </div>
+                <div class="admin-card admin-card-wide">
+                  <div class="admin-card-head">
+                    <h3>System health</h3>
+                    <span class="admin-section-label">Host telemetry</span>
+                  </div>
+                  <div id="admin-system">Loading...</div>
                 </div>
               </div>
-              <div id="admin-bulk-bar" class="admin-bulk-bar hidden">
-                <span class="bulk-bar-label">0 files selected</span>
-                <button type="button" class="btn btn-danger btn-sm" id="admin-bulk-delete">Delete selected</button>
-                <button type="button" class="btn btn-text btn-sm" id="admin-bulk-clear">Clear selection</button>
-              </div>
-              <div id="admin-files">Loading…</div>
             </div>
-            <div class="admin-card">
-              <h3>Maintenance</h3>
-              <div class="admin-actions">
-                <button type="button" class="btn btn-secondary" id="admin-cleanup-temp">Clean temp uploads</button>
-                <button type="button" class="btn btn-secondary" id="admin-cleanup-sessions">Clean expired sessions</button>
-              </div>
-            </div>
-            <div class="admin-card admin-card-wide">
-              <div class="admin-card-head">
-                <h3>Console</h3>
-                <p class="page-subtitle" style="margin:0;font-size:12px">Safe allowlisted operations — no shell execution</p>
-              </div>
-              <div class="console-layout">
-                <div id="console-commands" class="console-commands">Loading commands…</div>
-                <div class="console-right">
-                  <div id="console-output" class="console-output"><span class="console-hint">Select a command to run</span></div>
-                  <div class="console-history-row">
-                    <span class="muted" style="font-size:12px">History</span>
-                    <button type="button" class="btn btn-text btn-sm" id="console-clear-history">Clear</button>
+            <div class="admin-panel hidden" data-admin-panel="access">
+              <div class="admin-grid">
+                <div class="admin-card admin-card-wide">
+                  <div class="admin-card-head">
+                    <h3>Users</h3>
+                    <span class="admin-section-label">Access identities</span>
                   </div>
-                  <div id="console-history" class="console-history"></div>
+                  <form id="admin-create-user-form" class="inline-form">
+                    <input id="admin-user-name" type="text" placeholder="Name" autocomplete="off" required>
+                    <input id="admin-user-code" type="password" placeholder="Access code" autocomplete="new-password" required>
+                    <select id="admin-user-role" aria-label="Role">
+                      <option value="user">User</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button type="submit" class="btn btn-secondary btn-sm">Create</button>
+                  </form>
+                  <div id="admin-users">Loading...</div>
+                </div>
+                <div class="admin-card">
+                  <div class="admin-card-head">
+                    <h3>Trusted devices</h3>
+                    <span class="admin-section-label">LAN trust</span>
+                  </div>
+                  <div id="admin-devices">Loading...</div>
+                </div>
+                <div class="admin-card">
+                  <div class="admin-card-head">
+                    <h3>Active sessions</h3>
+                    <span class="admin-section-label">Current auth</span>
+                  </div>
+                  <div id="admin-sessions">Loading...</div>
+                </div>
+              </div>
+            </div>
+            <div class="admin-panel hidden" data-admin-panel="files">
+              <div class="admin-card admin-card-wide">
+                <div class="admin-card-head">
+                  <div>
+                    <h3>Files</h3>
+                    <p class="page-subtitle">Audit, preview, and delete stored objects with admin permissions.</p>
+                  </div>
+                  <div class="admin-card-head-actions">
+                    <input id="admin-files-search" type="search" placeholder="Filter files..." autocomplete="off" class="admin-files-search-input">
+                    <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh-files">Refresh</button>
+                  </div>
+                </div>
+                <div id="admin-bulk-bar" class="admin-bulk-bar hidden">
+                  <span class="bulk-bar-label">0 files selected</span>
+                  <button type="button" class="btn btn-danger btn-sm" id="admin-bulk-delete">Delete selected</button>
+                  <button type="button" class="btn btn-text btn-sm" id="admin-bulk-clear">Clear selection</button>
+                </div>
+                <div id="admin-files">Loading...</div>
+              </div>
+            </div>
+            <div class="admin-panel hidden" data-admin-panel="maintenance">
+              <div class="admin-grid">
+                <div class="admin-card">
+                  <div class="admin-card-head">
+                    <h3>Maintenance</h3>
+                    <span class="admin-section-label">Safe cleanup</span>
+                  </div>
+                  <div class="admin-actions maintenance-actions">
+                    <button type="button" class="btn btn-secondary" id="admin-cleanup-temp">Clean temp uploads</button>
+                    <button type="button" class="btn btn-secondary" id="admin-cleanup-sessions">Clean expired sessions</button>
+                  </div>
+                </div>
+                <div class="admin-card">
+                  <div class="admin-card-head">
+                    <h3>Diagnostics</h3>
+                    <span class="admin-section-label">Read-only checks</span>
+                  </div>
+                  <p class="muted">Run allowlisted diagnostics from the Safe console. Host shell execution is not exposed here.</p>
+                </div>
+              </div>
+            </div>
+            <div class="admin-panel hidden" data-admin-panel="console">
+              <div class="admin-card admin-card-wide safe-console-card">
+                <div class="admin-card-head">
+                  <div>
+                    <h3>Safe console</h3>
+                    <p class="page-subtitle">Allowlisted operations only. No arbitrary shell execution.</p>
+                  </div>
+                  <span class="state-badge private">Guarded</span>
+                </div>
+                <div class="console-layout">
+                  <div id="console-commands" class="console-commands">Loading commands...</div>
+                  <div class="console-right">
+                    <div id="console-output" class="console-output"><span class="console-hint">Select a command to run</span></div>
+                    <div class="console-history-row">
+                      <span class="muted">History</span>
+                      <button type="button" class="btn btn-text btn-sm" id="console-clear-history">Clear</button>
+                    </div>
+                    <div id="console-history" class="console-history"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -659,26 +759,29 @@
     <div id="preview-content" class="preview-content"></div>
   </dialog>
 
-  <script src="/assets/js/api.js" defer></script>
-  <script src="/assets/js/ui/format.js" defer></script>
-  <script src="/assets/js/ui/render.js" defer></script>
-  <script src="/assets/js/ui/toast.js" defer></script>
-  <script src="/assets/js/ui/dialogs.js" defer></script>
-  <script src="/assets/js/state.js" defer></script>
-  <script src="/assets/js/upload.js" defer></script>
-  <script src="/assets/js/features/overview.js" defer></script>
-  <script src="/assets/js/features/search.js" defer></script>
-  <script src="/assets/js/features/media.js" defer></script>
-  <script src="/assets/js/features/public.js" defer></script>
-  <script src="/assets/js/features/workspaces.js" defer></script>
-  <script src="/assets/js/files.js" defer></script>
-  <script src="/assets/js/notes.js" defer></script>
-  <script src="/assets/js/admin.js" defer></script>
-  <script src="/assets/js/editor.js" defer></script>
-  <script src="/assets/js/app.js" defer></script>
+  <script src="/assets/js/api.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/ui/format.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/ui/render.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/ui/toast.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/ui/dialogs.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/state.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/upload.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/features/overview.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/features/search.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/features/media.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/features/public.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/features/workspaces.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/files.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/notes.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/admin.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/editor.js?v=2026-05-24-4" defer></script>
+  <script src="/assets/js/app.js?v=2026-05-24-4" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/assets/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/assets/sw.js?v=2026-05-24-4", {
+        scope: "/",
+        updateViaCache: "none",
+      }).catch(() => {});
     }
   </script>
 </body>

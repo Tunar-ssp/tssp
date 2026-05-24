@@ -61,7 +61,7 @@ impl AuthStore {
             AuthStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
         })?;
 
-        run_auth_migration(&connection)?;
+        initialize_store_schema(&connection)?;
         Ok(Self { pool })
     }
 
@@ -268,7 +268,7 @@ impl AuthStore {
     }
 }
 
-fn run_auth_migration(connection: &Connection) -> Result<(), AuthStoreError> {
+pub(crate) fn initialize_store_schema(connection: &Connection) -> Result<(), AuthStoreError> {
     let applied: i64 = connection.query_row(
         "SELECT COUNT(*) FROM schema_migrations WHERE version = ?1",
         params![MIGRATION_VERSION],
