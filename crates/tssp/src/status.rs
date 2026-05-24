@@ -123,11 +123,17 @@ fn print_status(status: &DaemonStatus, json: bool) -> Result<(), String> {
     println!("tsspd {}  [{}]", status.version, status.status);
     println!("Uptime:    {}", format_uptime(status.uptime_seconds));
     println!("Storage:   {}", format_bytes(status.storage_bytes_used));
-    println!("Files:     {}  (pinned: {}, uploads/24h: {})", status.file_count, status.pinned_count, status.recent_upload_count_24h);
+    println!(
+        "Files:     {}  (pinned: {}, uploads/24h: {})",
+        status.file_count, status.pinned_count, status.recent_upload_count_24h
+    );
     println!("Notes:     {}", status.note_count);
     println!("Tags:      {}", status.tag_count);
     if status.corrupt_file_count > 0 {
-        eprintln!("warning: {} file(s) with missing blobs", status.corrupt_file_count);
+        eprintln!(
+            "warning: {} file(s) with missing blobs",
+            status.corrupt_file_count
+        );
     }
     Ok(())
 }

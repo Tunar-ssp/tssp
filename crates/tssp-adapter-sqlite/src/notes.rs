@@ -264,11 +264,7 @@ impl NoteRepository for SqliteFileRepository {
         })
     }
 
-    fn replace_tags_on_note(
-        &self,
-        id: &NoteId,
-        tags: &[Tag],
-    ) -> Result<(), RepositoryError> {
+    fn replace_tags_on_note(&self, id: &NoteId, tags: &[Tag]) -> Result<(), RepositoryError> {
         let mut connection = self.connect()?;
         let transaction = connection
             .transaction()

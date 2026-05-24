@@ -3,27 +3,6 @@ window.Tssp = window.Tssp || {};
 (function (T) {
   "use strict";
 
-  // Shared rendering helpers used across modules.
-
-  T.tagsHtml = function tagsHtml(tags) {
-    return (tags || [])
-      .map((tag) => `<span class="tag">${T.escapeHtml(tag)}</span>`)
-      .join("");
-  };
-
-  T.stateBadge = function stateBadge(value) {
-    const isPublic = value === "public";
-    return `<span class="state-badge ${isPublic ? "public" : "private"}">${isPublic ? "Public" : "Private"}</span>`;
-  };
-
-  T.publicLink = function publicLink(file) {
-    return file.public_token ? `${window.location.origin}/p/${file.public_token}` : "";
-  };
-
-  T.tableMessage = function tableMessage(columns, message) {
-    return `<tr><td colspan="${columns}" class="table-empty">${T.escapeHtml(message)}</td></tr>`;
-  };
-
   // Overview
 
   T.loadOverview = async function loadOverview() {
@@ -146,15 +125,16 @@ window.Tssp = window.Tssp || {};
             extra = `${vis}${tags}`;
             actions = `<button type="button" class="btn btn-text btn-sm" data-preview-file="${id}">Preview</button><a class="btn btn-text btn-sm" href="${T.fileDownloadUrl(result.id)}" download>Download</a>`;
           } else if (type === "note") {
-            detail = T.escapeHtml((result.body || "")
-            .trim()
-            .replace(/^#+\s+/gm, "")
-            .replace(/\*\*?([^*]+)\*\*?/g, "$1")
-            .replace(/`([^`]+)`/g, "$1")
-            .replace(/\n+/g, " ")
-            .trim()
-            .slice(0, 120));
-            extra = tags;
+            const rawSnippet = result.snippet || (result.body || "")
+              .trim()
+              .replace(/^#+\s+/gm, "")
+              .replace(/\*\*?([^*]+)\*\*?/g, "$1")
+              .replace(/`([^`]+)`/g, "$1")
+              .replace(/\n+/g, " ")
+              .trim()
+              .slice(0, 120);
+            detail = T.escapeHtml(rawSnippet);
+            extra = (result.pinned ? `<span title="Pinned">📌</span> ` : "") + tags;
             actions = `<button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Open</button>`;
           } else if (type === "workspace") {
             detail = T.escapeHtml((result.snippet || "").slice(0, 120));

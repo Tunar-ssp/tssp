@@ -86,6 +86,20 @@ async fn index_does_not_load_pro_js() {
     assert!(INDEX_HTML.contains("files.js"));
     assert!(INDEX_HTML.contains("notes.js"));
     assert!(INDEX_HTML.contains("admin.js"));
+    assert!(INDEX_HTML.contains("ui/format.js"));
+}
+
+#[tokio::test]
+async fn serve_asset_returns_ui_modules() {
+    for path in [
+        "js/ui/format.js",
+        "js/ui/render.js",
+        "js/ui/toast.js",
+        "js/ui/dialogs.js",
+    ] {
+        let response = serve_asset(axum::extract::Path(path.to_owned())).await;
+        assert_eq!(response.status(), StatusCode::OK, "missing asset: {path}");
+    }
 }
 
 #[tokio::test]

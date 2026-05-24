@@ -165,8 +165,13 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
             eprintln!("error: pin update failed: {}", res.status());
             return Ok(classify_status(res.status()));
         }
-        if !cli.output.quiet && args.body.is_none() && args.title.is_none() && args.tags.is_empty() {
-            println!("{} note {}", if args.pin { "pinned" } else { "unpinned" }, args.id);
+        if !cli.output.quiet && args.body.is_none() && args.title.is_none() && args.tags.is_empty()
+        {
+            println!(
+                "{} note {}",
+                if args.pin { "pinned" } else { "unpinned" },
+                args.id
+            );
         }
         if args.body.is_none() && args.title.is_none() && args.tags.is_empty() {
             return Ok(CliExitCode::Success);
@@ -207,7 +212,10 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
             .send()
             .map_err(|error| format!("could not reach daemon: {error}"))?;
         if !res.status().is_success() && res.status() != StatusCode::NO_CONTENT {
-            eprintln!("warning: body updated but tag replace failed: {}", res.status());
+            eprintln!(
+                "warning: body updated but tag replace failed: {}",
+                res.status()
+            );
         }
     }
 

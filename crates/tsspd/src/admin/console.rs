@@ -227,11 +227,7 @@ fn run_public_files_summary(state: &HttpState) -> (bool, serde_json::Value) {
     };
     match state.stats_provider.list_files(&query) {
         Ok(paged) => {
-            let total_size: u64 = paged
-                .files
-                .iter()
-                .map(|f| f.size.bytes())
-                .sum();
+            let total_size: u64 = paged.files.iter().map(|f| f.size.bytes()).sum();
             (
                 true,
                 serde_json::json!({
@@ -273,9 +269,10 @@ fn run_version_info(state: &HttpState) -> (bool, serde_json::Value) {
 }
 
 fn run_integrity_check(state: &HttpState) -> (bool, serde_json::Value) {
-    match state.stats_provider.list_files(
-        &tssp_ports::ListQuery { limit: 2000, ..tssp_ports::ListQuery::default() },
-    ) {
+    match state.stats_provider.list_files(&tssp_ports::ListQuery {
+        limit: 2000,
+        ..tssp_ports::ListQuery::default()
+    }) {
         Ok(paged) => {
             let data_dir = state.settings().data_dir.clone();
             let blob_root = data_dir.join("blobs");
@@ -284,10 +281,7 @@ fn run_integrity_check(state: &HttpState) -> (bool, serde_json::Value) {
             for file in &paged.files {
                 let hash = file.content_hash.as_str();
                 if hash.len() >= 4 {
-                    let path = blob_root
-                        .join(&hash[..2])
-                        .join(&hash[2..4])
-                        .join(hash);
+                    let path = blob_root.join(&hash[..2]).join(&hash[2..4]).join(hash);
                     if !path.is_file() {
                         missing += 1;
                     }

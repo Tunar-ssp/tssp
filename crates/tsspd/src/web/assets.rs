@@ -38,6 +38,22 @@ pub(crate) const CSS_MOBILE: &str = include_str!(concat!(
 
 pub(crate) const JS_API: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/api.js"));
+pub(crate) const JS_UI_FORMAT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/ui/format.js"
+));
+pub(crate) const JS_UI_RENDER: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/ui/render.js"
+));
+pub(crate) const JS_UI_TOAST: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/ui/toast.js"
+));
+pub(crate) const JS_UI_DIALOGS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/ui/dialogs.js"
+));
 pub(crate) const JS_STATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/state.js"
@@ -86,6 +102,10 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "css/views.css" => Some((CSS_VIEWS, "text/css; charset=utf-8")),
         "css/mobile.css" => Some((CSS_MOBILE, "text/css; charset=utf-8")),
         "js/api.js" => Some((JS_API, "application/javascript; charset=utf-8")),
+        "js/ui/format.js" => Some((JS_UI_FORMAT, "application/javascript; charset=utf-8")),
+        "js/ui/render.js" => Some((JS_UI_RENDER, "application/javascript; charset=utf-8")),
+        "js/ui/toast.js" => Some((JS_UI_TOAST, "application/javascript; charset=utf-8")),
+        "js/ui/dialogs.js" => Some((JS_UI_DIALOGS, "application/javascript; charset=utf-8")),
         "js/state.js" => Some((JS_STATE, "application/javascript; charset=utf-8")),
         "js/upload.js" => Some((JS_UPLOAD, "application/javascript; charset=utf-8")),
         "js/views.js" => Some((JS_VIEWS, "application/javascript; charset=utf-8")),

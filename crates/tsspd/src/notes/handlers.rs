@@ -187,7 +187,11 @@ pub(crate) async fn replace_note_tags(
     };
     let provider = state.note_provider.clone();
 
-    match run_blocking(provider, move |provider| provider.replace_tags(note_id, tags)).await {
+    match run_blocking(provider, move |provider| {
+        provider.replace_tags(note_id, tags)
+    })
+    .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(response) => response,
     }
@@ -263,7 +267,10 @@ pub(crate) async fn export_notes(State(state): State<HttpState>) -> Response {
                 StatusCode::OK,
                 [
                     (CONTENT_TYPE, "application/x-ndjson; charset=utf-8"),
-                    (CONTENT_DISPOSITION, "attachment; filename=\"notes-export.ndjson\""),
+                    (
+                        CONTENT_DISPOSITION,
+                        "attachment; filename=\"notes-export.ndjson\"",
+                    ),
                 ],
                 body,
             )

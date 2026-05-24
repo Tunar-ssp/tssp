@@ -164,7 +164,10 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
                 };
                 println!("  note      {}  {}{}", note.id, note.title, tags);
                 if !note.snippet.is_empty() {
-                    println!("            {}", note.snippet.lines().next().unwrap_or_default());
+                    println!(
+                        "            {}",
+                        note.snippet.lines().next().unwrap_or_default()
+                    );
                 }
             }
             SearchResultItem::Workspace { record: workspace } => {
@@ -173,7 +176,10 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
                     workspace.id, workspace.name, workspace.language
                 );
                 if !workspace.snippet.is_empty() {
-                    println!("            {}", workspace.snippet.lines().next().unwrap_or_default());
+                    println!(
+                        "            {}",
+                        workspace.snippet.lines().next().unwrap_or_default()
+                    );
                 }
             }
         }

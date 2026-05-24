@@ -279,11 +279,7 @@ pub trait NoteRepository {
     /// # Errors
     ///
     /// Returns [`RepositoryError::NotFound`] when the note does not exist.
-    fn replace_tags_on_note(
-        &self,
-        id: &NoteId,
-        tags: &[Tag],
-    ) -> Result<(), RepositoryError>;
+    fn replace_tags_on_note(&self, id: &NoteId, tags: &[Tag]) -> Result<(), RepositoryError>;
 
     /// Pins a note, optionally at a specific position.
     ///
@@ -490,11 +486,7 @@ where
         self.as_ref().remove_tag_from_note(id, tag)
     }
 
-    fn replace_tags_on_note(
-        &self,
-        id: &NoteId,
-        tags: &[Tag],
-    ) -> Result<(), RepositoryError> {
+    fn replace_tags_on_note(&self, id: &NoteId, tags: &[Tag]) -> Result<(), RepositoryError> {
         self.as_ref().replace_tags_on_note(id, tags)
     }
 
