@@ -118,23 +118,32 @@ window.Tssp = window.Tssp || {};
     const tree = T.$("#folder-tree");
     if (!tree) return;
 
-    function renderTree(items) {
+    function renderTree(items, isAdmin) {
       tree.innerHTML = items
         .map(
           (folder) =>
-            `<button type="button" data-folder="${T.escapeHtml(folder.path)}" class="${folder.path === T.currentFolder ? "active" : ""}">
-              <span>${T.escapeHtml(folder.label)}</span><span class="mono">${folder.count}</span>
-            </button>`
+            `<div class="folder-item${folder.path === T.currentFolder ? " active" : ""}">
+              <button type="button" class="folder-btn" data-folder="${T.escapeHtml(folder.path)}">
+                <span class="folder-label">${T.escapeHtml(folder.label)}</span>
+                <span class="folder-count mono">${folder.count}</span>
+              </button>
+              ${isAdmin && folder.path ? `<button type="button" class="folder-rename-btn btn btn-text btn-sm" data-folder-rename="${T.escapeHtml(folder.path)}" title="Rename folder">✎</button>` : ""}
+            </div>`
         )
         .join("");
-      tree.querySelectorAll("button").forEach((button) => {
+      tree.querySelectorAll(".folder-btn").forEach((button) => {
         button.addEventListener("click", () => {
           T.currentFolder = button.dataset.folder || "";
           T.$("#breadcrumb-folder").textContent = T.currentFolder || "default";
           T.$("#upload-folder").value = T.currentFolder;
-          tree.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
-          button.classList.add("active");
+          tree.querySelectorAll(".folder-item").forEach((item) => item.classList.remove("active"));
+          button.closest(".folder-item").classList.add("active");
           T.loadFiles();
+        });
+      });
+      tree.querySelectorAll(".folder-rename-btn").forEach((button) => {
+        button.addEventListener("click", () => {
+          T.renameFolder(button.dataset.folderRename);
         });
       });
     }
@@ -149,7 +158,7 @@ window.Tssp = window.Tssp || {};
           items.push({ path: folder.path, label: folder.path, count: folder.file_count });
         }
       }
-      renderTree(items);
+      renderTree(items, true);
     } catch {
       try {
         const data = await T.api("/files?limit=500");
@@ -164,11 +173,27 @@ window.Tssp = window.Tssp || {};
           label: path || "Bucket root",
           count,
         }));
-        renderTree(items);
+        renderTree(items, false);
       } catch {
         tree.innerHTML =
-          '<button type="button" data-folder="" class="active"><span>Bucket root</span><span class="mono">—</span></button>';
+          '<div class="folder-item active"><button type="button" class="folder-btn" data-folder=""><span class="folder-label">Bucket root</span><span class="folder-count mono">—</span></button></div>';
       }
+    }
+  };
+
+  T.renameFolder = async function renameFolder(fromPath) {
+    const toPath = prompt(`Rename folder "${fromPath}" to:`, fromPath);
+    if (!toPath || toPath.trim() === fromPath) return;
+    try {
+      const result = await T.api("/folders/move", {
+        method: "POST",
+        body: JSON.stringify({ from: fromPath, to: toPath.trim() }),
+      });
+      T.showBanner(`Folder renamed — ${result.files_updated || 0} file(s) updated`, "success");
+      T.loadFolderTree();
+      T.loadFiles();
+    } catch (error) {
+      T.showBanner(error.message, "error");
     }
   };
 
