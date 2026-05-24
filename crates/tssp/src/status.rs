@@ -70,9 +70,46 @@ struct DaemonStatus {
     status: String,
     uptime_seconds: u64,
     file_count: u64,
+    #[serde(default)]
+    note_count: u64,
     tag_count: u64,
     pinned_count: u64,
     recent_upload_count_24h: u64,
+    #[serde(default)]
+    storage_bytes_used: u64,
+    #[serde(default)]
+    corrupt_file_count: u64,
+}
+
+fn format_uptime(secs: u64) -> String {
+    let days = secs / 86400;
+    let hours = (secs % 86400) / 3600;
+    let mins = (secs % 3600) / 60;
+    let s = secs % 60;
+    if days > 0 {
+        format!("{days}d {hours}h {mins}m {s}s")
+    } else if hours > 0 {
+        format!("{hours}h {mins}m {s}s")
+    } else if mins > 0 {
+        format!("{mins}m {s}s")
+    } else {
+        format!("{s}s")
+    }
+}
+
+fn format_bytes(b: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    if b >= GB {
+        format!("{:.1} GiB", b as f64 / GB as f64)
+    } else if b >= MB {
+        format!("{:.1} MiB", b as f64 / MB as f64)
+    } else if b >= KB {
+        format!("{:.1} KiB", b as f64 / KB as f64)
+    } else {
+        format!("{b} B")
+    }
 }
 
 fn print_status(status: &DaemonStatus, json: bool) -> Result<(), String> {
@@ -83,13 +120,15 @@ fn print_status(status: &DaemonStatus, json: bool) -> Result<(), String> {
         return Ok(());
     }
 
-    println!("OK tsspd {}", status.version);
-    println!("Status: {}", status.status);
-    println!("Uptime: {}s", status.uptime_seconds);
-    println!("Files: {}", status.file_count);
-    println!("Tags: {}", status.tag_count);
-    println!("Pinned: {}", status.pinned_count);
-    println!("Uploaded in last 24h: {}", status.recent_upload_count_24h);
+    println!("tsspd {}  [{}]", status.version, status.status);
+    println!("Uptime:    {}", format_uptime(status.uptime_seconds));
+    println!("Storage:   {}", format_bytes(status.storage_bytes_used));
+    println!("Files:     {}  (pinned: {}, uploads/24h: {})", status.file_count, status.pinned_count, status.recent_upload_count_24h);
+    println!("Notes:     {}", status.note_count);
+    println!("Tags:      {}", status.tag_count);
+    if status.corrupt_file_count > 0 {
+        eprintln!("warning: {} file(s) with missing blobs", status.corrupt_file_count);
+    }
     Ok(())
 }
 
@@ -107,9 +146,12 @@ mod tests {
             status: "ok".to_owned(),
             uptime_seconds: 1,
             file_count: 2,
+            note_count: 0,
             tag_count: 3,
             pinned_count: 4,
             recent_upload_count_24h: 5,
+            storage_bytes_used: 0,
+            corrupt_file_count: 0,
         };
 
         assert_eq!(status.schema_version, 1);
@@ -138,7 +180,7 @@ mod tests {
     #[test]
     fn parse_status_body_accepts_valid_payload() {
         let status = parse_status_body(
-            r#"{"schema_version":1,"version":"0.1.0","status":"ok","uptime_seconds":1,"file_count":2,"tag_count":3,"pinned_count":4,"recent_upload_count_24h":5}"#,
+            r#"{"schema_version":1,"version":"0.1.0","status":"ok","uptime_seconds":1,"file_count":2,"note_count":1,"tag_count":3,"pinned_count":4,"recent_upload_count_24h":5,"storage_bytes_used":1024,"corrupt_file_count":0}"#,
             "http://127.0.0.1:8421",
         )
         .unwrap_or_else(|error| panic!("parse failed: {error}"));
@@ -162,9 +204,12 @@ mod tests {
             status: "ok".to_owned(),
             uptime_seconds: 1,
             file_count: 2,
+            note_count: 0,
             tag_count: 3,
             pinned_count: 4,
             recent_upload_count_24h: 5,
+            storage_bytes_used: 0,
+            corrupt_file_count: 0,
         };
 
         assert_eq!(print_status(&status, true), Ok(()));
