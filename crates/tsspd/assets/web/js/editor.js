@@ -546,6 +546,39 @@ window.Tssp = window.Tssp || {};
           updateStatusBar();
         }
       }
+      // Auto-close brackets and quotes
+      const PAIRS = { "(": ")", "[": "]", "{": "}", '"': '"', "'": "'", "`": "`" };
+      const CLOSE_CHARS = new Set(Object.values(PAIRS));
+      if (event.key in PAIRS) {
+        const start = area.selectionStart;
+        const end = area.selectionEnd;
+        const val = area.value;
+        const close = PAIRS[event.key];
+        if (start !== end) {
+          // Wrap selection
+          event.preventDefault();
+          const selected = val.slice(start, end);
+          area.value = val.slice(0, start) + event.key + selected + close + val.slice(end);
+          area.selectionStart = start + 1;
+          area.selectionEnd = end + 1;
+          markDirty();
+        } else {
+          const nextChar = val[start];
+          if (!nextChar || /\s/.test(nextChar) || CLOSE_CHARS.has(nextChar)) {
+            event.preventDefault();
+            area.value = val.slice(0, start) + event.key + close + val.slice(start);
+            area.selectionStart = area.selectionEnd = start + 1;
+            markDirty();
+          }
+        }
+      } else if (CLOSE_CHARS.has(event.key)) {
+        const start = area.selectionStart;
+        const val = area.value;
+        if (val[start] === event.key) {
+          event.preventDefault();
+          area.selectionStart = area.selectionEnd = start + 1;
+        }
+      }
     });
 
     area.addEventListener("input", () => {
