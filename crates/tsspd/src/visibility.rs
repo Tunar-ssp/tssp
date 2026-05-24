@@ -7,7 +7,7 @@ use axum::Json;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use getrandom::getrandom;
 use serde::{Deserialize, Serialize};
-use tssp_domain::{FileId, FileRecord, Visibility};
+use tssp_domain::{FileId, Visibility};
 
 use crate::auth::AuthContext;
 use crate::upload::FileRecordResponse;
@@ -17,10 +17,6 @@ fn new_public_token() -> Result<String, String> {
     let mut bytes = [0_u8; 24];
     getrandom(&mut bytes).map_err(|error| format!("failed to generate public token: {error}"))?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
-}
-
-fn can_manage_file(auth: &AuthContext, file: &FileRecord) -> bool {
-    auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)
 }
 
 fn forbidden() -> Response {
@@ -118,7 +114,7 @@ pub async fn patch_file_visibility(
         Ok(None) => return not_found(),
         Err(message) => return internal(message),
     };
-    if !can_manage_file(&auth, &existing) {
+    if !auth.can_manage_file(&existing) {
         return forbidden();
     }
 
@@ -198,7 +194,7 @@ pub async fn bulk_file_visibility(
         let Some(existing) = state.stats_provider.find_file(&file_id).ok().flatten() else {
             continue;
         };
-        if !can_manage_file(&auth, &existing) {
+        if !auth.can_manage_file(&existing) {
             continue;
         }
         let token = match visibility {
