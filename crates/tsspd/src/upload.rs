@@ -1,7 +1,7 @@
 //! Multipart file upload delivery.
 
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::extract::{Multipart, State};
 use axum::http::header::LOCATION;
@@ -55,6 +55,12 @@ pub struct HttpUploadRequest {
     pub owner_id: Option<tssp_domain::UserId>,
     /// Streaming file content.
     pub source: Box<dyn Read + Send>,
+    /// Pre-hashed path for optimized I/O.
+    pub staged_path: Option<PathBuf>,
+    /// Pre-computed content hash.
+    pub content_hash: Option<tssp_domain::ContentHash>,
+    /// Pre-computed file size.
+    pub size: Option<tssp_domain::FileSize>,
 }
 
 /// Result returned by the upload provider.
@@ -173,6 +179,9 @@ where
             visibility: tssp_domain::Visibility::Private,
             public_token: None,
             source: request.source.as_mut(),
+            staged_path: request.staged_path,
+            content_hash: request.content_hash,
+            size: request.size,
         };
         self.service
             .upload(&mut upload_request)
@@ -293,6 +302,7 @@ async fn upload_staged_file(
     staged: StagedMultipartUpload,
     owner_id: Option<tssp_domain::UserId>,
 ) -> Result<HttpUploadOutcome, HttpUploadError> {
+    let staged_path = staged.temp_file.path().to_path_buf();
     let source = match staged.temp_file.reopen() {
         Ok(file) => file,
         Err(error) => {
@@ -311,6 +321,9 @@ async fn upload_staged_file(
         folder_path: staged.folder_path,
         owner_id,
         source: Box::new(source),
+        staged_path: Some(staged_path),
+        content_hash: Some(staged.content_hash),
+        size: Some(staged.size),
     };
 
     match task::spawn_blocking(move || upload_provider.upload(upload_request)).await {
@@ -328,12 +341,16 @@ pub(crate) struct StagedMultipartUpload {
     pub(crate) pinned: bool,
     pub(crate) folder_path: String,
     pub(crate) temp_file: NamedTempFile,
+    pub(crate) content_hash: tssp_domain::ContentHash,
+    pub(crate) size: tssp_domain::FileSize,
 }
 
 struct StagedBatchFile {
     filename: String,
     mime_type: Option<String>,
     temp_file: NamedTempFile,
+    content_hash: tssp_domain::ContentHash,
+    size: tssp_domain::FileSize,
 }
 
 pub(crate) async fn stage_multipart_upload(
@@ -352,6 +369,7 @@ pub(crate) async fn stage_multipart_upload(
     let mut tags = Vec::new();
     let mut pinned = false;
     let mut folder_path = String::new();
+    let mut hash_and_size = None;
 
     while let Some(field) = next_field(&mut multipart).await? {
         let Some(name) = field.name().map(str::to_owned) else {
@@ -367,7 +385,7 @@ pub(crate) async fn stage_multipart_upload(
                     .file_name()
                     .map_or_else(|| "upload.bin".to_owned(), str::to_owned);
                 mime_type = field.content_type().map(str::to_owned);
-                write_field_to_temp(field, &mut temp_file).await?;
+                hash_and_size = Some(write_field_to_temp(field, &mut temp_file).await?);
                 filename = Some(next_filename);
             }
             "tag" | "tags" => tags.push(field_text(field).await?),
@@ -388,7 +406,20 @@ pub(crate) async fn stage_multipart_upload(
         }
     }
 
-    finish_staged_upload(filename, mime_type, tags, pinned, folder_path, temp_file)
+    let (content_hash, size) = hash_and_size.ok_or_else(|| HttpUploadError::InvalidRequest {
+        message: "multipart upload must include a file field".to_owned(),
+    })?;
+
+    finish_staged_upload(
+        filename,
+        mime_type,
+        tags,
+        pinned,
+        folder_path,
+        temp_file,
+        content_hash,
+        size,
+    )
 }
 
 async fn stage_batch_multipart_upload(
@@ -446,6 +477,8 @@ async fn stage_batch_multipart_upload(
             pinned,
             folder_path: folder_path.clone(),
             temp_file: file.temp_file,
+            content_hash: file.content_hash,
+            size: file.size,
         })
         .collect())
 }
@@ -462,13 +495,15 @@ async fn stage_batch_file(
         NamedTempFile::new_in(upload_temp_dir).map_err(|error| HttpUploadError::Internal {
             message: format!("could not create staged upload file: {error}"),
         })?;
-    write_field_to_temp(field, &mut temp_file).await?;
+    let (content_hash, size) = write_field_to_temp(field, &mut temp_file).await?;
     sync_staged_upload(&mut temp_file)?;
 
     Ok(StagedBatchFile {
         filename,
         mime_type,
         temp_file,
+        content_hash,
+        size,
     })
 }
 
@@ -505,6 +540,8 @@ fn finish_staged_upload(
     pinned: bool,
     folder_path: String,
     mut temp_file: NamedTempFile,
+    content_hash: tssp_domain::ContentHash,
+    size: tssp_domain::FileSize,
 ) -> Result<StagedMultipartUpload, HttpUploadError> {
     let Some(filename) = filename else {
         return Err(HttpUploadError::InvalidRequest {
@@ -521,6 +558,8 @@ fn finish_staged_upload(
         pinned,
         folder_path,
         temp_file,
+        content_hash,
+        size,
     })
 }
 
@@ -542,7 +581,10 @@ fn sync_staged_upload(temp_file: &mut NamedTempFile) -> Result<(), HttpUploadErr
 async fn write_field_to_temp(
     mut field: axum::extract::multipart::Field<'_>,
     temp_file: &mut NamedTempFile,
-) -> Result<(), HttpUploadError> {
+) -> Result<(tssp_domain::ContentHash, tssp_domain::FileSize), HttpUploadError> {
+    let mut hasher = blake3::Hasher::new();
+    let mut size = 0_u64;
+
     while let Some(chunk) =
         field
             .chunk()
@@ -551,13 +593,27 @@ async fn write_field_to_temp(
                 message: format!("invalid file field: {error}"),
             })?
     {
+        hasher.update(&chunk);
+        size = size
+            .checked_add(chunk.len() as u64)
+            .ok_or_else(|| HttpUploadError::Internal {
+                message: "upload size overflow".to_owned(),
+            })?;
+
         temp_file
             .write_all(&chunk)
             .map_err(|error| HttpUploadError::Internal {
                 message: format!("could not write staged upload: {error}"),
             })?;
     }
-    Ok(())
+
+    let hash = tssp_domain::ContentHash::new(hasher.finalize().to_hex().as_str()).map_err(
+        |error| HttpUploadError::Internal {
+            message: format!("could not compute hash: {error}"),
+        },
+    )?;
+
+    Ok((hash, tssp_domain::FileSize::new(size)))
 }
 
 async fn field_text(field: axum::extract::multipart::Field<'_>) -> Result<String, HttpUploadError> {
@@ -862,7 +918,16 @@ mod tests {
         let temp = tempfile::NamedTempFile::new()
             .unwrap_or_else(|error| panic!("temp file failed: {error}"));
 
-        let result = finish_staged_upload(None, None, Vec::new(), false, String::new(), temp);
+        let result = finish_staged_upload(
+            None,
+            None,
+            Vec::new(),
+            false,
+            String::new(),
+            temp,
+            content_hash(),
+            FileSize::new(0),
+        );
 
         assert!(
             matches!(result, Err(HttpUploadError::InvalidRequest { message }) if message.contains("file field"))
@@ -883,6 +948,8 @@ mod tests {
             true,
             "photos".to_owned(),
             temp,
+            content_hash(),
+            FileSize::new(5),
         )
         .unwrap_or_else(|error| panic!("finish failed: {error:?}"));
 
@@ -891,6 +958,7 @@ mod tests {
         assert_eq!(staged.tags, vec!["Docs"]);
         assert!(staged.pinned);
         assert_eq!(staged.folder_path, "photos");
+        assert_eq!(staged.size.bytes(), 5);
     }
 
     #[test]
@@ -904,6 +972,9 @@ mod tests {
             folder_path: String::new(),
             owner_id: None,
             source: Box::new(Cursor::new(Vec::<u8>::new())),
+            staged_path: None,
+            content_hash: None,
+            size: None,
         };
 
         let result = provider.upload(request);

@@ -1,8 +1,9 @@
 //! Trusted device sessions for long-lived local login.
 
 use std::path::Path;
-use std::sync::Mutex;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 use tssp_domain::{UserId, UserRole};
@@ -44,24 +45,41 @@ pub struct TrustedDevice {
 }
 
 /// Thread-safe trusted device store.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeviceStore {
-    connection: Mutex<Connection>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 impl DeviceStore {
+    /// Creates a device store from an existing pool.
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
+        Self { pool }
+    }
+
     /// Opens device tables.
     ///
     /// # Errors
     ///
     /// Returns an error when migration fails.
     pub fn open(path: &Path) -> Result<Self, DeviceStoreError> {
-        let connection = Connection::open(path)?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
+        let manager = SqliteConnectionManager::file(path);
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .map_err(|e| DeviceStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
+        let connection = pool
+            .get()
+            .map_err(|e| DeviceStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
         run_devices_migration(&connection)?;
-        Ok(Self {
-            connection: Mutex::new(connection),
-        })
+        Ok(Self { pool })
+    }
+
+    fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, DeviceStoreError> {
+        self.pool
+            .get()
+            .map_err(|_| DeviceStoreError::Database(rusqlite::Error::ExecuteReturnedResults))
     }
 
     /// Inserts a trusted device record.
@@ -70,7 +88,7 @@ impl DeviceStore {
     ///
     /// Returns an error when insert fails.
     pub fn insert_device(&self, device: &TrustedDevice) -> Result<(), DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         connection.execute(
             "INSERT INTO trusted_devices
              (device_token, user_id, role, device_name, last_seen_at, created_at, last_ip, last_user_agent, expires_at)
@@ -100,7 +118,7 @@ impl DeviceStore {
         token: &str,
         now: i64,
     ) -> Result<Option<TrustedDevice>, DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection.prepare(
             "SELECT device_token, user_id, role, device_name, last_seen_at, created_at, last_ip, last_user_agent, expires_at
              FROM trusted_devices WHERE device_token = ?1 AND expires_at > ?2 LIMIT 1",
@@ -124,7 +142,7 @@ impl DeviceStore {
         ip: Option<&str>,
         user_agent: Option<&str>,
     ) -> Result<(), DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = connection.execute(
             "UPDATE trusted_devices
              SET last_seen_at = ?1, last_ip = ?2, last_user_agent = ?3
@@ -146,7 +164,7 @@ impl DeviceStore {
         &self,
         user_id: Option<&UserId>,
     ) -> Result<Vec<TrustedDevice>, DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match user_id {
             Some(id) => (
                 "SELECT device_token, user_id, role, device_name, last_seen_at, created_at, last_ip, last_user_agent, expires_at
@@ -176,7 +194,7 @@ impl DeviceStore {
     ///
     /// Returns an error when delete fails.
     pub fn revoke(&self, token: &str) -> Result<(), DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = connection.execute(
             "DELETE FROM trusted_devices WHERE device_token = ?1",
             params![token],
@@ -193,7 +211,7 @@ impl DeviceStore {
     ///
     /// Returns an error when delete fails.
     pub fn revoke_all_for_user(&self, user_id: &UserId) -> Result<u64, DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let removed = connection.execute(
             "DELETE FROM trusted_devices WHERE user_id = ?1",
             params![user_id.as_str()],
@@ -207,18 +225,12 @@ impl DeviceStore {
     ///
     /// Returns an error when cleanup fails.
     pub fn cleanup_expired(&self, now: i64) -> Result<u64, DeviceStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let removed = connection.execute(
             "DELETE FROM trusted_devices WHERE expires_at <= ?1",
             params![now],
         )?;
         Ok(u64::try_from(removed).unwrap_or(0))
-    }
-
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, DeviceStoreError> {
-        self.connection
-            .lock()
-            .map_err(|_| DeviceStoreError::Database(rusqlite::Error::ExecuteReturnedResults))
     }
 }
 

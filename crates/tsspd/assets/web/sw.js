@@ -15,6 +15,7 @@ const ASSETS = [
   "/assets/js/files.js",
   "/assets/js/notes.js",
   "/assets/js/admin.js",
+  "/assets/js/editor.js",
   "/assets/js/app.js",
 ];
 

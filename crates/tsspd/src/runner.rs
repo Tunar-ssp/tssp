@@ -131,10 +131,16 @@ fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, Stri
     })
 }
 
-fn open_repository(metadata_path: &Path) -> Result<Arc<SqliteFileRepository>, String> {
-    SqliteFileRepository::open(metadata_path)
-        .map(Arc::new)
-        .map_err(|error| format!("could not initialize metadata store: {error}"))
+fn create_connection_pool(metadata_path: &Path) -> Result<Pool<SqliteConnectionManager>, String> {
+    let manager = SqliteConnectionManager::file(metadata_path);
+    Pool::builder()
+        .max_size(20)
+        .build(manager)
+        .map_err(|e| format!("could not create metadata connection pool: {e}"))
+}
+
+fn open_repository(pool: Pool<SqliteConnectionManager>) -> Result<Arc<SqliteFileRepository>, String> {
+    Ok(Arc::new(SqliteFileRepository::new(pool)))
 }
 
 fn open_storage(settings: &DaemonSettings) -> Result<Arc<FilesystemBlobStore>, String> {
@@ -197,13 +203,10 @@ fn configure_auth_password(auth: &AuthService) -> Result<(), String> {
 }
 
 fn start_session_service(
-    metadata_path: &Path,
+    pool: Pool<SqliteConnectionManager>,
     upload_temp_dir: &Path,
 ) -> Result<SessionService<SqliteSessionRepository>, String> {
-    let session_connection = rusqlite::Connection::open(metadata_path)
-        .map_err(|error| format!("could not open session database connection: {error}"))?;
-    let session_repository =
-        SqliteSessionRepository::new(Arc::new(std::sync::Mutex::new(session_connection)));
+    let session_repository = SqliteSessionRepository::new(pool);
     let session_service = SessionService::new(session_repository);
 
     let now = SystemClock.now();
@@ -219,21 +222,12 @@ fn start_session_service(
 }
 
 fn start_auth_service(
-    metadata_path: &Path,
+    pool: Pool<SqliteConnectionManager>,
     settings: &DaemonSettings,
 ) -> Result<AuthService, String> {
-    let auth_store = Arc::new(
-        AuthStore::open(metadata_path)
-            .map_err(|error| format!("could not initialize auth store: {error}"))?,
-    );
-    let user_store = Arc::new(
-        UserStore::open(metadata_path)
-            .map_err(|error| format!("could not initialize user store: {error}"))?,
-    );
-    let device_store = Arc::new(
-        DeviceStore::open(metadata_path)
-            .map_err(|error| format!("could not initialize device store: {error}"))?,
-    );
+    let auth_store = Arc::new(AuthStore::new(pool.clone()));
+    let user_store = Arc::new(UserStore::new(pool.clone()));
+    let device_store = Arc::new(DeviceStore::new(pool));
     let auth_service = AuthService::new(
         auth_store,
         user_store,
@@ -261,6 +255,7 @@ fn start_auth_service(
 fn build_http_state(
     settings: &Arc<DaemonSettings>,
     paths: RuntimePaths,
+    pool: Pool<SqliteConnectionManager>,
     repository: Arc<SqliteFileRepository>,
     storage: Arc<FilesystemBlobStore>,
     session_service: SessionService<SqliteSessionRepository>,
@@ -278,10 +273,7 @@ fn build_http_state(
     let tag_service = TagService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
     let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
-    let workspace_store = Arc::new(
-        WorkspaceStore::open(&paths.metadata_path)
-            .map_err(|error| format!("could not initialize workspace store: {error}"))?,
-    );
+    let workspace_store = Arc::new(WorkspaceStore::new(pool));
 
     Ok(HttpState::new(
         Instant::now(),
@@ -356,13 +348,14 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     settings.log_effective();
     warn_if_insecure_bind(&settings);
     let paths = prepare_runtime_paths(&settings)?;
-    let repository = open_repository(&paths.metadata_path)?;
+    let pool = create_connection_pool(&paths.metadata_path)?;
+    let repository = open_repository(pool.clone())?;
     run_integrity_check(&paths.metadata_path)
         .map_err(|error| format!("database integrity check failed: {error}"))?;
     let storage = open_storage(&settings)?;
     let corrupt_file_count = run_startup_integrity_scan(&repository, &storage);
-    let session_service = start_session_service(&paths.metadata_path, &paths.upload_temp_dir)?;
-    let auth_service = start_auth_service(&paths.metadata_path, &settings)?;
+    let session_service = start_session_service(pool.clone(), &paths.upload_temp_dir)?;
+    let auth_service = start_auth_service(pool.clone(), &settings)?;
 
     let settings = Arc::new(settings);
     let address = settings.socket_addr();
@@ -377,6 +370,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     let state = build_http_state(
         &settings,
         paths,
+        pool,
         repository,
         storage,
         session_service,

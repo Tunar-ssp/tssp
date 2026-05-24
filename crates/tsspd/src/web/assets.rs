@@ -70,7 +70,7 @@ pub(crate) const JS_APP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
 
 pub(crate) const HTML_CSP: &str =
-    "default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; \
+    "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; \
      img-src 'self' data: blob:; base-uri 'self'; form-action 'self'";
 
 /// Lookup embedded asset bytes and MIME type by path under `assets/web/`.

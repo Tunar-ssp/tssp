@@ -5,12 +5,13 @@
 //! so the future script foundation does not grow out of an unsafe scratchpad.
 
 use std::path::Path;
-use std::sync::Mutex;
 
 use axum::extract::{Path as AxumPath, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, ErrorCode};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -24,9 +25,9 @@ const MAX_WORKSPACE_LANGUAGE_BYTES: usize = 40;
 const MAX_WORKSPACE_BODY_BYTES: usize = 1_048_576;
 
 /// SQLite-backed workspace store.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WorkspaceStore {
-    connection: Mutex<Connection>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 /// Workspace persistence failures.
@@ -41,9 +42,6 @@ pub enum WorkspaceError {
     /// A generated id collided with an existing workspace.
     #[error("workspace already exists")]
     Conflict,
-    /// The connection mutex was poisoned.
-    #[error("workspace database lock is poisoned")]
-    LockPoisoned,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -79,28 +77,34 @@ pub(crate) struct WorkspaceSearchRecord {
 }
 
 impl WorkspaceStore {
+    /// Creates a workspace store from an existing pool.
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
+        Self { pool }
+    }
+
     /// Opens the workspace store at the metadata database path.
     ///
     /// # Errors
     ///
     /// Returns [`WorkspaceError`] when the database cannot be opened.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
-        let connection = Connection::open(path)?;
-        connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        connection.pragma_update(None, "foreign_keys", "ON")?;
-        Ok(Self {
-            connection: Mutex::new(connection),
+        let manager = SqliteConnectionManager::file(path.as_ref());
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .map_err(|e| WorkspaceError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
+        Ok(Self { pool })
+    }
+
+    fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, WorkspaceError> {
+        self.pool.get().map_err(|e| {
+            WorkspaceError::Database(rusqlite::Error::from_error(Box::new(e)))
         })
     }
 
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, WorkspaceError> {
-        self.connection
-            .lock()
-            .map_err(|_| WorkspaceError::LockPoisoned)
-    }
-
     fn list_for_owner(&self, owner_id: &str) -> Result<Vec<WorkspaceRecord>, WorkspaceError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection.prepare(
             "SELECT id, owner_id, name, language, body, created_at, updated_at
              FROM workspaces
@@ -114,7 +118,7 @@ impl WorkspaceStore {
     }
 
     pub(crate) fn get(&self, id: &str, owner_id: Option<&str>) -> Result<WorkspaceRecord, WorkspaceError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection.prepare(
             "SELECT id, owner_id, name, language, body, created_at, updated_at
              FROM workspaces
@@ -134,7 +138,7 @@ impl WorkspaceStore {
     }
 
     fn insert(&self, record: &WorkspaceRecord) -> Result<(), WorkspaceError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         connection
             .execute(
             "INSERT INTO workspaces (id, owner_id, name, language, body, created_at, updated_at)
@@ -154,7 +158,7 @@ impl WorkspaceStore {
     }
 
     fn update(&self, record: &WorkspaceRecord) -> Result<(), WorkspaceError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = connection.execute(
             "UPDATE workspaces
              SET name = ?1, language = ?2, body = ?3, updated_at = ?4
@@ -175,7 +179,7 @@ impl WorkspaceStore {
     }
 
     fn delete(&self, id: &str, owner_id: Option<&str>) -> Result<(), WorkspaceError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = if let Some(owner_id) = owner_id {
             connection.execute(
                 "DELETE FROM workspaces WHERE id = ?1 AND owner_id = ?2",
@@ -191,7 +195,7 @@ impl WorkspaceStore {
     }
 
     pub(crate) fn list_all(&self) -> Result<Vec<WorkspaceRecord>, WorkspaceError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection.prepare(
             "SELECT id, owner_id, name, language, body, created_at, updated_at
              FROM workspaces
@@ -214,7 +218,7 @@ impl WorkspaceStore {
             return Ok(Vec::new());
         }
         let limit = i64::try_from(limit.min(50)).unwrap_or(50);
-        let connection = self.lock()?;
+        let connection = self.connect()?;
 
         if let Some(owner_id) = owner_id {
             let mut statement = connection.prepare(SEARCH_WORKSPACES_FOR_OWNER_SQL)?;

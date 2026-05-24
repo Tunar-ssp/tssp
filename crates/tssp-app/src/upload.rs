@@ -1,9 +1,10 @@
 //! Upload use case orchestration.
 
 use std::io::Read;
+use std::path::PathBuf;
 
 use thiserror::Error;
-use tssp_domain::{DomainError, FileName, FileRecord, MimeType, Tag};
+use tssp_domain::{ContentHash, DomainError, FileName, FileRecord, FileSize, MimeType, Tag};
 use tssp_ports::{
     BlobStore, BlobStoreError, Clock, FileRepository, IdGenerationError, IdGenerator,
     NewFileRecord, RepositoryError,
@@ -51,7 +52,17 @@ where
             .transpose()?
             .unwrap_or_else(MimeType::octet_stream);
         let tags = normalize_tags(request.tags)?;
-        let blob = self.blob_store.put_stream(request.source)?;
+
+        let blob = if let (Some(path), Some(hash), Some(size)) = (
+            &request.staged_path,
+            &request.content_hash,
+            &request.size,
+        ) {
+            self.blob_store.put_staged(path, hash, *size)?
+        } else {
+            self.blob_store.put_stream(request.source)?
+        };
+
         if blob.deduplicated {
             match self
                 .repository
@@ -121,6 +132,12 @@ pub struct UploadRequest<'a> {
     pub public_token: Option<String>,
     /// Streaming content source.
     pub source: &'a mut dyn Read,
+    /// Optional path to a pre-staged file in temporary storage.
+    pub staged_path: Option<PathBuf>,
+    /// Optional pre-computed content hash.
+    pub content_hash: Option<ContentHash>,
+    /// Optional pre-computed file size.
+    pub size: Option<FileSize>,
 }
 
 /// Successful upload result.

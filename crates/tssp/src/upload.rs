@@ -165,32 +165,25 @@ fn upload_batch(
     cli: &Cli,
 ) -> Result<CliExitCode, String> {
     let started_at = Instant::now();
-    let boundary = multipart_boundary();
+    use reqwest::blocking::multipart::{Form, Part};
 
-    let mut form_data = Vec::new();
+    let mut form = Form::new();
+
     for item in items {
         for tag in &item.tags {
-            form_data.extend(text_field(&boundary, "tag", tag));
+            form = form.text("tag", tag.clone());
         }
         if item.pinned {
-            form_data.extend(text_field(&boundary, "pin", "true"));
+            form = form.text("pin", "true");
         }
-        form_data.extend(file_header(&boundary, &item.filename));
-
-        let mut file = File::open(&item.path)
-            .map_err(|error| format!("could not open {}: {error}", item.path.display()))?;
-        file.read_to_end(&mut form_data)
-            .map_err(|error| format!("could not read {}: {error}", item.path.display()))?;
-        form_data.extend(b"\r\n");
+        let part = Part::file(&item.path)
+            .map_err(|error| format!("could not open {}: {error}", item.path.display()))?
+            .file_name(item.filename.clone());
+        form = form.part("file", part);
     }
-    form_data.extend(format!("--{boundary}--\r\n").as_bytes());
 
     let response = api_post(client, &address.url("/api/v1/files/batch"))
-        .header(
-            CONTENT_TYPE,
-            format!("multipart/form-data; boundary={boundary}"),
-        )
-        .body(Body::from(form_data))
+        .multipart(form)
         .send()
         .map_err(|error| format!("could not upload batch to {}: {error}", address.base_url()))?;
 

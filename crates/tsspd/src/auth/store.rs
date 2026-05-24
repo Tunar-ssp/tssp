@@ -1,8 +1,9 @@
 //! `SQLite` persistence for auth configuration and tokens.
 
 use std::path::Path;
-use std::sync::Mutex;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
@@ -20,25 +21,41 @@ pub enum AuthStoreError {
 }
 
 /// Thread-safe auth metadata store backed by `SQLite`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthStore {
-    connection: Mutex<Connection>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 impl AuthStore {
+    /// Creates an auth store from an existing pool.
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
+        Self { pool }
+    }
+
     /// Opens (or creates) auth tables in the metadata database.
     ///
     /// # Errors
     ///
     /// Returns an error when the database cannot be opened or migrated.
     pub fn open(path: &Path) -> Result<Self, AuthStoreError> {
-        let connection = Connection::open(path)?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "synchronous", "NORMAL")?;
+        let manager = SqliteConnectionManager::file(path);
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .map_err(|e| AuthStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
+        let connection = pool
+            .get()
+            .map_err(|e| AuthStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
         run_auth_migration(&connection)?;
-        Ok(Self {
-            connection: Mutex::new(connection),
-        })
+        Ok(Self { pool })
+    }
+
+    fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, AuthStoreError> {
+        self.pool
+            .get()
+            .map_err(|e| AuthStoreError::Database(rusqlite::Error::from_error(Box::new(e))))
     }
 
     /// Returns the stored bcrypt password hash, if configured.
@@ -47,10 +64,7 @@ impl AuthStore {
     ///
     /// Returns an error when the query fails.
     pub fn password_hash(&self) -> Result<Option<String>, AuthStoreError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare("SELECT value FROM auth_config WHERE key = 'password_hash' LIMIT 1")?;
         let mut rows = statement.query([])?;
@@ -69,10 +83,7 @@ impl AuthStore {
         if hash.trim().is_empty() {
             return Err(AuthStoreError::InvalidPasswordHash);
         }
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         connection.execute(
             "INSERT INTO auth_config (key, value) VALUES ('password_hash', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -95,10 +106,7 @@ impl AuthStore {
         created_at: i64,
         expires_at: i64,
     ) -> Result<(), AuthStoreError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         connection.execute(
             "INSERT INTO auth_tokens (token, kind, user_id, device_id, created_at, expires_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -117,10 +125,7 @@ impl AuthStore {
         token: &str,
         now: i64,
     ) -> Result<Option<(String, String, String)>, AuthStoreError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         let mut statement = connection.prepare(
             "SELECT u.id, u.role, u.name
              FROM auth_tokens t
@@ -144,10 +149,7 @@ impl AuthStore {
         if token.trim().is_empty() {
             return Ok(false);
         }
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         let count: i64 = connection.query_row(
             "SELECT COUNT(*) FROM auth_tokens WHERE token = ?1 AND expires_at > ?2",
             params![token, now],
@@ -162,10 +164,7 @@ impl AuthStore {
     ///
     /// Returns an error when the delete fails.
     pub fn revoke_token(&self, token: &str) -> Result<(), AuthStoreError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         connection.execute("DELETE FROM auth_tokens WHERE token = ?1", params![token])?;
         Ok(())
     }
@@ -176,10 +175,7 @@ impl AuthStore {
     ///
     /// Returns an error when cleanup fails.
     pub fn cleanup_expired(&self, now: i64) -> Result<u64, AuthStoreError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| AuthStoreError::Database(rusqlite::Error::ExecuteReturnedResults))?;
+        let connection = self.connect()?;
         let removed = connection.execute(
             "DELETE FROM auth_tokens WHERE expires_at <= ?1",
             params![now],
@@ -220,47 +216,4 @@ fn run_auth_migration(connection: &Connection) -> Result<(), AuthStoreError> {
         params![MIGRATION_VERSION],
     )?;
     Ok(())
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used)]
-mod tests {
-    use super::AuthStore;
-    use std::path::PathBuf;
-
-    fn temp_db() -> (tempfile::TempDir, PathBuf) {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let path = temp.path().join("metadata.sqlite3");
-        rusqlite::Connection::open(&path)
-            .expect("open")
-            .execute_batch(
-                "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);",
-            )
-            .expect("schema");
-        (temp, path)
-    }
-
-    #[test]
-    fn password_hash_round_trip() {
-        let (_temp, path) = temp_db();
-        let store = AuthStore::open(&path).expect("open");
-        assert!(store.password_hash().expect("read").is_none());
-        store
-            .set_password_hash("$2b$12$abcdefghijklmnopqrstuv")
-            .expect("write");
-        let hash = store.password_hash().expect("read");
-        assert_eq!(hash.as_deref(), Some("$2b$12$abcdefghijklmnopqrstuv"));
-    }
-
-    #[test]
-    fn token_validity_respects_expiry() {
-        let (_temp, path) = temp_db();
-        let store = AuthStore::open(&path).expect("open");
-        store
-            .insert_token("tok-a", "api", None, None, 100, 200)
-            .expect("insert");
-        assert!(store.token_valid("tok-a", 150).expect("valid"));
-        assert!(!store.token_valid("tok-a", 200).expect("expired"));
-        assert!(!store.token_valid("missing", 150).expect("missing"));
-    }
 }

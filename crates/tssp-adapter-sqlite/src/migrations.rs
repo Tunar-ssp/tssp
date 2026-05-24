@@ -15,7 +15,7 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
+            ) STRICT;
 
             CREATE TABLE IF NOT EXISTS files (
                 id TEXT PRIMARY KEY,
@@ -27,18 +27,18 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
                 storage_handle TEXT NOT NULL,
                 uploaded_at INTEGER NOT NULL,
                 pinned_at INTEGER
-            );
+            ) STRICT;
 
             CREATE TABLE IF NOT EXISTS tags (
                 key TEXT PRIMARY KEY,
                 display TEXT NOT NULL
-            );
+            ) STRICT;
 
             CREATE TABLE IF NOT EXISTS file_tags (
                 file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
                 tag_key TEXT NOT NULL REFERENCES tags(key) ON DELETE CASCADE,
                 PRIMARY KEY (file_id, tag_key)
-            );
+            ) STRICT;
 
             CREATE VIRTUAL TABLE IF NOT EXISTS file_search
                 USING fts5(file_id UNINDEXED, name, tags);
@@ -77,7 +77,7 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
                 received_file TEXT REFERENCES files(id) ON DELETE SET NULL,
                 expected_name TEXT,
                 used_at INTEGER
-            );
+            ) STRICT;
 
             CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
             CREATE INDEX IF NOT EXISTS sessions_kind ON sessions(kind);
@@ -129,7 +129,7 @@ pub(crate) fn migrate_cloud_schema(connection: &Connection) -> Result<(), Sqlite
                     body TEXT NOT NULL,
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
-                );
+                ) STRICT;
                 CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
                 ",
             )

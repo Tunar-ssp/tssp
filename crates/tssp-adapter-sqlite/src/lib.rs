@@ -14,8 +14,9 @@ mod sessions;
 pub use sessions::SqliteSessionRepository;
 
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, params_from_iter, types::Value, Connection};
 use tssp_domain::{ContentHash, FileId, FileName, FileRecord, Tag, TagKey, UnixTimestamp};
 use tssp_ports::{
@@ -33,26 +34,42 @@ use query::{
 };
 
 /// `SQLite` metadata repository.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SqliteFileRepository {
-    connection: Mutex<Connection>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 impl SqliteFileRepository {
-    /// Opens a `SQLite` database file and runs embedded migrations.
+    /// Creates a repository from an existing connection pool.
+    #[must_use]
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
+        Self { pool }
+    }
+
+    /// Opens a `SQLite` database file, configures the pool, and runs embedded migrations.
     ///
     /// # Errors
     ///
     /// Returns [`SqliteRepositoryError`] when the database cannot be opened,
     /// configured, checked, or migrated.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteRepositoryError> {
-        let connection = Connection::open(path).map_err(SqliteRepositoryError::Open)?;
+        let manager = SqliteConnectionManager::file(path.as_ref());
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .map_err(|error| {
+                SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
+            })?;
+
+        let connection = pool.get().map_err(|error| {
+            SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
+        })?;
+
         connection::configure_connection(&connection)?;
         connection::run_integrity_check(&connection)?;
         migrations::run_migrations(&connection)?;
-        Ok(Self {
-            connection: Mutex::new(connection),
-        })
+
+        Ok(Self { pool })
     }
 
     /// Opens an in-memory `SQLite` database for tests.
@@ -62,20 +79,30 @@ impl SqliteFileRepository {
     /// Returns [`SqliteRepositoryError`] when the database cannot be configured
     /// or migrated.
     pub fn open_in_memory() -> Result<Self, SqliteRepositoryError> {
-        let connection = Connection::open_in_memory().map_err(SqliteRepositoryError::Open)?;
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder()
+            .max_size(1) // Single connection for in-memory tests to maintain state
+            .build(manager)
+            .map_err(|error| {
+                SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
+            })?;
+
+        let connection = pool.get().map_err(|error| {
+            SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
+        })?;
+
         connection::configure_connection(&connection)?;
         connection::run_integrity_check(&connection)?;
         migrations::run_migrations(&connection)?;
-        Ok(Self {
-            connection: Mutex::new(connection),
-        })
+
+        Ok(Self { pool })
     }
 
-    fn lock(&self) -> Result<MutexGuard<'_, Connection>, RepositoryError> {
-        self.connection
-            .lock()
+    fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, RepositoryError> {
+        self.pool
+            .get()
             .map_err(|error| RepositoryError::OperationFailed {
-                message: format!("metadata connection lock is poisoned: {error}"),
+                message: format!("metadata connection pool failure: {error}"),
             })
     }
 }
@@ -83,7 +110,7 @@ impl SqliteFileRepository {
 impl FileRepository for SqliteFileRepository {
     fn insert_file(&self, new_file: NewFileRecord) -> Result<FileRecord, RepositoryError> {
         let inserted_id = new_file.id.clone();
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -101,7 +128,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn find_file(&self, id: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
@@ -125,7 +152,7 @@ impl FileRepository for SqliteFileRepository {
         &self,
         content_hash: &ContentHash,
     ) -> Result<Option<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
@@ -149,7 +176,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -184,7 +211,7 @@ impl FileRepository for SqliteFileRepository {
     fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {
         let page_limit = validate_list_limit(query.limit)?;
 
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut sql = String::from(
             "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
              FROM files f",
@@ -331,7 +358,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn list_tags(&self) -> Result<Vec<TagSummary>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT tags.display, COUNT(file_tags.file_id) AS file_count
@@ -364,7 +391,7 @@ impl FileRepository for SqliteFileRepository {
         id: &FileId,
         tags: &[Tag],
     ) -> Result<TagMutationOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -402,7 +429,7 @@ impl FileRepository for SqliteFileRepository {
         id: &FileId,
         tag: &TagKey,
     ) -> Result<TagMutationOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -428,7 +455,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn stats_since(&self, recent_since: UnixTimestamp) -> Result<RepositoryStats, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         Ok(RepositoryStats {
             file_count: count(&connection, "SELECT COUNT(*) FROM files", [])?,
             note_count: count(&connection, "SELECT COUNT(*) FROM notes", [])?,
@@ -456,7 +483,7 @@ impl FileRepository for SqliteFileRepository {
         id: &FileId,
         position: Option<u32>,
     ) -> Result<tssp_ports::PinOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -542,7 +569,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn unpin_file(&self, id: &FileId) -> Result<tssp_ports::PinOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -586,7 +613,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn list_pinned_files(&self) -> Result<Vec<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
@@ -607,7 +634,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn reorder_pins(&self, ordered_ids: &[FileId]) -> Result<(), RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -634,7 +661,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
@@ -665,7 +692,7 @@ impl FileRepository for SqliteFileRepository {
         id: &FileId,
         new_name: &FileName,
     ) -> Result<Option<FileRecord>, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -689,7 +716,7 @@ impl FileRepository for SqliteFileRepository {
     }
 
     fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT folder_path, COUNT(*)
@@ -717,7 +744,7 @@ impl FileRepository for SqliteFileRepository {
         visibility: tssp_domain::Visibility,
         public_token: Option<&str>,
     ) -> Result<Option<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = connection
             .execute(
                 "UPDATE files SET visibility = ?1, public_token = ?2 WHERE id = ?3",
@@ -734,7 +761,7 @@ impl FileRepository for SqliteFileRepository {
         &self,
         token: &str,
     ) -> Result<Option<FileRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
@@ -761,7 +788,7 @@ impl FileRepository for SqliteFileRepository {
     ) -> Result<u64, RepositoryError> {
         let from = normalize_folder_prefix(from_prefix);
         let to = normalize_folder_prefix(to_prefix);
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = if from.is_empty() {
             connection
                 .execute(
@@ -797,7 +824,7 @@ impl FileRepository for SqliteFileRepository {
         folder_path: &str,
     ) -> Result<Option<FileRecord>, RepositoryError> {
         let normalized = normalize_folder_prefix(folder_path);
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = connection
             .execute(
                 "UPDATE files SET folder_path = ?1 WHERE id = ?2",

@@ -20,7 +20,7 @@ use crate::{
 impl NoteRepository for SqliteFileRepository {
     fn insert_note(&self, new_note: NewNoteRecord) -> Result<NoteRecord, RepositoryError> {
         let inserted_id = new_note.id.clone();
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -38,7 +38,7 @@ impl NoteRepository for SqliteFileRepository {
     }
 
     fn find_note(&self, id: &NoteId) -> Result<Option<NoteRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT id, title, body, created_at, updated_at, pinned_at
@@ -65,7 +65,7 @@ impl NoteRepository for SqliteFileRepository {
         body: &NoteBody,
         updated_at: UnixTimestamp,
     ) -> Result<NoteRecord, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -99,7 +99,7 @@ impl NoteRepository for SqliteFileRepository {
     }
 
     fn delete_note(&self, id: &NoteId) -> Result<bool, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -120,7 +120,7 @@ impl NoteRepository for SqliteFileRepository {
             });
         }
 
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut sql = String::from(
             "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at
              FROM notes n",
@@ -198,7 +198,7 @@ impl NoteRepository for SqliteFileRepository {
         id: &NoteId,
         tags: &[Tag],
     ) -> Result<TagMutationOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -240,7 +240,7 @@ impl NoteRepository for SqliteFileRepository {
         id: &NoteId,
         tag: &TagKey,
     ) -> Result<TagMutationOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -265,7 +265,7 @@ impl NoteRepository for SqliteFileRepository {
     }
 
     fn pin_note(&self, id: &NoteId, position: Option<u32>) -> Result<PinOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -289,7 +289,7 @@ impl NoteRepository for SqliteFileRepository {
     }
 
     fn unpin_note(&self, id: &NoteId) -> Result<PinOutcome, RepositoryError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
@@ -311,7 +311,7 @@ impl NoteRepository for SqliteFileRepository {
     }
 
     fn search_notes(&self, query: &str) -> Result<Vec<NoteRecord>, RepositoryError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at
@@ -362,7 +362,7 @@ impl NoteRepository for SqliteFileRepository {
             }
         }
 
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         for file in fuzzy_file_candidates(&connection, &terms)? {
             let key = format!("file:{}", file.id.as_str());
             if seen.insert(key) {
@@ -604,13 +604,13 @@ pub(crate) fn migrate_notes_schema(connection: &Connection) -> Result<(), Sqlite
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 pinned_at INTEGER
-            );
+            ) STRICT;
 
             CREATE TABLE IF NOT EXISTS note_tags (
                 note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
                 tag_key TEXT NOT NULL REFERENCES tags(key) ON DELETE CASCADE,
                 PRIMARY KEY (note_id, tag_key)
-            );
+            ) STRICT;
 
             CREATE VIRTUAL TABLE IF NOT EXISTS note_search
                 USING fts5(note_id UNINDEXED, title, body, tags);

@@ -1,9 +1,10 @@
 //! Multi-user accounts (name + code hash, roles).
 
 use std::path::Path;
-use std::sync::Mutex;
 
 use bcrypt::{hash, verify, DEFAULT_COST};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection};
 use thiserror::Error;
 use tssp_domain::{UserId, UserName, UserRole};
@@ -43,24 +44,41 @@ pub struct UserRecord {
 }
 
 /// Thread-safe user store.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserStore {
-    connection: Mutex<Connection>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 impl UserStore {
+    /// Creates a user store from an existing pool.
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
+        Self { pool }
+    }
+
     /// Opens user tables in the metadata database.
     ///
     /// # Errors
     ///
     /// Returns an error when migration fails.
     pub fn open(path: &Path) -> Result<Self, UserStoreError> {
-        let connection = Connection::open(path)?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
+        let manager = SqliteConnectionManager::file(path);
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .map_err(|e| UserStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
+        let connection = pool
+            .get()
+            .map_err(|e| UserStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+
         run_users_migration(&connection)?;
-        Ok(Self {
-            connection: Mutex::new(connection),
-        })
+        Ok(Self { pool })
+    }
+
+    fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, UserStoreError> {
+        self.pool
+            .get()
+            .map_err(|_| UserStoreError::Database(rusqlite::Error::ExecuteReturnedResults))
     }
 
     /// Returns the number of users.
@@ -69,7 +87,7 @@ impl UserStore {
     ///
     /// Returns an error when the query fails.
     pub fn count_users(&self) -> Result<u64, UserStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let count: i64 =
             connection.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
         Ok(u64::try_from(count).unwrap_or(0))
@@ -95,7 +113,7 @@ impl UserStore {
         }
         let code_hash = hash(code, DEFAULT_COST)
             .map_err(|error| UserStoreError::Invalid(format!("could not hash code: {error}")))?;
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let result = connection.execute(
             "INSERT INTO users (id, name, name_lower, role, code_hash, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -132,7 +150,7 @@ impl UserStore {
     ///
     /// Returns [`UserStoreError::NotFound`] when credentials are wrong.
     pub fn verify_credentials(&self, name: &str, code: &str) -> Result<UserRecord, UserStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let name_lower = name.trim().to_ascii_lowercase();
         let mut statement = connection.prepare(
             "SELECT id, name, role, code_hash, created_at, disabled_at
@@ -178,7 +196,7 @@ impl UserStore {
     ///
     /// Returns an error when the query fails.
     pub fn list_users(&self) -> Result<Vec<UserRecord>, UserStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection.prepare(
             "SELECT id, name, role, created_at, disabled_at FROM users ORDER BY name_lower",
         )?;
@@ -208,7 +226,7 @@ impl UserStore {
     ///
     /// Returns an error when lookup fails.
     pub fn find_user(&self, id: &UserId) -> Result<Option<UserRecord>, UserStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare("SELECT id, name, role, created_at, disabled_at FROM users WHERE id = ?1")?;
         let mut rows = statement.query(params![id.as_str()])?;
@@ -237,7 +255,7 @@ impl UserStore {
     /// Returns an error when the user does not exist or when the change would
     /// leave the system without an enabled admin.
     pub fn set_role(&self, id: &UserId, role: UserRole) -> Result<(), UserStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         if matches!(role, UserRole::User) {
             let admin_count: i64 = connection.query_row(
                 "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled_at IS NULL",
@@ -280,7 +298,7 @@ impl UserStore {
         }
         let code_hash = hash(code, DEFAULT_COST)
             .map_err(|error| UserStoreError::Invalid(format!("could not hash code: {error}")))?;
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let changed = connection.execute(
             "UPDATE users SET code_hash = ?1 WHERE id = ?2",
             params![code_hash, id.as_str()],
@@ -297,7 +315,7 @@ impl UserStore {
     ///
     /// Returns an error when delete is not allowed.
     pub fn delete_user(&self, id: &UserId) -> Result<(), UserStoreError> {
-        let connection = self.lock()?;
+        let connection = self.connect()?;
         let admin_count: i64 = connection.query_row(
             "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled_at IS NULL",
             [],
@@ -321,12 +339,6 @@ impl UserStore {
             return Err(UserStoreError::NotFound);
         }
         Ok(())
-    }
-
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, UserStoreError> {
-        self.connection
-            .lock()
-            .map_err(|_| UserStoreError::Database(rusqlite::Error::ExecuteReturnedResults))
     }
 }
 

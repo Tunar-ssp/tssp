@@ -3,13 +3,13 @@
   const T = window.Tssp;
 
   function bindEvents() {
-    T.$("#login-form").addEventListener("submit", async (ev) => {
+    T.$("#login-form")?.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const err = T.$("#login-error");
-      err.classList.add("hidden");
-      const name = T.$("#login-name").value.trim();
-      const code = T.$("#login-code").value;
-      const remember_device = T.$("#login-remember").checked;
+      if (err) err.classList.add("hidden");
+      const name = T.$("#login-name")?.value.trim() || "";
+      const code = T.$("#login-code")?.value || "";
+      const remember_device = T.$("#login-remember")?.checked || false;
       try {
         await fetch(T.API + "/auth/login", {
           method: "POST",
@@ -29,8 +29,10 @@
         });
         T.showApp();
       } catch (e) {
-        err.textContent = e.message;
-        err.classList.remove("hidden");
+        if (err) {
+          err.textContent = e.message;
+          err.classList.remove("hidden");
+        }
       }
     });
 
@@ -38,12 +40,12 @@
       a.addEventListener("click", (ev) => {
         ev.preventDefault();
         T.setView(a.dataset.view);
-        T.$("#side-nav").classList.remove("open");
+        T.$("#side-nav")?.classList.remove("open");
       });
     });
 
-    T.$("#nav-toggle").addEventListener("click", () => {
-      T.$("#side-nav").classList.toggle("open");
+    T.$("#nav-toggle")?.addEventListener("click", () => {
+      T.$("#side-nav")?.classList.toggle("open");
     });
 
     T.$("#logout-btn")?.addEventListener("click", async () => {
@@ -55,43 +57,66 @@
       T.showLogin();
     });
 
-    T.$("#refresh-btn").addEventListener("click", () => {
+    T.$("#refresh-btn")?.addEventListener("click", () => {
       T.showBanner("");
-      T.refreshCurrentView();
-      T.loadFolderTree();
+      if (typeof T.refreshCurrentView === "function") T.refreshCurrentView();
+      if (typeof T.loadFolderTree === "function") T.loadFolderTree();
     });
 
-    T.$("#pinned-only")?.addEventListener("change", () => T.loadFiles());
+    T.$("#pinned-only")?.addEventListener("change", () => {
+      if (typeof T.loadFiles === "function") T.loadFiles();
+    });
 
-    T.$("#global-search").addEventListener("input", (ev) => {
+    T.$("#global-search")?.addEventListener("input", (ev) => {
       const q = ev.target.value.trim();
       clearTimeout(T.searchTimer);
-      T.searchTimer = setTimeout(() => T.runSearch(q), T.SEARCH_DEBOUNCE_MS);
+      if (typeof T.runSearch === "function") {
+        T.searchTimer = setTimeout(() => T.runSearch(q), T.SEARCH_DEBOUNCE_MS);
+      }
     });
 
-    T.$("#new-note-btn")?.addEventListener("click", () => T.openNoteDialog(null));
-    T.$("#note-form").addEventListener("submit", (ev) => {
+    T.$("#new-note-btn")?.addEventListener("click", () => {
+      if (typeof T.openNoteDialog === "function") T.openNoteDialog(null);
+    });
+
+    T.$("#note-form")?.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      T.saveNote();
+      if (typeof T.saveNote === "function") T.saveNote();
     });
-    T.$("#note-cancel")?.addEventListener("click", () => T.closeNoteEditor());
-    T.$("#note-back")?.addEventListener("click", () => T.closeNoteEditor());
+
+    T.$("#note-cancel")?.addEventListener("click", () => {
+      if (typeof T.closeNoteEditor === "function") T.closeNoteEditor();
+    });
+
+    T.$("#note-back")?.addEventListener("click", () => {
+      if (typeof T.closeNoteEditor === "function") T.closeNoteEditor();
+    });
+
     T.$("#search-clear-filters")?.addEventListener("click", () => {
-      T.$("#search-kind").value = "all";
-      T.$("#search-tag").value = "";
-      T.$("#search-type").value = "";
-      T.$("#search-visibility").value = "";
-      T.$("#search-pinned").checked = false;
-      const q = T.$("#global-search").value.trim();
-      if (q) T.runSearch(q);
+      const kind = T.$("#search-kind");
+      const tag = T.$("#search-tag");
+      const type = T.$("#search-type");
+      const vis = T.$("#search-visibility");
+      const pin = T.$("#search-pinned");
+      const search = T.$("#global-search");
+
+      if (kind) kind.value = "all";
+      if (tag) tag.value = "";
+      if (type) type.value = "";
+      if (vis) vis.value = "";
+      if (pin) pin.checked = false;
+
+      const q = search ? search.value.trim() : "";
+      if (q && typeof T.runSearch === "function") T.runSearch(q);
     });
+
     ["search-kind", "search-tag", "search-type", "search-visibility", "search-pinned"].forEach(
       (id) => {
         const el = T.$(`#${id}`);
         if (!el) return;
         el.addEventListener("change", () => {
-          const q = T.$("#global-search").value.trim();
-          if (q) T.runSearch(q);
+          const q = T.$("#global-search")?.value.trim();
+          if (q && typeof T.runSearch === "function") T.runSearch(q);
         });
         if (el.tagName === "INPUT" && el.type === "text") {
           el.addEventListener(
@@ -99,121 +124,140 @@
             () => {
               clearTimeout(T.searchFilterTimer);
               T.searchFilterTimer = setTimeout(() => {
-                const query = T.$("#global-search").value.trim();
-                if (query) T.runSearch(query);
+                const query = T.$("#global-search")?.value.trim();
+                if (query && typeof T.runSearch === "function") T.runSearch(query);
               }, T.SEARCH_DEBOUNCE_MS);
             }
           );
         }
       }
     );
-    T.$("#note-preview-refresh")?.addEventListener("click", () => T.refreshNotePreview());
-    T.$("#note-body-input")?.addEventListener("input", () => T.refreshNotePreview());
 
-    T.$("#new-workspace-btn")?.addEventListener("click", () =>
-      T.openWorkspaceDialog(null)
-    );
+    T.$("#note-preview-refresh")?.addEventListener("click", () => {
+      if (typeof T.refreshNotePreview === "function") T.refreshNotePreview();
+    });
+
+    T.$("#note-body-input")?.addEventListener("input", () => {
+      if (typeof T.refreshNotePreview === "function") T.refreshNotePreview();
+    });
+
+    T.$("#new-workspace-btn")?.addEventListener("click", () => {
+      if (typeof T.openWorkspaceDialog === "function") T.openWorkspaceDialog(null);
+    });
+
     T.$("#workspace-form")?.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      T.saveWorkspace();
+      if (typeof T.saveWorkspace === "function") T.saveWorkspace();
     });
-    T.$("#workspace-cancel")?.addEventListener("click", () =>
-      T.$("#workspace-dialog").close()
-    );
-    T.$("#workspace-close")?.addEventListener("click", () =>
-      T.$("#workspace-dialog").close()
-    );
 
-    T.$("#admin-cleanup-temp")?.addEventListener("click", () => T.adminCleanup("temp"));
-    T.$("#admin-cleanup-sessions")?.addEventListener("click", () =>
-      T.adminCleanup("sessions")
-    );
-    T.$("#admin-refresh-files")?.addEventListener("click", () => T.loadAdminFiles());
+    T.$("#workspace-cancel")?.addEventListener("click", () => T.$("#workspace-dialog")?.close());
+    T.$("#workspace-close")?.addEventListener("click", () => T.$("#workspace-dialog")?.close());
+
+    T.$("#admin-cleanup-temp")?.addEventListener("click", () => {
+      if (typeof T.adminCleanup === "function") T.adminCleanup("temp");
+    });
+
+    T.$("#admin-cleanup-sessions")?.addEventListener("click", () => {
+      if (typeof T.adminCleanup === "function") T.adminCleanup("sessions");
+    });
+
+    T.$("#admin-refresh-files")?.addEventListener("click", () => {
+      if (typeof T.loadAdminFiles === "function") T.loadAdminFiles();
+    });
+
     T.$("#console-clear-history")?.addEventListener("click", () => {
       T.$$("#console-history button").forEach((b) => b.remove());
       const h = T.$("#console-history");
       if (h) h.innerHTML = '<span class="console-hint">No commands run yet</span>';
     });
+
     document.addEventListener("click", (ev) => {
       const consoleBtn = ev.target.closest("[data-console-cmd]");
-      if (consoleBtn) T.runConsoleCommand(consoleBtn.dataset.consoleCmd);
+      if (consoleBtn && typeof T.runConsoleCommand === "function") {
+        T.runConsoleCommand(consoleBtn.dataset.consoleCmd);
+      }
     });
+
     T.$("#admin-create-user-form")?.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      T.createAdminUser();
+      if (typeof T.createAdminUser === "function") T.createAdminUser();
     });
+
     T.$("#select-all-files")?.addEventListener("change", (ev) => {
-      T.setAllVisibleFilesSelected(ev.target.checked);
+      if (typeof T.setAllVisibleFilesSelected === "function") {
+        T.setAllVisibleFilesSelected(ev.target.checked);
+      }
     });
-    T.$("#preview-close")?.addEventListener("click", () => T.$("#preview-dialog").close());
+
+    T.$("#preview-close")?.addEventListener("click", () => T.$("#preview-dialog")?.close());
 
     document.addEventListener("change", (ev) => {
       const fileSelect = ev.target.closest("[data-file-select]");
-      if (fileSelect) {
+      if (fileSelect && typeof T.setSelectedFile === "function") {
         T.setSelectedFile(fileSelect.dataset.fileSelect, fileSelect.checked);
       }
     });
 
     document.addEventListener("click", (ev) => {
       const bulkAction = ev.target.closest("[data-bulk-action]");
-      if (bulkAction) {
+      if (bulkAction && typeof T.bulkFileAction === "function") {
         T.bulkFileAction(bulkAction.dataset.bulkAction);
         return;
       }
       const previewFile = ev.target.closest("[data-preview-file]");
-      if (previewFile) {
+      if (previewFile && typeof T.previewFile === "function") {
         T.previewFile(previewFile.dataset.previewFile);
         return;
       }
       const renameFile = ev.target.closest("[data-rename-file]");
-      if (renameFile) {
+      if (renameFile && typeof T.renameFile === "function") {
         T.renameFile(renameFile.dataset.renameFile);
         return;
       }
       const copyLink = ev.target.closest("[data-copy-link]");
-      if (copyLink) {
+      if (copyLink && typeof T.copyText === "function") {
         T.copyText(copyLink.dataset.copyLink)
-          .then(() => T.showBanner("Link copied", "success"))
-          .catch((e) => T.showBanner(e.message, "error"));
+          .then(() => typeof T.showBanner === "function" && T.showBanner("Link copied", "success"))
+          .catch((e) => typeof T.showBanner === "function" && T.showBanner(e.message, "error"));
         return;
       }
       const adminRole = ev.target.closest("[data-admin-role]");
-      if (adminRole) {
+      if (adminRole && typeof T.adminSetUserRole === "function") {
         T.adminSetUserRole(adminRole.dataset.adminRole, adminRole.dataset.role);
         return;
       }
       const adminResetCode = ev.target.closest("[data-admin-reset-code]");
-      if (adminResetCode) {
+      if (adminResetCode && typeof T.adminResetCode === "function") {
         T.adminResetCode(adminResetCode.dataset.adminResetCode);
         return;
       }
       const adminDeleteUser = ev.target.closest("[data-admin-delete-user]");
-      if (adminDeleteUser) {
+      if (adminDeleteUser && typeof T.adminDeleteUser === "function") {
         T.adminDeleteUser(adminDeleteUser.dataset.adminDeleteUser);
         return;
       }
       const adminRevokeUserDevices = ev.target.closest("[data-admin-revoke-user-devices]");
-      if (adminRevokeUserDevices) {
+      if (adminRevokeUserDevices && typeof T.adminRevokeUserDevices === "function") {
         T.adminRevokeUserDevices(adminRevokeUserDevices.dataset.adminRevokeUserDevices);
         return;
       }
       const adminRevokeDevice = ev.target.closest("[data-admin-revoke-device]");
-      if (adminRevokeDevice) {
+      if (adminRevokeDevice && typeof T.adminRevokeDevice === "function") {
         T.adminRevokeDevice(adminRevokeDevice.dataset.adminRevokeDevice);
         return;
       }
       const adminDeleteFile = ev.target.closest("[data-admin-delete-file]");
-      if (adminDeleteFile) {
+      if (adminDeleteFile && typeof T.adminDeleteFile === "function") {
         T.adminDeleteFile(adminDeleteFile.dataset.adminDeleteFile);
         return;
       }
       const delFile = ev.target.closest("[data-delete-file]");
-      if (delFile) {
+      if (delFile && typeof T.deleteFile === "function") {
         T.deleteFile(delFile.dataset.deleteFile);
         return;
       }
       const pinFile = ev.target.closest("[data-pin-file]");
-      if (pinFile) {
+      if (pinFile && typeof T.toggleFilePin === "function") {
         T.toggleFilePin(
           pinFile.dataset.pinFile,
           pinFile.dataset.pinned === "1"
@@ -221,45 +265,48 @@
         return;
       }
       const delNote = ev.target.closest("[data-delete-note]");
-      if (delNote) {
+      if (delNote && typeof T.deleteNote === "function") {
         T.deleteNote(delNote.dataset.deleteNote);
         return;
       }
       const editNote = ev.target.closest("[data-edit-note]");
-      if (editNote) {
+      if (editNote && typeof T.openNote === "function") {
         T.openNote(editNote.dataset.editNote);
         return;
       }
       const pinNote = ev.target.closest("[data-pin-note]");
-      if (pinNote) {
+      if (pinNote && typeof T.toggleNotePin === "function") {
         T.toggleNotePin(pinNote.dataset.pinNote, pinNote.dataset.pinned === "1");
         return;
       }
       const editWorkspace = ev.target.closest("[data-ws-edit]");
-      if (editWorkspace) {
+      if (editWorkspace && typeof T.openWorkspace === "function") {
         T.openWorkspace(editWorkspace.dataset.wsEdit);
         return;
       }
       const deleteWorkspace = ev.target.closest("[data-ws-del]");
-      if (deleteWorkspace) {
+      if (deleteWorkspace && typeof T.deleteWorkspace === "function") {
         T.deleteWorkspace(deleteWorkspace.dataset.wsDel);
         return;
       }
       const vis = ev.target.closest("[data-vis]");
-      if (vis) {
+      if (vis && typeof T.setFileVisibility === "function") {
         T.setFileVisibility(vis.dataset.vis, vis.dataset.v);
       }
     });
 
-    T.bindUpload();
-    T.bindEditorEvents();
+    if (typeof T.bindUpload === "function") T.bindUpload();
+    if (typeof T.bindEditorEvents === "function") T.bindEditorEvents();
   }
 
   try {
     bindEvents();
+    T.probeAuth().catch((err) => {
+      console.error("Auth probe failed:", err);
+      T.showApp();
+    });
   } catch (err) {
-    document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#08080b;color:#ececf1;font-family:system-ui;padding:24px"><div style="max-width:480px;text-align:center"><h2 style="color:#f87171;margin-bottom:12px">Dashboard failed to load</h2><p style="color:#9b9ba6;margin-bottom:16px">A JavaScript initialisation error prevented the app from starting.</p><pre style="background:#15151b;border:1px solid #282832;border-radius:8px;padding:14px;text-align:left;overflow:auto;font-size:12px;color:#fbbf24">${err?.stack || err?.message || String(err)}</pre><button onclick="location.reload()" style="margin-top:18px;padding:10px 20px;background:#a855f7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">Reload</button></div></div>`;
-    return;
+    console.error("Initialization failed:", err);
+    document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#08080b;color:#ececf1;font-family:system-ui;padding:24px"><div style="max-width:480px;text-align:center"><h2 style="color:#f87171;margin-bottom:12px">Dashboard failed to load</h2><p style="color:#9b9ba6;margin-bottom:16px">A JavaScript initialisation error prevented the app from starting.</p><pre style="background:#15151b;border:1px solid #282832;border-radius:8px;padding:14px;text-align:left;overflow:auto;font-size:12px;color:#fbbf24">${T.escapeHtml(err?.stack || err?.message || String(err))}</pre><button onclick="location.reload()" style="margin-top:18px;padding:10px 20px;background:#a855f7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">Reload</button></div></div>`;
   }
-  T.probeAuth();
 })();

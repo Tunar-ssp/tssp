@@ -4,45 +4,42 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use tssp_ports::BlobReader;
+use tssp_app::{
+    DeleteFileService, NoteService, PinService, SessionService, TagService, UploadService,
+};
+use tssp_ports::{BlobReader, BlobStore, Clock, FileRepository, IdGenerator, SessionRepository};
 
 use crate::auth::AuthService;
-use crate::delete::StaticFileDeleteProvider;
-use crate::notes::StaticNoteProvider;
-use crate::pins::StaticFilePinProvider;
-use crate::search::StaticFileSearchProvider;
-use crate::sessions::StaticSessionProvider;
 use crate::settings::DaemonSettings;
-use crate::status::StaticMetadataStatsProvider;
-use crate::tags::StaticFileTagProvider;
-use crate::upload::StaticFileUploadProvider;
 use crate::urls::PublicUrlBuilder;
-use crate::{content, delete, notes, pins, search, sessions, status, tags, upload, workspaces};
+use crate::workspaces;
 
 /// Shared HTTP state.
 #[derive(Clone)]
-pub struct HttpState {
+pub struct HttpState<R> {
     pub(crate) started_at: Instant,
-    pub(crate) stats_provider: Arc<dyn status::MetadataStatsProvider>,
-    pub(crate) upload_provider: Arc<dyn upload::FileUploadProvider>,
-    pub(crate) delete_provider: Arc<dyn delete::FileDeleteProvider>,
-    pub(crate) tag_provider: Arc<dyn tags::FileTagProvider>,
-    pub(crate) pin_provider: Arc<dyn pins::FilePinProvider>,
-    pub(crate) search_provider: Arc<dyn search::FileSearchProvider>,
-    pub(crate) session_provider: Arc<dyn sessions::SessionProvider>,
-    pub(crate) note_provider: Arc<dyn notes::NoteProvider>,
-    pub(crate) blob_reader: Arc<dyn BlobReader + Send + Sync>,
     pub(crate) upload_temp_dir: PathBuf,
     pub(crate) storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(crate) auth: AuthService,
     pub(crate) workspaces: Option<Arc<workspaces::WorkspaceStore>>,
-    settings: Arc<DaemonSettings>,
-    public_urls: PublicUrlBuilder,
+    pub(crate) settings: Arc<DaemonSettings>,
+    pub(crate) public_urls: PublicUrlBuilder,
     pub(crate) corrupt_file_count: u64,
+
+    pub(crate) tag_service: Arc<TagService<R>>,
+    pub(crate) note_service: Arc<NoteService<R, tssp_adapter_system::SystemClock, tssp_adapter_system::UuidV7FileIdGenerator>>,
+    pub(crate) pin_service: Arc<PinService<R>>,
+    pub(crate) delete_service: Arc<DeleteFileService<tssp_adapter_fs::FilesystemBlobStore, R>>,
+    pub(crate) upload_service: Arc<UploadService<tssp_adapter_fs::FilesystemBlobStore, R, tssp_adapter_system::UuidV7FileIdGenerator, tssp_adapter_system::SystemClock>>,
+    pub(crate) session_service: Arc<SessionService<tssp_adapter_sqlite::SqliteSessionRepository>>,
+    pub(crate) blob_reader: Arc<tssp_adapter_fs::FilesystemBlobStore>,
 }
 
-impl HttpState {
-    /// Creates a base HTTP state with static/placeholder providers.
+impl<R> HttpState<R>
+where
+    R: FileRepository + Send + Sync + 'static,
+{
+    /// Creates a new HTTP state.
     #[must_use]
     pub fn new(
         started_at: Instant,
@@ -50,18 +47,16 @@ impl HttpState {
         settings: Arc<DaemonSettings>,
         public_urls: PublicUrlBuilder,
         corrupt_file_count: u64,
+        tag_service: Arc<TagService<R>>,
+        note_service: Arc<NoteService<R, tssp_adapter_system::SystemClock, tssp_adapter_system::UuidV7FileIdGenerator>>,
+        pin_service: Arc<PinService<R>>,
+        delete_service: Arc<DeleteFileService<tssp_adapter_fs::FilesystemBlobStore, R>>,
+        upload_service: Arc<UploadService<tssp_adapter_fs::FilesystemBlobStore, R, tssp_adapter_system::UuidV7FileIdGenerator, tssp_adapter_system::SystemClock>>,
+        session_service: Arc<SessionService<tssp_adapter_sqlite::SqliteSessionRepository>>,
+        blob_reader: Arc<tssp_adapter_fs::FilesystemBlobStore>,
     ) -> Self {
         Self {
             started_at,
-            stats_provider: Arc::new(StaticMetadataStatsProvider),
-            upload_provider: Arc::new(StaticFileUploadProvider),
-            delete_provider: Arc::new(StaticFileDeleteProvider),
-            tag_provider: Arc::new(StaticFileTagProvider),
-            pin_provider: Arc::new(StaticFilePinProvider),
-            search_provider: Arc::new(StaticFileSearchProvider),
-            session_provider: Arc::new(StaticSessionProvider),
-            note_provider: Arc::new(StaticNoteProvider),
-            blob_reader: Arc::new(content::StaticBlobReader),
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
             auth: AuthService::disabled(),
@@ -69,6 +64,13 @@ impl HttpState {
             settings,
             public_urls,
             corrupt_file_count,
+            tag_service,
+            note_service,
+            pin_service,
+            delete_service,
+            upload_service,
+            session_service,
+            blob_reader,
         }
     }
 
@@ -89,90 +91,6 @@ impl HttpState {
     #[must_use]
     pub fn public_urls(&self) -> &PublicUrlBuilder {
         &self.public_urls
-    }
-
-    /// Builds HTTP state for integration tests.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn test_http_state(upload_temp_dir: PathBuf) -> Self {
-        let settings = Arc::new(DaemonSettings::default());
-        let urls = PublicUrlBuilder::from_settings(&settings);
-        Self::new(Instant::now(), upload_temp_dir, settings, urls, 0)
-    }
-
-    /// Builds HTTP state for integration tests with custom settings.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn test_http_state_with_settings(
-        upload_temp_dir: PathBuf,
-        settings: DaemonSettings,
-    ) -> Self {
-        let settings = Arc::new(settings);
-        let urls = PublicUrlBuilder::from_settings(&settings);
-        Self::new(Instant::now(), upload_temp_dir, settings, urls, 0)
-    }
-
-    /// Sets the metadata stats provider.
-    #[must_use]
-    pub fn with_stats_provider(mut self, provider: Arc<dyn status::MetadataStatsProvider>) -> Self {
-        self.stats_provider = provider;
-        self
-    }
-
-    /// Sets the file upload provider.
-    #[must_use]
-    pub fn with_upload_provider(mut self, provider: Arc<dyn upload::FileUploadProvider>) -> Self {
-        self.upload_provider = provider;
-        self
-    }
-
-    /// Sets the file delete provider.
-    #[must_use]
-    pub fn with_delete_provider(mut self, provider: Arc<dyn delete::FileDeleteProvider>) -> Self {
-        self.delete_provider = provider;
-        self
-    }
-
-    /// Sets the file tag provider.
-    #[must_use]
-    pub fn with_tag_provider(mut self, provider: Arc<dyn tags::FileTagProvider>) -> Self {
-        self.tag_provider = provider;
-        self
-    }
-
-    /// Sets the file pin provider.
-    #[must_use]
-    pub fn with_pin_provider(mut self, provider: Arc<dyn pins::FilePinProvider>) -> Self {
-        self.pin_provider = provider;
-        self
-    }
-
-    /// Sets the blob reader provider.
-    #[must_use]
-    pub fn with_blob_reader(mut self, reader: Arc<dyn BlobReader + Send + Sync>) -> Self {
-        self.blob_reader = reader;
-        self
-    }
-
-    /// Sets the search provider.
-    #[must_use]
-    pub fn with_search_provider(mut self, provider: Arc<dyn search::FileSearchProvider>) -> Self {
-        self.search_provider = provider;
-        self
-    }
-
-    /// Sets the session provider.
-    #[must_use]
-    pub fn with_session_provider(mut self, provider: Arc<dyn sessions::SessionProvider>) -> Self {
-        self.session_provider = provider;
-        self
-    }
-
-    /// Sets the note provider.
-    #[must_use]
-    pub fn with_note_provider(mut self, provider: Arc<dyn notes::NoteProvider>) -> Self {
-        self.note_provider = provider;
-        self
     }
 
     /// Sets the authentication service.

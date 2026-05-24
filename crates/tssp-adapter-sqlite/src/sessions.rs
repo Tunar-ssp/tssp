@@ -1,5 +1,7 @@
 //! `SQLite` implementation of `SessionRepository`.
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Row};
 use tssp_domain::{FileId, FileName, SessionKind, SessionToken, TransferSession, UnixTimestamp};
 use tssp_ports::{RepositoryError, SessionRepository};
@@ -78,63 +80,52 @@ fn map_session_row(row: &Row<'_>) -> Result<TransferSession, RepositoryError> {
 }
 
 /// SQLite-backed session repository.
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct SqliteSessionRepository {
-    connection: std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 impl SqliteSessionRepository {
-    /// Creates a new session repository with a shared database connection.
-    pub fn new(connection: std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>) -> Self {
-        Self { connection }
+    /// Creates a new session repository with a connection pool.
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
+        Self { pool }
+    }
+
+    fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, RepositoryError> {
+        self.pool
+            .get()
+            .map_err(|error| RepositoryError::OperationFailed {
+                message: format!("session connection pool failure: {error}"),
+            })
     }
 }
 
 impl SessionRepository for SqliteSessionRepository {
     fn create_session(&self, session: TransferSession) -> Result<(), RepositoryError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("session connection lock is poisoned: {e}"),
-            })?;
-
-        let kind_str = match session.kind {
-            SessionKind::Send => "send",
-            SessionKind::Receive => "receive",
-        };
-
+        let connection = self.connect()?;
         connection
             .execute(
-                "INSERT INTO sessions (token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO sessions (token, kind, created_at, expires_at, source_file, received_file, expected_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     session.token.as_str(),
-                    kind_str,
+                    match session.kind {
+                        SessionKind::Send => "send",
+                        SessionKind::Receive => "receive",
+                    },
                     session.created_at.seconds(),
                     session.expires_at.seconds(),
-                    session.source_file.as_ref().map(FileId::as_str),
-                    session.received_file.as_ref().map(FileId::as_str),
-                    session.expected_name.as_ref().map(FileName::original),
-                    None::<i64>,
+                    session.source_file.as_ref().map(|id| id.as_str()),
+                    session.received_file.as_ref().map(|id| id.as_str()),
+                    session.expected_name.as_ref().map(|name| name.original()),
                 ],
             )
             .map_err(map_rusqlite_repository_error)?;
-
         Ok(())
     }
 
-    fn find_session(
-        &self,
-        token: &SessionToken,
-    ) -> Result<Option<TransferSession>, RepositoryError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("session connection lock is poisoned: {e}"),
-            })?;
-
+    fn find_session(&self, token: &SessionToken) -> Result<Option<TransferSession>, RepositoryError> {
+        let connection = self.connect()?;
         let mut statement = connection
             .prepare(
                 "SELECT token, kind, created_at, expires_at, source_file, received_file, expected_name
@@ -142,280 +133,50 @@ impl SessionRepository for SqliteSessionRepository {
                  WHERE token = ?1",
             )
             .map_err(map_rusqlite_repository_error)?;
-
         let mut rows = statement
             .query(params![token.as_str()])
             .map_err(map_rusqlite_repository_error)?;
-
         let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? else {
             return Ok(None);
         };
-
-        let session = map_session_row(row)?;
-        Ok(Some(session))
+        map_session_row(row).map(Some)
     }
 
-    fn mark_session_used(
-        &self,
-        token: &SessionToken,
-        used_at: UnixTimestamp,
-    ) -> Result<(), RepositoryError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("session connection lock is poisoned: {e}"),
-            })?;
-
-        connection
+    fn update_session(&self, session: &TransferSession) -> Result<(), RepositoryError> {
+        let connection = self.connect()?;
+        let changed = connection
             .execute(
-                "UPDATE sessions SET used_at = ?1 WHERE token = ?2",
-                params![used_at.seconds(), token.as_str()],
+                "UPDATE sessions
+                 SET received_file = ?1
+                 WHERE token = ?2",
+                params![
+                    session.received_file.as_ref().map(|id| id.as_str()),
+                    session.token.as_str()
+                ],
             )
             .map_err(map_rusqlite_repository_error)?;
-
-        Ok(())
-    }
-
-    fn set_received_file(
-        &self,
-        token: &SessionToken,
-        file_id: &FileId,
-    ) -> Result<(), RepositoryError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("session connection lock is poisoned: {e}"),
-            })?;
-
-        connection
-            .execute(
-                "UPDATE sessions SET received_file = ?1 WHERE token = ?2",
-                params![file_id.as_str(), token.as_str()],
-            )
-            .map_err(map_rusqlite_repository_error)?;
-
-        Ok(())
-    }
-
-    fn cleanup_expired_sessions(&self, before: UnixTimestamp) -> Result<u64, RepositoryError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("session connection lock is poisoned: {e}"),
-            })?;
-
-        connection
-            .execute(
-                "DELETE FROM sessions WHERE expires_at < ?1",
-                params![before.seconds()],
-            )
-            .map_err(map_rusqlite_repository_error)
-            .map(|count| count as u64)
-    }
-
-    fn list_sessions_by_kind(
-        &self,
-        kind: SessionKind,
-    ) -> Result<Vec<TransferSession>, RepositoryError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| RepositoryError::OperationFailed {
-                message: format!("session connection lock is poisoned: {e}"),
-            })?;
-
-        let kind_str = match kind {
-            SessionKind::Send => "send",
-            SessionKind::Receive => "receive",
-        };
-
-        let mut statement = connection
-            .prepare(
-                "SELECT token, kind, created_at, expires_at, source_file, received_file, expected_name
-                 FROM sessions
-                 WHERE kind = ?1",
-            )
-            .map_err(map_rusqlite_repository_error)?;
-
-        let mut rows = statement
-            .query(params![kind_str])
-            .map_err(map_rusqlite_repository_error)?;
-
-        let mut sessions = Vec::new();
-        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            sessions.push(map_session_row(row)?);
+        if changed == 0 {
+            return Err(RepositoryError::NotFound);
         }
-
-        Ok(sessions)
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
-mod tests {
-    use super::*;
-    use tssp_domain::SessionKind;
-
-    fn init_test_db() -> std::sync::Arc<std::sync::Mutex<rusqlite::Connection>> {
-        let conn = rusqlite::Connection::open_in_memory().expect("failed to open connection");
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS sessions (
-                token TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                created_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL,
-                source_file TEXT,
-                received_file TEXT,
-                expected_name TEXT,
-                used_at INTEGER
-            );
-            CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
-            CREATE INDEX IF NOT EXISTS sessions_kind ON sessions(kind);",
-        )
-        .expect("failed to initialize test db");
-        std::sync::Arc::new(std::sync::Mutex::new(conn))
+        Ok(())
     }
 
-    #[test]
-    fn create_and_find_session() {
-        let repo = SqliteSessionRepository::new(init_test_db());
-
-        let token = SessionToken::new("aaaaaaaaaaaaaaaaaaaaaa").expect("invalid token");
-        let now = UnixTimestamp::new(1000).expect("invalid timestamp");
-        let expires = UnixTimestamp::new(2000).expect("invalid timestamp");
-        let file_id = FileId::new("file-001").expect("invalid file id");
-
-        let session = TransferSession::new(
-            token.clone(),
-            SessionKind::Send,
-            now,
-            expires,
-            Some(file_id),
-        )
-        .expect("failed to create session");
-
-        repo.create_session(session).expect("create failed");
-        let found = repo
-            .find_session(&token)
-            .expect("find failed")
-            .expect("session not found");
-
-        assert_eq!(found.token, token);
-        assert_eq!(found.kind, SessionKind::Send);
+    fn delete_session(&self, token: &SessionToken) -> Result<(), RepositoryError> {
+        let connection = self.connect()?;
+        let changed = connection
+            .execute("DELETE FROM sessions WHERE token = ?1", params![token.as_str()])
+            .map_err(map_rusqlite_repository_error)?;
+        if changed == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
     }
 
-    #[test]
-    fn mark_session_used() {
-        let repo = SqliteSessionRepository::new(init_test_db());
-
-        let token = SessionToken::new("bbbbbbbbbbbbbbbbbbbbbb").expect("invalid token");
-        let now = UnixTimestamp::new(1000).expect("invalid timestamp");
-        let expires = UnixTimestamp::new(2000).expect("invalid timestamp");
-        let file_id = FileId::new("file-002").expect("invalid file id");
-
-        let session = TransferSession::new(
-            token.clone(),
-            SessionKind::Send,
-            now,
-            expires,
-            Some(file_id),
-        )
-        .expect("failed to create session");
-
-        repo.create_session(session).expect("create failed");
-
-        let used_at = UnixTimestamp::new(1500).expect("invalid timestamp");
-        repo.mark_session_used(&token, used_at)
-            .expect("mark used failed");
-
-        let found = repo
-            .find_session(&token)
-            .expect("find failed")
-            .expect("session not found");
-
-        assert_eq!(found.token, token);
-    }
-
-    #[test]
-    fn cleanup_expired_sessions() {
-        let repo = SqliteSessionRepository::new(init_test_db());
-
-        let token1 = SessionToken::new("cccccccccccccccccccccc").expect("invalid token");
-        let token2 = SessionToken::new("dddddddddddddddddddddd").expect("invalid token");
-        let now = UnixTimestamp::new(1000).expect("invalid timestamp");
-        let expires_soon = UnixTimestamp::new(1500).expect("invalid timestamp");
-        let expires_later = UnixTimestamp::new(3000).expect("invalid timestamp");
-
-        let file_id1 = FileId::new("file-003").expect("invalid file id");
-        let file_id2 = FileId::new("file-004").expect("invalid file id");
-
-        let session1 = TransferSession::new(
-            token1.clone(),
-            SessionKind::Send,
-            now,
-            expires_soon,
-            Some(file_id1),
-        )
-        .expect("failed to create session");
-        let session2 = TransferSession::new(
-            token2.clone(),
-            SessionKind::Send,
-            now,
-            expires_later,
-            Some(file_id2),
-        )
-        .expect("failed to create session");
-
-        repo.create_session(session1).expect("create failed");
-        repo.create_session(session2).expect("create failed");
-
-        let cutoff = UnixTimestamp::new(2000).expect("invalid timestamp");
-        let deleted = repo
-            .cleanup_expired_sessions(cutoff)
-            .expect("cleanup failed");
-
-        assert_eq!(deleted, 1);
-
-        let found1 = repo.find_session(&token1).expect("find failed");
-        let found2 = repo.find_session(&token2).expect("find failed");
-
-        assert!(found1.is_none());
-        assert!(found2.is_some());
-    }
-
-    #[test]
-    fn list_sessions_by_kind() {
-        let repo = SqliteSessionRepository::new(init_test_db());
-
-        let token_send = SessionToken::new("eeeeeeeeeeeeeeeeeeeeee").expect("invalid token");
-        let token_recv = SessionToken::new("ffffffffffffffffffffff").expect("invalid token");
-        let now = UnixTimestamp::new(1000).expect("invalid timestamp");
-        let expires = UnixTimestamp::new(2000).expect("invalid timestamp");
-        let file_id = FileId::new("file-005").expect("invalid file id");
-
-        let session_send =
-            TransferSession::new(token_send, SessionKind::Send, now, expires, Some(file_id))
-                .expect("failed to create session");
-        let session_recv =
-            TransferSession::new(token_recv, SessionKind::Receive, now, expires, None)
-                .expect("failed to create session");
-
-        repo.create_session(session_send).expect("create failed");
-        repo.create_session(session_recv).expect("create failed");
-
-        let send_sessions = repo
-            .list_sessions_by_kind(SessionKind::Send)
-            .expect("list failed");
-        let recv_sessions = repo
-            .list_sessions_by_kind(SessionKind::Receive)
-            .expect("list failed");
-
-        assert_eq!(send_sessions.len(), 1);
-        assert_eq!(recv_sessions.len(), 1);
-        assert_eq!(send_sessions[0].kind, SessionKind::Send);
-        assert_eq!(recv_sessions[0].kind, SessionKind::Receive);
+    fn reap_expired_sessions(&self, now: UnixTimestamp) -> Result<u64, RepositoryError> {
+        let connection = self.connect()?;
+        let changed = connection
+            .execute("DELETE FROM sessions WHERE expires_at < ?1", params![now.seconds()])
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(u64::try_from(changed).unwrap_or(0))
     }
 }

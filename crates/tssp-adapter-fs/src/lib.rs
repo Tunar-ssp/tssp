@@ -149,16 +149,51 @@ impl BlobStore for FilesystemBlobStore {
         })
     }
 
+    fn put_staged(
+        &self,
+        temp_path: &Path,
+        content_hash: &ContentHash,
+        size: FileSize,
+    ) -> Result<BlobWriteOutcome, BlobStoreError> {
+        let permanent_path = self.permanent_path(content_hash)?;
+        let parent = permanent_path
+            .parent()
+            .ok_or_else(|| BlobStoreError::WriteFailed {
+                message: "blob path has no parent directory".to_owned(),
+            })?;
+        create_dir_all(parent)?;
+
+        let deduplicated = if permanent_path.exists() {
+            remove_file_best_effort(temp_path);
+            true
+        } else {
+            rename_file(temp_path, &permanent_path)?;
+            sync_directory(parent)?;
+            false
+        };
+
+        Ok(BlobWriteOutcome {
+            content_hash: content_hash.clone(),
+            handle: Self::handle_for_hash(content_hash)?,
+            size,
+            deduplicated,
+        })
+    }
+
     fn cleanup_unreferenced(&self, handle: &StorageHandle) -> Result<(), BlobStoreError> {
         let path = self.path_for_handle(handle)?;
-        match fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(BlobStoreError::CleanupFailed {
-                handle: handle.clone(),
-                message: error.to_string(),
-            }),
-        }
+        let handle_clone = handle.clone();
+        tokio::task::spawn(async move {
+            match fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => tracing::warn!(
+                    "background cleanup failed for {}: {error}",
+                    handle_clone.as_str()
+                ),
+            }
+        });
+        Ok(())
     }
 }
 
@@ -313,6 +348,30 @@ mod tests {
 
         assert_eq!(first_outcome.handle, second_outcome.handle);
         assert!(second_outcome.deduplicated);
+    }
+
+    #[test]
+    fn put_staged_moves_temp_file_to_permanent_storage() {
+        let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+        let store = FilesystemBlobStore::new(temp.path())
+            .unwrap_or_else(|error| panic!("store init failed: {error}"));
+
+        let content = b"staged content";
+        let hash = blake3::hash(content);
+        let content_hash = tssp_domain::ContentHash::new(hash.to_hex().as_str()).unwrap();
+        let size = tssp_domain::FileSize::new(content.len() as u64);
+
+        let temp_file_path = temp.path().join("my-staged-upload.tmp");
+        fs::write(&temp_file_path, content).unwrap();
+
+        let outcome = store
+            .put_staged(&temp_file_path, &content_hash, size)
+            .unwrap();
+
+        assert_eq!(outcome.content_hash, content_hash);
+        assert!(!outcome.deduplicated);
+        assert!(!temp_file_path.exists());
+        assert!(temp.path().join(outcome.handle.as_str()).is_file());
     }
 
     #[test]
