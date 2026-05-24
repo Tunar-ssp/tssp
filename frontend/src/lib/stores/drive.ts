@@ -1,44 +1,57 @@
-import { writable, derived } from "svelte/store";
-import type { FileRecord, FolderEntry, ShareInfo } from "../api";
+import { writable, derived } from 'svelte/store';
+import { api, type FileRecord } from '../api';
 
-export type DriveLens = "all" | "images" | "videos" | "documents";
-export type DriveViewMode = "grid" | "table";
-export type DriveSort = "name" | "date" | "size";
-
-export const driveLens = writable<DriveLens>("all");
-export const driveFolder = writable("");
-export const driveViewMode = writable<DriveViewMode>("grid");
-export const driveSort = writable<DriveSort>("date");
-export const driveQuery = writable("");
-export const driveFiles = writable<FileRecord[]>([]);
-export const driveFolders = writable<FolderEntry[]>([]);
-export const driveLoading = writable(false);
-export const driveError = writable("");
+export const files = writable<FileRecord[]>([]);
 export const selectedIds = writable<Set<string>>(new Set());
-export const focusedFileId = writable<string | null>(null);
-export const previewFileId = writable<string | null>(null);
-export const shareInfo = writable<ShareInfo | null>(null);
-export const uploadDragOver = writable(false);
+export const currentFolder = writable<string>('');
+export const isLoading = writable(false);
+export const folders = writable<string[]>([]);
 
-export const selectedCount = derived(selectedIds, ($s) => $s.size);
-export const focusedFile = derived(
-  [driveFiles, focusedFileId],
-  ([$files, $id]) => $files.find((f) => f.id === $id) || null,
+export const selectedCount = derived(selectedIds, ($ids) => $ids.size);
+
+export const visibleFiles = derived(
+  [files, currentFolder],
+  ([$files, $folder]) =>
+    $files.filter(f => (f.folder_path || '') === $folder)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
 );
 
-export function toggleSelection(id: string, checked: boolean) {
-  selectedIds.update((set) => {
-    const next = new Set(set);
-    if (checked) next.add(id);
-    else next.delete(id);
-    return next;
+export async function loadFiles(folder?: string) {
+  isLoading.set(true);
+  try {
+    const data = await api.listFiles(500);
+    files.set(data.files || []);
+
+    // Extract unique folders
+    const folderSet = new Set(data.files?.map(f => f.folder_path || '') || []);
+    folders.set(Array.from(folderSet).sort());
+
+    if (folder !== undefined) {
+      currentFolder.set(folder);
+    }
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+export function toggleSelect(id: string) {
+  selectedIds.update(s => {
+    const newSet = new Set(s);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    return newSet;
   });
+}
+
+export function selectAll(ids: string[]) {
+  selectedIds.set(new Set(ids));
 }
 
 export function clearSelection() {
   selectedIds.set(new Set());
 }
 
-export function selectAll(ids: string[]) {
-  selectedIds.set(new Set(ids));
+export function setFolder(path: string) {
+  currentFolder.set(path);
+  clearSelection();
 }

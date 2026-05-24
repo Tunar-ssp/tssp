@@ -41,7 +41,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, title, body, created_at, updated_at, pinned_at
+                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path
                  FROM notes
                  WHERE id = ?1",
             )
@@ -122,7 +122,7 @@ impl NoteRepository for SqliteFileRepository {
 
         let connection = self.connect()?;
         let mut sql = String::from(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at
+            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path
              FROM notes n",
         );
         let mut where_clauses = Vec::new();
@@ -347,7 +347,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at
+                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path
                  FROM note_search s
                  JOIN notes n ON n.id = s.note_id
                  WHERE note_search MATCH ?1
@@ -467,7 +467,7 @@ fn fuzzy_note_candidates(
     let like_prefix = format!("{prefix}%");
     let mut statement = connection
         .prepare(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at
+            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path
              FROM notes n
              WHERE n.title LIKE ?1 COLLATE NOCASE
                 OR EXISTS (
@@ -680,6 +680,25 @@ pub(crate) fn migrate_notes_schema(connection: &Connection) -> Result<(), Sqlite
     Ok(())
 }
 
+/// Adds `folder_path` to notes (schema v12).
+pub(crate) fn migrate_notes_folders(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 12)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE notes ADD COLUMN folder_path TEXT NOT NULL DEFAULT '';
+            CREATE INDEX IF NOT EXISTS idx_notes_folder_path ON notes(folder_path);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 12)?;
+    Ok(())
+}
+
 pub(crate) fn ensure_note_exists(
     transaction: &Transaction<'_>,
     id: &NoteId,
@@ -741,6 +760,7 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
         updated_at,
         tags: Vec::new(),
         pinned_at,
+        folder_path: row.get(6).map_err(map_rusqlite_repository_error)?,
     })
 }
 
@@ -775,8 +795,8 @@ fn insert_note_row(
 ) -> Result<(), RepositoryError> {
     transaction
         .execute(
-            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 new_note.id.as_str(),
                 new_note.title.as_str(),
@@ -784,6 +804,7 @@ fn insert_note_row(
                 new_note.created_at.seconds(),
                 new_note.updated_at.seconds(),
                 new_note.pinned_at,
+                new_note.folder_path,
             ],
         )
         .map(|_rows| ())

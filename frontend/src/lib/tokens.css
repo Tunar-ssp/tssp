@@ -1,30 +1,104 @@
 :root {
-  --bg-root: #000000;
-  --bg-base: #0b0b0d;
-  --bg-elevated: #111114;
-  --bg-surface: #16161a;
-  --bg-card: #1a1a1f;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --border: #2c2e35;
-  --border-strong: #3a3d47;
-  --text: #f1f1f3;
-  --text-muted: #8b8d97;
-  --text-dim: #5a5c66;
-  --brand: #2563eb;
-  --brand-dim: rgba(37, 99, 235, 0.14);
-  --blue: #60a5fa;
-  --cyan: #22d3ee;
-  --green: #4ade80;
-  --yellow: #fcd34d;
-  --orange: #fb923c;
-  --red: #f87171;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
-  --font-ui: Inter, Geist, system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
-  --sidebar-width: 240px;
-  --topbar-height: 52px;
-  --details-width: 320px;
+  /* Colors from design */
+  --bg-deep:    #06070a;
+  --bg:         #0b0c10;
+  --bg-1:       #101218;
+  --surface:    #14161d;
+  --surface-2:  #1a1d26;
+  --surface-3:  #232732;
+  --surface-hi: #2a2f3c;
+  --hairline:   #1f222b;
+  --border:     #262a35;
+  --border-2:   #323744;
+
+  --text:       #e7e9ee;
+  --text-2:     #b9bdc7;
+  --muted:      #7c8190;
+  --dim:        #535766;
+  --faint:      #393d49;
+
+  /* Brand accents */
+  --green:      #5be39a;
+  --green-soft: #1f3a2c;
+  --pink:       #ff5fa2;
+  --pink-soft:  #3a1c2c;
+  --orange:     #ff8a3d;
+  --orange-soft:#3a2418;
+  --blue:       #6ea8ff;
+  --blue-soft:  #16243f;
+  --cyan:       #58d6e0;
+  --violet:     #a394ff;
+  --success:    #34d399;
+  --warning:    #fbbf24;
+  --danger:     #ff6b6b;
+
+  /* Glass & dock */
+  --dock-glass: rgba(20,22,29,0.62);
+  --dock-edge:  rgba(255,255,255,0.06);
+  --dock-hi:    rgba(255,255,255,0.08);
+  --shadow-dock: 0 18px 40px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.04) inset, 0 -1px 0 rgba(0,0,0,.5) inset;
+  --shadow-card: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.32);
+  --shadow-modal: 0 30px 80px rgba(0,0,0,.6), 0 2px 0 rgba(255,255,255,.04) inset;
+
+  /* Spacing */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px;
+
+  /* Radius */
+  --r-1: 4px; --r-2: 6px; --r-3: 8px; --r-4: 10px;
+  --r-5: 14px; --r-6: 18px; --r-7: 22px; --r-full: 9999px;
+
+  /* Typography */
+  --ff-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --ff-mono: "JetBrains Mono", ui-monospace, monospace;
+  --ff-display: "Bricolage Grotesque", system-ui, sans-serif;
+
+  --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px;
+  --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-24: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: var(--ff-sans);
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-smooth: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f2330;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2a2f3c;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: rgba(110, 168, 255, 0.32);
 }

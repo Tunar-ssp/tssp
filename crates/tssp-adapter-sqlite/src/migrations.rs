@@ -91,7 +91,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_cloud_schema(connection)?;
     migrate_search_indexes(connection)?;
     migrate_content_hash_index(connection)?;
-    migrate_workspace_documents_schema(connection)
+    migrate_workspace_documents_schema(connection)?;
+    notes::migrate_notes_folders(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).

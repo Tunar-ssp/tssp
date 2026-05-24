@@ -1,510 +1,133 @@
-export interface AuthSnapshot {
-  required: boolean;
-  user?: { name: string; role: string } | null;
+export interface ApiResponse<T> {
+  data?: T;
+  error?: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  role: 'admin' | 'user';
 }
 
 export interface FileRecord {
-  schema_version?: number;
   id: string;
   name: string;
   size_bytes: number;
-  content_hash: string;
   mime_type: string;
-  uploaded_at: number;
-  tags: string[];
-  pinned: boolean;
+  uploaded_at: string;
+  updated_at: string;
   folder_path?: string;
-  visibility: string;
-  public_token?: string | null;
-}
-
-export interface NoteRecord {
-  schema_version?: number;
-  id: string;
-  title: string;
-  body: string;
-  tags: string[];
-  created_at: number;
-  updated_at: number;
-  pinned_at?: number | null;
-}
-
-export interface WorkspaceRecord {
-  id: string;
-  owner_id: string;
-  name: string;
-  language: string;
-  body: string;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface WorkspaceDocumentSummary {
-  id: string;
-  workspace_id: string;
-  owner_id: string;
-  path: string;
-  language: string;
-  is_primary: boolean;
-  updated_at: number;
-  size_bytes: number;
-}
-
-export interface WorkspaceDocumentRecord extends WorkspaceDocumentSummary {
-  body: string;
-  created_at: number;
-}
-
-export interface SearchResult {
-  type: "file" | "note" | "workspace";
-  id?: string;
-  title?: string;
-  name?: string;
-  snippet?: string;
   tags?: string[];
-  visibility?: string;
-  size_bytes?: number;
-  folder_path?: string;
-  language?: string;
-  updated_at?: number;
-  uploaded_at?: number;
+  pinned_at?: string;
+  public: boolean;
 }
 
-export interface AdminOverview {
-  file_count: number;
-  note_count: number;
-  workspace_count?: number;
-  pinned_count: number;
-  tag_count: number;
-  storage_bytes_used: number;
-  corrupt_file_count: number;
-  version?: string;
-  uptime_seconds?: number;
-}
-
-export interface AdminSystem {
-  hostname: string;
-  os: string;
-  arch: string;
-  uptime_seconds?: number;
-  total_memory_bytes?: number;
-  available_memory_bytes?: number;
-  data_dir_total_bytes?: number;
-  data_dir_free_bytes?: number;
-  load_average_1m?: number;
-}
-
-export interface AdminActivityItem {
-  kind: string;
+export interface Note {
   id: string;
   title: string;
-  detail: string;
-  occurred_at: number;
-  visibility?: string;
-  size_bytes?: number;
-  language?: string;
+  body: string;
+  tags: string[];
+  pinned_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface AdminUser {
+export interface Workspace {
   id: string;
   name: string;
-  role: string;
-  created_at: number;
-  disabled: boolean;
+  language: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface AdminSession {
-  token: string;
-  token_preview: string;
-  kind: string;
-  user_id?: string | null;
-  user_name?: string | null;
-  role?: string | null;
-  created_at: number;
-  expires_at: number;
-  current: boolean;
-}
+const BASE = '/api/v1';
 
-export interface AdminDevice {
-  device_token: string;
-  user_id: string;
-  role: string;
-  device_name: string;
-  last_seen_at: number;
-  created_at: number;
-  last_ip?: string | null;
-  last_user_agent?: string | null;
-  expires_at: number;
-}
-
-export interface FolderEntry {
-  path: string;
-  file_count: number;
-}
-
-export interface ConsoleCommand {
-  name: string;
-  description: string;
-  category: string;
-}
-
-export interface ConsoleOutput {
-  schema_version: number;
-  command: string;
-  success: boolean;
-  output: Record<string, unknown>;
-  ran_at_ms: number;
-}
-
-export interface ShareInfo {
-  schema_version: number;
-  public_url: string;
-  qr_terminal: string;
-}
-
-export interface UploadBatchItem {
-  filename: string;
-  http_status: number;
-  deduplicated?: boolean;
-  file?: FileRecord;
-  error?: { code: string; message: string };
-}
-
-export interface UploadBatchResponse {
-  schema_version: number;
-  results: UploadBatchItem[];
-}
-
-const API_ROOT = "/api/v1";
-
-async function parseErrorMessage(response: Response): Promise<string> {
-  const payload = await response.json().catch(() => null);
-  return payload?.error?.message || payload?.error || `${response.status} ${response.statusText}`;
-}
-
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_ROOT}${path}`, {
-    credentials: "same-origin",
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(BASE + path, {
+    credentials: 'same-origin',
     headers: {
-      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-      ...(init?.headers || {}),
+      'Content-Type': 'application/json',
+      ...init?.headers,
     },
     ...init,
   });
-  if (!response.ok) throw new Error(await parseErrorMessage(response));
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
-}
 
-function withQuery(path: string, params: Record<string, string | number | boolean | undefined>) {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value == null || value === "") continue;
-    query.set(key, String(value));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.error?.message || err?.error || `HTTP ${res.status}`
+    );
   }
-  const suffix = query.toString();
-  return suffix ? `${path}?${suffix}` : path;
+
+  return res.json();
 }
 
-export async function probeAuthStatus(): Promise<AuthSnapshot> {
-  const required = await apiFetch<{ required: boolean }>("/auth/required");
-  if (!required.required) return { required: false, user: null };
-  const user = await apiFetch<{ name: string; role: string }>("/auth/me");
-  return { required: true, user };
-}
-
-export function listFiles(params: {
-  limit?: number;
-  folder?: string;
-  name?: string;
-  type?: string;
-  pinned?: boolean;
-  sort?: string;
-} = {}) {
-  return apiFetch<{ files: FileRecord[]; next_cursor?: string }>(
-    withQuery("/files", {
-      limit: params.limit ?? 200,
-      folder: params.folder,
-      name: params.name,
-      type: params.type,
-      pinned: params.pinned,
-      sort: params.sort,
+export const api = {
+  // Auth
+  getMe: () => request<User>('/auth/me'),
+  
+  // Files
+  listFiles: (limit?: number) =>
+    request<{ files: FileRecord[] }>(`/files${limit ? `?limit=${limit}` : ''}`),
+  listFolders: () => request<{ folders: string[] }>('/folders'),
+  getFile: (id: string) => request<FileRecord>(`/files/${id}`),
+  deleteFile: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  renameFile: (id: string, newName: string) =>
+    request(`/files/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: newName }),
     }),
-  );
-}
-
-export function getFile(id: string) {
-  return apiFetch<FileRecord>(`/files/${encodeURIComponent(id)}`);
-}
-
-export function renameFile(id: string, name: string) {
-  return apiFetch<{ schema_version: number; file: FileRecord }>(
-    `/files/${encodeURIComponent(id)}`,
-    { method: "PATCH", body: JSON.stringify({ name }) },
-  );
-}
-
-export function deleteFile(id: string) {
-  return apiFetch<void>(`/files/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
-export function pinFile(id: string) {
-  return apiFetch<{ schema_version: number; changed: boolean }>(
-    `/files/${encodeURIComponent(id)}/pin`,
-    { method: "PUT" },
-  );
-}
-
-export function unpinFile(id: string) {
-  return apiFetch<{ schema_version: number; changed: boolean }>(
-    `/files/${encodeURIComponent(id)}/pin`,
-    { method: "DELETE" },
-  );
-}
-
-export function addFileTags(id: string, tags: string[]) {
-  return apiFetch<{ schema_version: number; tags: string[] }>(
-    `/files/${encodeURIComponent(id)}/tags`,
-    { method: "POST", body: JSON.stringify(tags) },
-  );
-}
-
-export function getFileShare(id: string) {
-  return apiFetch<ShareInfo>(`/files/${encodeURIComponent(id)}/share`);
-}
-
-export function setFileVisibility(id: string, visibility: "public" | "private") {
-  return apiFetch<{ schema_version: number; file: FileRecord; public_url?: string | null }>(
-    `/files/${encodeURIComponent(id)}/visibility`,
-    { method: "PATCH", body: JSON.stringify({ visibility }) },
-  );
-}
-
-export function bulkSetVisibility(ids: string[], visibility: "public" | "private") {
-  return apiFetch<{ schema_version: number; updated: number }>("/files/visibility/bulk", {
-    method: "POST",
-    body: JSON.stringify({ ids, visibility }),
-  });
-}
-
-export function moveFileToFolder(id: string, folderPath: string) {
-  return apiFetch<{ schema_version: number; file: FileRecord }>(
-    `/files/${encodeURIComponent(id)}/folder`,
-    { method: "PATCH", body: JSON.stringify({ folder_path: folderPath }) },
-  );
-}
-
-export function moveFolder(from: string, to: string) {
-  return apiFetch<{ schema_version: number; files_updated: number }>("/folders/move", {
-    method: "POST",
-    body: JSON.stringify({ from, to }),
-  });
-}
-
-export function deleteFolder(path: string) {
-  return apiFetch<{ schema_version: number; files_updated: number }>("/folders/delete", {
-    method: "POST",
-    body: JSON.stringify({ path }),
-  });
-}
-
-export function listFolders() {
-  return apiFetch<{ schema_version: number; folders: FolderEntry[] }>("/folders");
-}
-
-export async function uploadFilesBatch(
-  files: File[],
-  options: { folderPath?: string; tags?: string[]; pin?: boolean } = {},
-) {
-  const body = new FormData();
-  for (const file of files) body.append("file", file, file.name);
-  for (const tag of options.tags || []) body.append("tag", tag);
-  if (options.folderPath) body.append("folder_path", options.folderPath);
-  if (options.pin) body.append("pin", "true");
-  return apiFetch<UploadBatchResponse>("/files/batch", { method: "POST", body });
-}
-
-export function listNotes(params: {
-  limit?: number;
-  title?: string;
-  pinned?: boolean;
-  sort?: string;
-  tag?: string;
-} = {}) {
-  return apiFetch<{ notes: NoteRecord[]; next_cursor?: string }>(
-    withQuery("/notes", {
-      limit: params.limit ?? 100,
-      title: params.title,
-      pinned: params.pinned,
-      sort: params.sort,
-      tag: params.tag,
+  updateFileTags: (id: string, tags: string[]) =>
+    request(`/files/${encodeURIComponent(id)}/tags`, {
+      method: 'PUT',
+      body: JSON.stringify({ tags }),
     }),
-  );
-}
+  toggleFilePin: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}/pin`, { method: 'POST' }),
+  toggleFilePublic: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}/visibility`, { method: 'POST' }),
 
-export function createNote(input: { title?: string; body: string; tags?: string[]; pin?: boolean }) {
-  return apiFetch<NoteRecord>("/notes", { method: "POST", body: JSON.stringify(input) });
-}
-
-export function updateNote(id: string, input: { title?: string; body: string; tags?: string[] }) {
-  return apiFetch<NoteRecord>(`/notes/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
-}
-
-export function deleteNote(id: string) {
-  return apiFetch<void>(`/notes/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
-export function duplicateNote(id: string) {
-  return apiFetch<NoteRecord>(`/notes/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
-}
-
-export function listWorkspaces() {
-  return apiFetch<{ workspaces: WorkspaceRecord[] }>("/workspaces");
-}
-
-export function createWorkspace(input: { name: string; language?: string; body?: string }) {
-  return apiFetch<WorkspaceRecord>("/workspaces", { method: "POST", body: JSON.stringify(input) });
-}
-
-export function updateWorkspace(id: string, input: { name: string; language: string; body: string }) {
-  return apiFetch<WorkspaceRecord>(`/workspaces/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
-}
-
-export function getAdminWorkspaceDetail(id: string) {
-  return apiFetch<{
-    schema_version: number;
-    workspace: WorkspaceRecord;
-    documents: WorkspaceDocumentSummary[];
-  }>(`/admin/editor/workspaces/${encodeURIComponent(id)}`);
-}
-
-export function getAdminWorkspaceDocument(workspaceId: string, documentId: string) {
-  return apiFetch<WorkspaceDocumentRecord>(
-    `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}`,
-  );
-}
-
-export function createAdminWorkspaceDocument(
-  workspaceId: string,
-  input: { path: string; language?: string; body?: string; make_primary?: boolean },
-) {
-  return apiFetch<WorkspaceDocumentRecord>(
-    `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents`,
-    { method: "POST", body: JSON.stringify(input) },
-  );
-}
-
-export function updateAdminWorkspaceDocument(
-  workspaceId: string,
-  documentId: string,
-  input: { path: string; language?: string; body?: string; make_primary?: boolean },
-) {
-  return apiFetch<WorkspaceDocumentRecord>(
-    `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}`,
-    { method: "PUT", body: JSON.stringify(input) },
-  );
-}
-
-export function deleteAdminWorkspaceDocument(workspaceId: string, documentId: string) {
-  return apiFetch<void>(
-    `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}`,
-    { method: "DELETE" },
-  );
-}
-
-export function getEditorExecutionState() {
-  return apiFetch<{ execution_disabled: boolean; message: string }>("/admin/editor/check", {
-    method: "POST",
-  });
-}
-
-export function listPublicFiles() {
-  return apiFetch<{ files: FileRecord[] }>("/public/files");
-}
-
-export function runSearch(
-  query: string,
-  filters: { kind?: string; type?: string; tag?: string; limit?: number } = {},
-) {
-  return apiFetch<{ schema_version: number; results: SearchResult[] }>(
-    withQuery("/search", {
-      q: query,
-      limit: filters.limit ?? 24,
-      kind: filters.kind,
-      type: filters.type,
-      tag: filters.tag,
+  // Notes
+  listNotes: () => request<{ notes: Note[] }>('/notes'),
+  getNote: (id: string) => request<Note>(`/notes/${encodeURIComponent(id)}`),
+  createNote: (note: Partial<Note>) =>
+    request<Note>('/notes', {
+      method: 'POST',
+      body: JSON.stringify(note),
     }),
-  );
-}
-
-export function getAdminOverview() {
-  return apiFetch<AdminOverview>("/admin/overview");
-}
-
-export function getAdminSystem() {
-  return apiFetch<AdminSystem>("/admin/system");
-}
-
-export function getAdminActivity(limit = 12) {
-  return apiFetch<{ schema_version: number; items: AdminActivityItem[] }>(
-    `/admin/activity?limit=${encodeURIComponent(String(limit))}`,
-  );
-}
-
-export function listAdminUsers() {
-  return apiFetch<{ schema_version: number; users: AdminUser[] }>("/admin/users");
-}
-
-export function listAdminSessions(limit = 50) {
-  return apiFetch<{ schema_version: number; sessions: AdminSession[] }>(
-    `/admin/sessions?limit=${encodeURIComponent(String(limit))}`,
-  );
-}
-
-export function listAdminDevices() {
-  return apiFetch<{ schema_version: number; devices: AdminDevice[] }>("/admin/devices");
-}
-
-export function listAdminFiles(params: { limit?: number; folder?: string; mimePrefix?: string } = {}) {
-  return apiFetch<{ schema_version: number; files: FileRecord[]; next_cursor?: string }>(
-    withQuery("/admin/files", {
-      limit: params.limit ?? 100,
-      folder: params.folder,
-      mime_prefix: params.mimePrefix,
+  updateNote: (id: string, updates: Partial<Note>) =>
+    request<Note>(`/notes/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
     }),
-  );
-}
+  deleteNote: (id: string) =>
+    request(`/notes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
-export function listAdminFolders() {
-  return apiFetch<{ schema_version: number; folders: FolderEntry[] }>("/admin/folders");
-}
+  // Workspaces
+  listWorkspaces: () => request<{ workspaces: Workspace[] }>('/workspaces'),
+  getWorkspace: (id: string) =>
+    request<Workspace>(`/workspaces/${encodeURIComponent(id)}`),
+  createWorkspace: (ws: Partial<Workspace>) =>
+    request<Workspace>('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(ws),
+    }),
+  updateWorkspace: (id: string, updates: Partial<Workspace>) =>
+    request<Workspace>(`/workspaces/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  deleteWorkspace: (id: string) =>
+    request(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
-export function listConsoleCommands() {
-  return apiFetch<{ schema_version: number; commands: ConsoleCommand[] }>("/admin/console/commands");
-}
-
-export function runConsoleCommand(command: string) {
-  return apiFetch<ConsoleOutput>("/admin/console/run", {
-    method: "POST",
-    body: JSON.stringify({ command }),
-  });
-}
-
-export function fileContentUrl(id: string, inline = true) {
-  const params = inline ? "?disposition=inline" : "";
-  return `${API_ROOT}/files/${encodeURIComponent(id)}/content${params}`;
-}
-
-export function fileDownloadUrl(id: string) {
-  return `${API_ROOT}/files/${encodeURIComponent(id)}/content?disposition=attachment`;
-}
-
-export function publicFileUrl(token: string) {
-  return `${window.location.origin}/p/${token}`;
-}
+  // Status
+  getStatus: () =>
+    request<{
+      status: string;
+      file_count: number;
+      storage_bytes_used: number;
+      storage_total_bytes: number;
+    }>('/status'),
+};
