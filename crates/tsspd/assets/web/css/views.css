@@ -1169,7 +1169,7 @@
 
 .note-full-editor-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 180px 1fr 1fr;
   gap: 0;
   flex: 1;
   min-height: 0;

@@ -1452,9 +1452,14 @@ textarea:focus {
 
 @media (max-width: 1100px) {
   .objects-layout,
-  .admin-grid-overview,
-  .note-full-editor-grid {
+  .admin-grid-overview {
     grid-template-columns: 1fr;
+  }
+  .note-full-editor-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .note-outline {
+    display: none;
   }
 
   .search-filters,
