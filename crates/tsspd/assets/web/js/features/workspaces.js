@@ -16,9 +16,17 @@ T.allWorkspaces = [];
       (w.name || "").toLowerCase().includes(query) || (w.body || "").toLowerCase().includes(query)
     );
     if (!items.length) {
-      container.innerHTML = T.allWorkspaces.length === 0
-        ? '<div class="notes-empty-state">No workspaces yet. Create one to store scripts and text files.</div>'
-        : '<div class="notes-empty-state">No workspaces match your filters.</div>';
+      if (T.allWorkspaces.length === 0) {
+        container.innerHTML = `<div class="notes-empty-hero">
+          <div class="notes-empty-icon">⌨️</div>
+          <div class="notes-empty-title">No workspaces yet</div>
+          <div class="notes-empty-sub">Create a workspace to store scripts, configs, and text files with syntax highlighting.</div>
+          <button type="button" class="btn btn-primary" id="ws-empty-cta">New workspace</button>
+        </div>`;
+        container.querySelector("#ws-empty-cta")?.addEventListener("click", () => T.openWorkspaceDialog(null));
+      } else {
+        container.innerHTML = '<div class="notes-empty-state">No workspaces match your filters.</div>';
+      }
       return;
     }
     const langColors = {

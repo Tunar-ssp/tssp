@@ -11,8 +11,12 @@ window.Tssp = window.Tssp || {};
       const data = await T.api("/files?type=image/&limit=200");
       const files = data.files || [];
       if (!files.length) {
-        grid.innerHTML =
-          '<div class="empty-state"><strong>No images yet</strong><p>Upload photos or screenshots and they will appear here as a gallery.</p></div>';
+        grid.innerHTML = `<div class="notes-empty-hero">
+          <div class="notes-empty-icon">🖼️</div>
+          <div class="notes-empty-title">No images yet</div>
+          <div class="notes-empty-sub">Upload photos, screenshots, or artwork to browse them in the gallery.</div>
+          <button type="button" class="btn btn-primary" data-upload-trigger>Upload images</button>
+        </div>`;
         return;
       }
       grid.innerHTML = files
@@ -55,8 +59,12 @@ window.Tssp = window.Tssp || {};
       const data = await T.api("/files?type=video/&limit=200");
       const files = data.files || [];
       if (!files.length) {
-        grid.innerHTML =
-          '<div class="empty-state"><strong>No videos yet</strong><p>Upload video files and they will appear here.</p></div>';
+        grid.innerHTML = `<div class="notes-empty-hero">
+          <div class="notes-empty-icon">🎬</div>
+          <div class="notes-empty-title">No videos yet</div>
+          <div class="notes-empty-sub">Upload video files and they will appear here for inline playback and download.</div>
+          <button type="button" class="btn btn-primary" data-upload-trigger>Upload videos</button>
+        </div>`;
         return;
       }
       grid.innerHTML = files
@@ -150,8 +158,12 @@ window.Tssp = window.Tssp || {};
       if (!files.length) {
         if (body) body.innerHTML = T.tableMessage(6, "No documents yet.");
         if (grid) {
-          grid.innerHTML =
-            '<div class="empty-state"><strong>No documents yet</strong><span>Upload PDFs, text files, or source documents from Cloud Drive.</span><div class="empty-actions"><button type="button" class="btn btn-secondary" data-view-jump="objects">Upload document</button></div></div>';
+          grid.innerHTML = `<div class="notes-empty-hero">
+            <div class="notes-empty-icon">📄</div>
+            <div class="notes-empty-title">No documents yet</div>
+            <div class="notes-empty-sub">Upload PDFs, source code, text files, or archives and they appear here.</div>
+            <button type="button" class="btn btn-primary" data-view-jump="objects">Open Cloud Drive</button>
+          </div>`;
         }
         return;
       }
