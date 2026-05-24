@@ -99,6 +99,7 @@
       <input class="title-input" type="text" value={titleDraft} placeholder="Untitled" on:input={(e) => onTitleChange(e.currentTarget.value)} />
       <span class="status">{autosaveStatus}</span>
       <div class="actions">
+        <button type="button" class="btn btn-sm btn-primary" on:click={onCreate}>New</button>
         <button type="button" class="btn btn-sm" on:click={onSave}>Save</button>
         <button type="button" class="btn btn-sm" on:click={onDuplicate}>Duplicate</button>
         <button type="button" class="btn btn-sm btn-danger" on:click={onDelete}>Delete</button>

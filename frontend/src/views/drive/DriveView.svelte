@@ -6,8 +6,8 @@
     deleteFile,
     deleteFolder,
     getFileShare,
-    listAdminFolders,
     listFiles,
+    listFolders,
     moveFileToFolder,
     moveFolder,
     pinFile,
@@ -77,7 +77,7 @@
     try {
       const [fileRes, folderRes] = await Promise.all([
         listFiles({ folder: $driveFolder || undefined, limit: 400 }),
-        listAdminFolders().catch(() => ({ folders: [] as FolderEntry[] })),
+        listFolders().catch(() => ({ folders: [] as FolderEntry[] })),
       ]);
       driveFiles.set(fileRes.files || []);
       folders = folderRes.folders || [];
@@ -218,6 +218,7 @@
 
 <section
   class="drive"
+  aria-label="Cloud Drive"
   on:dragover|preventDefault={() => uploadDragOver.set(true)}
   on:dragleave={() => uploadDragOver.set(false)}
   on:drop={onDrop}
@@ -426,7 +427,14 @@
 
 {#if showShareModal}
   <div class="modal-backdrop" role="presentation" on:click={() => (showShareModal = false)}>
-    <div class="modal" role="dialog" on:click|stopPropagation>
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      on:click|stopPropagation
+      on:keydown|stopPropagation
+    >
       <h3>Public link</h3>
       <p class="mono share-url">{shareUrl}</p>
       <pre class="qr">{shareQr}</pre>

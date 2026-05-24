@@ -36,7 +36,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthContext;
 use crate::{ErrorBody, ErrorResponse, HttpState};
@@ -50,6 +50,33 @@ pub struct FolderMoveBody {
 #[derive(Debug, Deserialize)]
 pub struct FolderDeleteBody {
     pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FolderEntry {
+    pub path: String,
+    pub file_count: u64,
+}
+
+/// `GET /api/v1/folders` — list virtual folder counts for the drive browser.
+pub async fn list_folders(State(state): State<HttpState>) -> Response {
+    match state.stats_provider.list_folder_counts() {
+        Ok(folders) => {
+            let entries: Vec<FolderEntry> = folders
+                .into_iter()
+                .map(|(path, file_count)| FolderEntry { path, file_count })
+                .collect();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "schema_version": 1,
+                    "folders": entries,
+                })),
+            )
+                .into_response()
+        }
+        Err(message) => internal(message),
+    }
 }
 
 /// `POST /api/v1/folders/move` — rewrite `folder_path` prefixes (admin).

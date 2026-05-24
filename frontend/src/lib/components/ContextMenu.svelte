@@ -18,21 +18,27 @@
 </script>
 
 {#if file}
-  <div class="ctx-backdrop" role="presentation" on:click={onClose} on:contextmenu|preventDefault={onClose}>
-    <menu class="ctx-menu" style={`left:${x}px;top:${y}px`} on:click|stopPropagation>
-      <button type="button" on:click={() => act(() => onPreview(file!))}>Preview</button>
-      <button type="button" on:click={() => act(() => onShare(file!))}>Share / QR</button>
-      <button type="button" on:click={() => act(() => onRename(file!))}>Rename</button>
-      <button type="button" on:click={() => act(() => onToggleVisibility(file!))}>
-        {file.visibility === "public" ? "Make private" : "Make public"}
-      </button>
-      <button type="button" class="danger" on:click={() => act(() => onDelete(file!))}>Delete</button>
-    </menu>
+  <button class="ctx-backdrop" type="button" aria-label="Close context menu" on:click={onClose} on:contextmenu|preventDefault={onClose}></button>
+  <div
+    class="ctx-menu"
+    role="menu"
+    tabindex="-1"
+    style={`left:${x}px;top:${y}px`}
+    on:click|stopPropagation
+    on:keydown|stopPropagation
+  >
+    <button type="button" role="menuitem" on:click={() => act(() => onPreview(file!))}>Preview</button>
+    <button type="button" role="menuitem" on:click={() => act(() => onShare(file!))}>Share / QR</button>
+    <button type="button" role="menuitem" on:click={() => act(() => onRename(file!))}>Rename</button>
+    <button type="button" role="menuitem" on:click={() => act(() => onToggleVisibility(file!))}>
+      {file.visibility === "public" ? "Make private" : "Make public"}
+    </button>
+    <button type="button" role="menuitem" class="danger" on:click={() => act(() => onDelete(file!))}>Delete</button>
   </div>
 {/if}
 
 <style>
-  .ctx-backdrop { position: fixed; inset: 0; z-index: 70; }
+  .ctx-backdrop { position: fixed; inset: 0; z-index: 70; border: 0; background: transparent; padding: 0; }
   .ctx-menu {
     position: fixed;
     margin: 0;

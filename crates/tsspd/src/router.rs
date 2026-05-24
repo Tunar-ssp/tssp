@@ -97,6 +97,10 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::visibility::bulk_file_visibility).options(options_response),
         )
         .route(
+            "/api/v1/folders",
+            get(crate::folders::list_folders).options(options_response),
+        )
+        .route(
             "/api/v1/folders/move",
             post(crate::folders::move_folder).options(options_response),
         )
