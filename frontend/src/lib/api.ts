@@ -1,13 +1,10 @@
 export interface AuthSnapshot {
   required: boolean;
-  user?: {
-    name: string;
-    role: string;
-  } | null;
+  user?: { name: string; role: string } | null;
 }
 
 export interface FileRecord {
-  schema_version: number;
+  schema_version?: number;
   id: string;
   name: string;
   size_bytes: number;
@@ -22,7 +19,7 @@ export interface FileRecord {
 }
 
 export interface NoteRecord {
-  schema_version: number;
+  schema_version?: number;
   id: string;
   title: string;
   body: string;
@@ -82,6 +79,7 @@ export interface AdminOverview {
   storage_bytes_used: number;
   corrupt_file_count: number;
   version?: string;
+  uptime_seconds?: number;
 }
 
 export interface AdminSystem {
@@ -169,45 +167,12 @@ export interface UploadBatchItem {
   http_status: number;
   deduplicated?: boolean;
   file?: FileRecord;
-  error?: {
-    code: string;
-    message: string;
-  };
+  error?: { code: string; message: string };
 }
 
 export interface UploadBatchResponse {
   schema_version: number;
   results: UploadBatchItem[];
-}
-
-export interface ListFilesParams {
-  limit?: number;
-  folder?: string;
-  name?: string;
-  type?: string;
-  pinned?: boolean;
-  sort?: string;
-}
-
-export interface ListNotesParams {
-  limit?: number;
-  title?: string;
-  pinned?: boolean;
-  sort?: string;
-  tag?: string;
-}
-
-export interface CreateWorkspaceInput {
-  name: string;
-  language?: string;
-  body?: string;
-}
-
-export interface CreateDocumentInput {
-  path: string;
-  language?: string;
-  body?: string;
-  make_primary?: boolean;
 }
 
 const API_ROOT = "/api/v1";
@@ -226,15 +191,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     },
     ...init,
   });
-
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
+  if (!response.ok) throw new Error(await parseErrorMessage(response));
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -250,14 +208,19 @@ function withQuery(path: string, params: Record<string, string | number | boolea
 
 export async function probeAuthStatus(): Promise<AuthSnapshot> {
   const required = await apiFetch<{ required: boolean }>("/auth/required");
-  if (!required.required) {
-    return { required: false, user: null };
-  }
+  if (!required.required) return { required: false, user: null };
   const user = await apiFetch<{ name: string; role: string }>("/auth/me");
   return { required: true, user };
 }
 
-export function listFiles(params: ListFilesParams = {}) {
+export function listFiles(params: {
+  limit?: number;
+  folder?: string;
+  name?: string;
+  type?: string;
+  pinned?: boolean;
+  sort?: string;
+} = {}) {
   return apiFetch<{ files: FileRecord[]; next_cursor?: string }>(
     withQuery("/files", {
       limit: params.limit ?? 200,
@@ -274,6 +237,38 @@ export function getFile(id: string) {
   return apiFetch<FileRecord>(`/files/${encodeURIComponent(id)}`);
 }
 
+export function renameFile(id: string, name: string) {
+  return apiFetch<{ schema_version: number; file: FileRecord }>(
+    `/files/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify({ name }) },
+  );
+}
+
+export function deleteFile(id: string) {
+  return apiFetch<void>(`/files/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function pinFile(id: string) {
+  return apiFetch<{ schema_version: number; changed: boolean }>(
+    `/files/${encodeURIComponent(id)}/pin`,
+    { method: "PUT" },
+  );
+}
+
+export function unpinFile(id: string) {
+  return apiFetch<{ schema_version: number; changed: boolean }>(
+    `/files/${encodeURIComponent(id)}/pin`,
+    { method: "DELETE" },
+  );
+}
+
+export function addFileTags(id: string, tags: string[]) {
+  return apiFetch<{ schema_version: number; tags: string[] }>(
+    `/files/${encodeURIComponent(id)}/tags`,
+    { method: "POST", body: JSON.stringify(tags) },
+  );
+}
+
 export function getFileShare(id: string) {
   return apiFetch<ShareInfo>(`/files/${encodeURIComponent(id)}/share`);
 }
@@ -281,21 +276,36 @@ export function getFileShare(id: string) {
 export function setFileVisibility(id: string, visibility: "public" | "private") {
   return apiFetch<{ schema_version: number; file: FileRecord; public_url?: string | null }>(
     `/files/${encodeURIComponent(id)}/visibility`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ visibility }),
-    },
+    { method: "PATCH", body: JSON.stringify({ visibility }) },
   );
+}
+
+export function bulkSetVisibility(ids: string[], visibility: "public" | "private") {
+  return apiFetch<{ schema_version: number; updated: number }>("/files/visibility/bulk", {
+    method: "POST",
+    body: JSON.stringify({ ids, visibility }),
+  });
 }
 
 export function moveFileToFolder(id: string, folderPath: string) {
   return apiFetch<{ schema_version: number; file: FileRecord }>(
     `/files/${encodeURIComponent(id)}/folder`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ folder_path: folderPath }),
-    },
+    { method: "PATCH", body: JSON.stringify({ folder_path: folderPath }) },
   );
+}
+
+export function moveFolder(from: string, to: string) {
+  return apiFetch<{ schema_version: number; files_updated: number }>("/folders/move", {
+    method: "POST",
+    body: JSON.stringify({ from, to }),
+  });
+}
+
+export function deleteFolder(path: string) {
+  return apiFetch<{ schema_version: number; files_updated: number }>("/folders/delete", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
 }
 
 export async function uploadFilesBatch(
@@ -303,25 +313,20 @@ export async function uploadFilesBatch(
   options: { folderPath?: string; tags?: string[]; pin?: boolean } = {},
 ) {
   const body = new FormData();
-  for (const file of files) {
-    body.append("file", file, file.name);
-  }
-  for (const tag of options.tags || []) {
-    body.append("tag", tag);
-  }
-  if (options.folderPath) {
-    body.append("folder_path", options.folderPath);
-  }
-  if (options.pin) {
-    body.append("pin", "true");
-  }
-  return apiFetch<UploadBatchResponse>("/files/batch", {
-    method: "POST",
-    body,
-  });
+  for (const file of files) body.append("file", file, file.name);
+  for (const tag of options.tags || []) body.append("tag", tag);
+  if (options.folderPath) body.append("folder_path", options.folderPath);
+  if (options.pin) body.append("pin", "true");
+  return apiFetch<UploadBatchResponse>("/files/batch", { method: "POST", body });
 }
 
-export function listNotes(params: ListNotesParams = {}) {
+export function listNotes(params: {
+  limit?: number;
+  title?: string;
+  pinned?: boolean;
+  sort?: string;
+  tag?: string;
+} = {}) {
   return apiFetch<{ notes: NoteRecord[]; next_cursor?: string }>(
     withQuery("/notes", {
       limit: params.limit ?? 100,
@@ -333,19 +338,11 @@ export function listNotes(params: ListNotesParams = {}) {
   );
 }
 
-export function createNote(input: {
-  title?: string;
-  body: string;
-  tags?: string[];
-  pin?: boolean;
-}) {
-  return apiFetch<NoteRecord>("/notes", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export function createNote(input: { title?: string; body: string; tags?: string[]; pin?: boolean }) {
+  return apiFetch<NoteRecord>("/notes", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateNote(id: string, input: { title?: string; body: string }) {
+export function updateNote(id: string, input: { title?: string; body: string; tags?: string[] }) {
   return apiFetch<NoteRecord>(`/notes/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(input),
@@ -353,32 +350,22 @@ export function updateNote(id: string, input: { title?: string; body: string }) 
 }
 
 export function deleteNote(id: string) {
-  return apiFetch<void>(`/notes/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  return apiFetch<void>(`/notes/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export function duplicateNote(id: string) {
-  return apiFetch<NoteRecord>(`/notes/${encodeURIComponent(id)}/duplicate`, {
-    method: "POST",
-  });
+  return apiFetch<NoteRecord>(`/notes/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
 }
 
 export function listWorkspaces() {
   return apiFetch<{ workspaces: WorkspaceRecord[] }>("/workspaces");
 }
 
-export function createWorkspace(input: CreateWorkspaceInput) {
-  return apiFetch<WorkspaceRecord>("/workspaces", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export function createWorkspace(input: { name: string; language?: string; body?: string }) {
+  return apiFetch<WorkspaceRecord>("/workspaces", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateWorkspace(
-  id: string,
-  input: { name: string; language: string; body: string },
-) {
+export function updateWorkspace(id: string, input: { name: string; language: string; body: string }) {
   return apiFetch<WorkspaceRecord>(`/workspaces/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(input),
@@ -401,37 +388,29 @@ export function getAdminWorkspaceDocument(workspaceId: string, documentId: strin
 
 export function createAdminWorkspaceDocument(
   workspaceId: string,
-  input: CreateDocumentInput,
+  input: { path: string; language?: string; body?: string; make_primary?: boolean },
 ) {
   return apiFetch<WorkspaceDocumentRecord>(
     `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents`,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
 
 export function updateAdminWorkspaceDocument(
   workspaceId: string,
   documentId: string,
-  input: CreateDocumentInput,
+  input: { path: string; language?: string; body?: string; make_primary?: boolean },
 ) {
   return apiFetch<WorkspaceDocumentRecord>(
     `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(input),
-    },
+    { method: "PUT", body: JSON.stringify(input) },
   );
 }
 
 export function deleteAdminWorkspaceDocument(workspaceId: string, documentId: string) {
   return apiFetch<void>(
     `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}`,
-    {
-      method: "DELETE",
-    },
+    { method: "DELETE" },
   );
 }
 
@@ -447,12 +426,12 @@ export function listPublicFiles() {
 
 export function runSearch(
   query: string,
-  filters: { kind?: string; type?: string; tag?: string } = {},
+  filters: { kind?: string; type?: string; tag?: string; limit?: number } = {},
 ) {
   return apiFetch<{ schema_version: number; results: SearchResult[] }>(
     withQuery("/search", {
       q: query,
-      limit: 24,
+      limit: filters.limit ?? 24,
       kind: filters.kind,
       type: filters.type,
       tag: filters.tag,
@@ -503,9 +482,7 @@ export function listAdminFolders() {
 }
 
 export function listConsoleCommands() {
-  return apiFetch<{ schema_version: number; commands: ConsoleCommand[] }>(
-    "/admin/console/commands",
-  );
+  return apiFetch<{ schema_version: number; commands: ConsoleCommand[] }>("/admin/console/commands");
 }
 
 export function runConsoleCommand(command: string) {
@@ -513,4 +490,17 @@ export function runConsoleCommand(command: string) {
     method: "POST",
     body: JSON.stringify({ command }),
   });
+}
+
+export function fileContentUrl(id: string, inline = true) {
+  const params = inline ? "?disposition=inline" : "";
+  return `${API_ROOT}/files/${encodeURIComponent(id)}/content${params}`;
+}
+
+export function fileDownloadUrl(id: string) {
+  return `${API_ROOT}/files/${encodeURIComponent(id)}/content?disposition=attachment`;
+}
+
+export function publicFileUrl(token: string) {
+  return `${window.location.origin}/p/${token}`;
 }

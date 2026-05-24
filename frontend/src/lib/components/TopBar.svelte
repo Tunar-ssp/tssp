@@ -1,47 +1,38 @@
 <script lang="ts">
-  import type { RouteId } from "../router";
+  import type { AppId } from "../router";
   import { authState } from "../stores/auth";
 
-  export let route: RouteId;
+  export let app: AppId;
   export let onOpenPalette: (seed?: string) => void;
+  export let onToggleMenu: () => void;
 
-  const titleMap: Record<RouteId, string> = {
+  const titles: Record<AppId, string> = {
     drive: "Cloud Drive",
-    images: "Cloud Drive",
-    videos: "Cloud Drive",
-    documents: "Cloud Drive",
-    sharing: "Sharing Center",
-    notes: "Notes",
+    knowledge: "Knowledge",
     workspace: "Workspace",
     operations: "Operations",
-    search: "Search",
   };
 </script>
 
 <header class="topbar">
-  <div class="topbar-title">
-    <span class="brand-mark">TSSP</span>
-    <div>
-      <strong>{titleMap[route]}</strong>
-      <span>Local-first cloud system</span>
-    </div>
-  </div>
+  <button type="button" class="topbar-menu btn btn-ghost" on:click={onToggleMenu} aria-label="Menu">
+    ☰
+  </button>
+  <div class="topbar-title">{titles[app]}</div>
 
   <button class="topbar-search" type="button" on:click={() => onOpenPalette("")}>
-    <span>Search files, notes, workspaces, commands</span>
+    <span>Search files, notes, commands…</span>
     <kbd>Ctrl K</kbd>
   </button>
 
   <div class="topbar-actions">
-    <button class="btn btn-secondary" type="button">Upload</button>
-    <button class="btn btn-secondary" type="button">Refresh</button>
     <div class="session-pill">
       {#if $authState.loading}
-        Loading session
+        …
       {:else if $authState.user}
         {$authState.user.name} · {$authState.user.role}
       {:else}
-        Open local
+        Local access
       {/if}
     </div>
   </div>

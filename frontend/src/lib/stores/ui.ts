@@ -6,11 +6,7 @@ export interface BannerState {
   detail?: string;
 }
 
-export const bannerState = writable<BannerState | null>({
-  tone: "info",
-  title: "Frontend migration in progress",
-  detail: "The new Svelte shell is being scaffolded alongside the legacy dashboard until feature parity is reached.",
-});
+export const bannerState = writable<BannerState | null>(null);
 
 export const commandPaletteOpen = writable(false);
 export const commandQuery = writable("");

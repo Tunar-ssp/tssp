@@ -1,100 +1,100 @@
 import { writable } from "svelte/store";
 
-export type RouteId =
-  | "drive"
-  | "images"
-  | "videos"
-  | "documents"
-  | "sharing"
-  | "notes"
-  | "workspace"
-  | "operations"
-  | "search";
+export type AppId = "drive" | "knowledge" | "workspace" | "operations";
+
+export type DriveLens = "all" | "images" | "videos" | "documents";
+export type OpsSection =
+  | "overview"
+  | "access"
+  | "files"
+  | "storage"
+  | "maintenance"
+  | "console";
 
 export interface NavItem {
-  id: RouteId;
+  id: AppId;
   label: string;
-  group: string;
   subtitle: string;
 }
 
-export const navItems: NavItem[] = [
-  {
-    id: "drive",
-    label: "Cloud Drive",
-    group: "Storage",
-    subtitle: "Files, folders, uploads, previews",
-  },
-  {
-    id: "sharing",
-    label: "Sharing Center",
-    group: "Storage",
-    subtitle: "Public links and QR access",
-  },
-  {
-    id: "notes",
-    label: "Notes",
-    group: "Knowledge",
-    subtitle: "Pages, capture, and structured writing",
-  },
-  {
-    id: "workspace",
-    label: "Workspace",
-    group: "Build",
-    subtitle: "Projects, documents, and editor tabs",
-  },
-  {
-    id: "search",
-    label: "Search",
-    group: "Global",
-    subtitle: "Cross-product lookup and command surface",
-  },
-  {
-    id: "operations",
-    label: "Operations",
-    group: "Admin",
-    subtitle: "Users, storage, diagnostics, and safe console",
-  },
+export const apps: NavItem[] = [
+  { id: "drive", label: "Cloud Drive", subtitle: "Files, folders, sharing" },
+  { id: "knowledge", label: "Knowledge", subtitle: "Notes and capture" },
+  { id: "workspace", label: "Workspace", subtitle: "Projects and editor" },
+  { id: "operations", label: "Operations", subtitle: "Admin and diagnostics" },
 ];
 
-const HASH_ALIASES: Record<string, RouteId> = {
-  drive: "drive",
-  objects: "drive",
-  images: "images",
-  videos: "videos",
-  documents: "documents",
-  public: "sharing",
-  sharing: "sharing",
-  notes: "notes",
-  workspaces: "workspace",
-  editor: "workspace",
-  search: "search",
-  admin: "operations",
-  overview: "operations",
-  operations: "operations",
-};
-
-function normalizeRoute(hash: string): RouteId {
-  const key = hash.replace(/^#/, "").trim().toLowerCase();
-  return HASH_ALIASES[key] || "drive";
-}
-
-function installHashSync() {
-  if (typeof window === "undefined") return;
-  window.addEventListener("hashchange", () => {
-    route.set(normalizeRoute(window.location.hash));
-  });
-}
-
-export const route = writable<RouteId>(
-  typeof window === "undefined" ? "drive" : normalizeRoute(window.location.hash),
-);
-
-installHashSync();
-
-export function navigate(next: RouteId) {
-  if (typeof window !== "undefined") {
-    window.location.hash = next;
+function parseHash(): { app: AppId; driveLens: DriveLens; ops: OpsSection } {
+  if (typeof window === "undefined") {
+    return { app: "drive", driveLens: "all", ops: "overview" };
   }
-  route.set(next);
+  const raw = window.location.hash.replace(/^#/, "").trim().toLowerCase();
+  const [appPart, subPart] = raw.split("/");
+  const alias: Record<string, AppId> = {
+    drive: "drive",
+    objects: "drive",
+    images: "drive",
+    videos: "drive",
+    documents: "drive",
+    notes: "knowledge",
+    knowledge: "knowledge",
+    workspace: "workspace",
+    workspaces: "workspace",
+    editor: "workspace",
+    operations: "operations",
+    admin: "operations",
+    ops: "operations",
+  };
+  const lensAlias: Record<string, DriveLens> = {
+    images: "images",
+    videos: "videos",
+    documents: "documents",
+  };
+  const app = alias[appPart] || "drive";
+  let driveLens: DriveLens = "all";
+  if (appPart in lensAlias) driveLens = lensAlias[appPart];
+  else if (subPart && subPart in lensAlias) driveLens = lensAlias[subPart];
+  const opsSections = new Set<OpsSection>([
+    "overview",
+    "access",
+    "files",
+    "storage",
+    "maintenance",
+    "console",
+  ]);
+  const ops = opsSections.has(subPart as OpsSection) ? (subPart as OpsSection) : "overview";
+  return { app, driveLens, ops };
+}
+
+export const appRoute = writable<AppId>("drive");
+export const driveLensRoute = writable<DriveLens>("all");
+export const opsSection = writable<OpsSection>("overview");
+
+function syncFromHash() {
+  const parsed = parseHash();
+  appRoute.set(parsed.app);
+  driveLensRoute.set(parsed.driveLens);
+  opsSection.set(parsed.ops);
+}
+
+if (typeof window !== "undefined") {
+  syncFromHash();
+  window.addEventListener("hashchange", syncFromHash);
+}
+
+export function navigateApp(app: AppId, sub?: string) {
+  if (typeof window === "undefined") return;
+  const hash = sub ? `${app}/${sub}` : app;
+  window.location.hash = hash;
+  syncFromHash();
+}
+
+export function navigateDriveLens(lens: DriveLens) {
+  navigateApp("drive", lens === "all" ? undefined : lens);
+  driveLensRoute.set(lens);
+}
+
+export function navigateOps(section: OpsSection) {
+  navigateApp("operations", section);
+  opsSection.set(section);
 }

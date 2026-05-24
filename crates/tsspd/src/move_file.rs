@@ -5,12 +5,11 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use tssp_domain::{FileId, UserId, UserRole, Visibility};
-use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};
+use tssp_domain::FileId;
 
 use crate::auth::AuthContext;
 use crate::upload::FileRecordResponse;
-use crate::{ErrorBody, ErrorResponse, HttpState, MetadataStatsProvider};
+use crate::{ErrorBody, ErrorResponse, HttpState};
 
 #[derive(Debug, Deserialize)]
 pub struct MoveFileRequest {

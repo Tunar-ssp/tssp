@@ -1,6 +1,6 @@
 import type { FileRecord } from "../api";
 
-export type DriveLens = "drive" | "images" | "videos" | "documents";
+export type DriveLens = "drive" | "images" | "videos" | "documents" | "all";
 
 export interface FolderEntry {
   path: string;
@@ -11,6 +11,7 @@ export interface FolderEntry {
 
 export function matchesDriveLens(file: FileRecord, lens: DriveLens): boolean {
   const mime = file.mime_type || "";
+  if (lens === "drive" || lens === "all") return true;
   if (lens === "images") return mime.startsWith("image/");
   if (lens === "videos") return mime.startsWith("video/");
   if (lens === "documents") {

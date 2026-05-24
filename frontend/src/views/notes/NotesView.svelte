@@ -10,7 +10,6 @@
   } from "../../lib/api";
   import { formatRelativeDate } from "../../lib/utils/format";
   import NotesEditor from "./NotesEditor.svelte";
-  import NotesList from "./NotesList.svelte";
 
   let notes: NoteRecord[] = [];
   let loading = true;
@@ -25,7 +24,7 @@
     activeNoteId = note.id;
     titleDraft = note.title || "";
     bodyDraft = note.body || "";
-    autosaveStatus = `Editing ${formatRelativeDate(note.updated_at)}`;
+    autosaveStatus = `Editing · ${formatRelativeDate(note.updated_at)}`;
   }
 
   function activeNote() {
@@ -34,22 +33,18 @@
 
   function scheduleAutosave() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      void saveNote();
-    }, 1200);
+    saveTimer = setTimeout(() => void saveNote(), 1500);
   }
 
   async function loadNotes() {
     loading = true;
     error = "";
     try {
-      const response = await listNotes({ limit: 50, sort: "-updated" });
+      const response = await listNotes({ limit: 100, sort: "-updated" });
       notes = response.notes || [];
-      if (!activeNoteId && notes[0]) {
-        selectNote(notes[0]);
-      }
-    } catch (nextError) {
-      error = nextError instanceof Error ? nextError.message : "Failed to load notes";
+      if (!activeNoteId && notes[0]) selectNote(notes[0]);
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to load notes";
     } finally {
       loading = false;
     }
@@ -60,115 +55,97 @@
     if (!note) return;
     try {
       const updated = await updateNote(note.id, {
-        title: titleDraft.trim() || "Untitled note",
+        title: titleDraft.trim() || "Untitled",
         body: bodyDraft,
       });
       notes = notes.map((item) => (item.id === updated.id ? updated : item));
-      selectNote(updated);
-      autosaveStatus = `Saved ${formatRelativeDate(updated.updated_at)}`;
-    } catch (nextError) {
-      autosaveStatus = nextError instanceof Error ? nextError.message : "Save failed";
+      autosaveStatus = `Saved · ${formatRelativeDate(updated.updated_at)}`;
+    } catch (e) {
+      autosaveStatus = e instanceof Error ? e.message : "Save failed";
     }
   }
 
   async function createNewNote() {
-    try {
-      const created = await createNote({
-        title: "Untitled note",
-        body: "# Quick capture\n\nStart writing here.",
-        tags: ["draft"],
-        pin: false,
-      });
-      notes = [created, ...notes];
-      selectNote(created);
-      autosaveStatus = "New note created";
-    } catch (nextError) {
-      autosaveStatus = nextError instanceof Error ? nextError.message : "Create failed";
-    }
+    const created = await createNote({
+      title: "Untitled",
+      body: "# New page\n\n",
+      tags: [],
+    });
+    notes = [created, ...notes];
+    selectNote(created);
   }
 
   async function duplicateActive() {
     const note = activeNote();
     if (!note) return;
-    try {
-      const duplicate = await duplicateNote(note.id);
-      notes = [duplicate, ...notes];
-      selectNote(duplicate);
-      autosaveStatus = "Duplicated note";
-    } catch (nextError) {
-      autosaveStatus = nextError instanceof Error ? nextError.message : "Duplicate failed";
-    }
+    const duplicate = await duplicateNote(note.id);
+    notes = [duplicate, ...notes];
+    selectNote(duplicate);
   }
 
   async function deleteActive() {
     const note = activeNote();
-    if (!note) return;
-    try {
-      await deleteNote(note.id);
-      notes = notes.filter((item) => item.id !== note.id);
-      const next = notes[0] || null;
-      if (next) {
-        selectNote(next);
-      } else {
-        activeNoteId = null;
-        titleDraft = "";
-        bodyDraft = "";
-      }
-      autosaveStatus = "Note deleted";
-    } catch (nextError) {
-      autosaveStatus = nextError instanceof Error ? nextError.message : "Delete failed";
+    if (!note || !confirm("Delete this note?")) return;
+    await deleteNote(note.id);
+    notes = notes.filter((n) => n.id !== note.id);
+    if (notes[0]) selectNote(notes[0]);
+    else {
+      activeNoteId = null;
+      titleDraft = "";
+      bodyDraft = "";
     }
   }
 
-  onMount(() => {
-    void loadNotes();
-  });
+  onMount(() => void loadNotes());
 </script>
 
-<section class="view-grid notes-layout">
-  <div class="hero-card compact">
+<section class="notes">
+  <header class="notes-head">
     <div>
-      <div class="eyebrow">Knowledge</div>
-      <h1>Structured note pages, not a random textarea.</h1>
-      <p>
-        Notes now behave like pages with a list, a focused editor, markdown preview, autosave, and
-        duplicate/delete actions.
-      </p>
+      <h1>Knowledge</h1>
+      <p class="muted">{autosaveStatus}</p>
     </div>
-    <div class="hero-actions">
-      <button class="btn btn-primary" type="button" on:click={createNewNote}>New note</button>
-      <button class="btn btn-secondary" type="button" on:click={loadNotes}>Refresh</button>
+    <div class="actions">
+      <button type="button" class="btn btn-primary btn-sm" on:click={createNewNote}>New note</button>
+      <button type="button" class="btn btn-sm" on:click={loadNotes}>Refresh</button>
     </div>
-  </div>
+  </header>
 
-  <div class="split-view notes-shell">
-    <article class="panel-card">
-      <header class="panel-head">
-        <strong>Notes home</strong>
-        <span>cards, tags, recents, pinned</span>
-      </header>
+  <div class="notes-body">
+    <aside class="notes-list">
       {#if loading}
-        <div class="empty-copy">Loading notes...</div>
+        <div class="empty-state">Loading…</div>
       {:else if error}
-        <div class="empty-copy">{error}</div>
+        <div class="empty-state">{error}</div>
       {:else if notes.length === 0}
-        <div class="empty-copy">No notes yet. Create a page to start the workspace.</div>
+        <div class="empty-state"><strong>No notes</strong>Create your first page.</div>
       {:else}
-        <NotesList notes={notes.slice(0, 8)} activeId={activeNoteId} onSelectNote={selectNote} />
+        {#each notes as note}
+          <button
+            type="button"
+            class="note-card"
+            class:active={note.id === activeNoteId}
+            on:click={() => selectNote(note)}
+          >
+            <strong>{note.title || "Untitled"}</strong>
+            <span>{(note.body || "").slice(0, 80)}</span>
+            <span class="meta">{formatRelativeDate(note.updated_at)}</span>
+          </button>
+        {/each}
       {/if}
-    </article>
+    </aside>
 
     <NotesEditor
       note={activeNote()}
-      titleDraft={titleDraft}
-      bodyDraft={bodyDraft}
-      autosaveStatus={autosaveStatus}
-      onTitleChange={(value) => {
-        titleDraft = value;
+      {titleDraft}
+      {bodyDraft}
+      {autosaveStatus}
+      onTitleChange={(v) => {
+        titleDraft = v;
         scheduleAutosave();
       }}
-      onBodyChange={(value) => {
-        bodyDraft = value;
+      onBodyChange={(v) => {
+        bodyDraft = v;
         scheduleAutosave();
       }}
       onSave={saveNote}
@@ -178,3 +155,19 @@
     />
   </div>
 </section>
+
+<style>
+  .notes { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .notes-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .notes-head h1 { margin: 0; font-size: 16px; }
+  .actions { display: flex; gap: 8px; }
+  .notes-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
+  .notes-list { overflow: auto; border-right: 1px solid var(--border); padding: 10px; display: grid; gap: 8px; align-content: start; }
+  .note-card { text-align: left; border: 1px solid var(--border); background: var(--bg-card); border-radius: var(--radius-md); padding: 10px 12px; display: grid; gap: 4px; }
+  .note-card.active { border-color: var(--brand); background: var(--brand-dim); }
+  .note-card strong { font-size: 13px; }
+  .note-card span { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { font-size: 11px !important; color: var(--text-dim) !important; }
+  .muted { color: var(--text-muted); font-size: 12px; margin: 4px 0 0; }
+  @media (max-width: 900px) { .notes-body { grid-template-columns: 1fr; } .notes-list { max-height: 200px; } }
+</style>
