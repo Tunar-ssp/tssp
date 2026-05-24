@@ -139,10 +139,17 @@ window.Tssp = window.Tssp || {};
     );
 
     if (!notes.length) {
-      const emptyMsg = T.allNotes.length === 0
-        ? "No notes yet. Create your first note to get started."
-        : "No notes match your filters.";
-      grid.innerHTML = `<div class="notes-empty-state">${T.escapeHtml(emptyMsg)}</div>`;
+      if (T.allNotes.length === 0) {
+        grid.innerHTML = `<div class="notes-empty-hero">
+          <div class="notes-empty-icon">📝</div>
+          <div class="notes-empty-title">No notes yet</div>
+          <div class="notes-empty-sub">Write down ideas, docs, and quick thoughts. Use <kbd>/</kbd> for formatting commands.</div>
+          <button type="button" class="btn btn-primary" id="notes-empty-cta">New note</button>
+        </div>`;
+        grid.querySelector("#notes-empty-cta")?.addEventListener("click", () => T.openNoteEditor(null));
+      } else {
+        grid.innerHTML = `<div class="notes-empty-state">No notes match your filters.</div>`;
+      }
       return;
     }
 

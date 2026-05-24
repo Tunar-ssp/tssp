@@ -203,8 +203,8 @@
   margin: 2px 4px 2px 0;
   border-radius: 999px;
   font-size: 11px;
-  background: var(--accent-dim);
-  color: var(--accent-hover);
+  background: var(--brand-dim);
+  color: var(--blue);
 }
 
 .type-pill,
@@ -248,7 +248,7 @@
 .link-button {
   border: 0;
   background: transparent;
-  color: var(--accent-hover);
+  color: var(--brand-hover);
   cursor: pointer;
   padding: 0;
 }
@@ -501,7 +501,7 @@
 .markdown-preview blockquote {
   margin: 8px 0;
   padding: 8px 12px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--brand);
   background: var(--bg-elevated);
   color: var(--text-muted);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -538,7 +538,7 @@
 }
 
 .markdown-preview a {
-  color: var(--accent-hover);
+  color: var(--brand-hover);
 }
 
 .markdown-preview ul,
@@ -731,7 +731,7 @@
 
 /* ── Focus ring improvements ─────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -755,8 +755,8 @@ input[type="password"]:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-dim);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-dim);
 }
 
 /* ── Tag chips field ─────────────────────────────────────────────────── */
@@ -776,8 +776,8 @@ select:focus {
 }
 
 .tag-chips-field:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-dim);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-dim);
 }
 
 .tag-chips-list {

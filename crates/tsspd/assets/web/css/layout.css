@@ -60,8 +60,8 @@
 
 .top-bar-search input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-dim);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-dim);
 }
 
 .search-icon {
@@ -134,8 +134,8 @@
 }
 
 .nav-item.active {
-  background: var(--accent-dim);
-  color: var(--accent-hover);
+  background: var(--brand-dim);
+  color: var(--blue);
 }
 
 .main {
@@ -253,8 +253,8 @@
 }
 
 .folder-tree button.active {
-  background: var(--accent-dim);
-  color: var(--accent-hover);
+  background: var(--brand-dim);
+  color: var(--blue);
 }
 
 .objects-main {
@@ -304,8 +304,8 @@
 }
 
 .folder-item.active .folder-btn {
-  background: var(--accent-dim);
-  color: var(--accent-hover);
+  background: var(--brand-dim);
+  color: var(--blue);
 }
 
 .folder-count {

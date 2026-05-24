@@ -4,7 +4,7 @@ window.Tssp = window.Tssp || {};
   "use strict";
 
   function sysBar(label, detail, pct) {
-    const color = pct > 85 ? "var(--danger)" : pct > 65 ? "var(--warning)" : "var(--accent)";
+    const color = pct > 85 ? "var(--danger)" : pct > 65 ? "var(--warning)" : "var(--brand)";
     return `<div class="sys-bar-row">
       <div class="sys-bar-head">
         <span class="sys-bar-label">${T.escapeHtml(label)}</span>
@@ -230,30 +230,43 @@ window.Tssp = window.Tssp || {};
         T.api("/admin/devices"),
         T.api("/admin/sessions?limit=100"),
       ]);
-      const corruptClass = ov.corrupt_file_count > 0 ? "style=\"color:var(--danger)\"" : "";
-      overview.innerHTML = `<div class="admin-overview-grid">
-        <div class="admin-stat"><div class="admin-stat-label">Files</div><div class="admin-stat-value">${ov.file_count}</div></div>
-        <div class="admin-stat"><div class="admin-stat-label">Notes</div><div class="admin-stat-value">${ov.note_count}</div></div>
-        <div class="admin-stat"><div class="admin-stat-label">Workspaces</div><div class="admin-stat-value">${ov.workspace_count ?? "—"}</div></div>
-        <div class="admin-stat"><div class="admin-stat-label">Pinned</div><div class="admin-stat-value">${ov.pinned_count}</div></div>
-        <div class="admin-stat"><div class="admin-stat-label">Tags</div><div class="admin-stat-value">${ov.tag_count}</div></div>
-        <div class="admin-stat"><div class="admin-stat-label">Storage</div><div class="admin-stat-value">${T.escapeHtml(T.formatBytes(ov.storage_bytes_used))}</div></div>
-        <div class="admin-stat"><div class="admin-stat-label">Corrupt</div><div class="admin-stat-value" ${corruptClass}>${ov.corrupt_file_count}</div></div>
+      function adminMetric(icon, label, value, color, alert) {
+        return `<div class="admin-metric-card ${alert ? "admin-metric-alert" : ""}">
+          <div class="admin-metric-icon" style="color:${color}">${icon}</div>
+          <div class="admin-metric-body">
+            <div class="admin-metric-value" ${alert ? `style="color:var(--danger)"` : ""}>${value}</div>
+            <div class="admin-metric-label">${label}</div>
+          </div>
+        </div>`;
+      }
+      const corruptAlert = ov.corrupt_file_count > 0;
+      overview.innerHTML = `<div class="admin-metrics-grid">
+        ${adminMetric("📁", "Files", ov.file_count, "var(--blue)", false)}
+        ${adminMetric("📝", "Notes", ov.note_count, "var(--yellow)", false)}
+        ${adminMetric("⌨️", "Workspaces", ov.workspace_count ?? "—", "var(--cyan)", false)}
+        ${adminMetric("📌", "Pinned", ov.pinned_count, "var(--violet)", false)}
+        ${adminMetric("🏷️", "Tags", ov.tag_count, "var(--green)", false)}
+        ${adminMetric("💾", "Storage used", T.escapeHtml(T.formatBytes(ov.storage_bytes_used)), "var(--brand)", false)}
+        ${adminMetric("⚠️", "Corrupt files", ov.corrupt_file_count, "var(--danger)", corruptAlert)}
       </div>
-      <div class="admin-stat-version">v${T.escapeHtml(ov.version || "—")}</div>`;
+      <div class="admin-version-bar">Server version <strong>v${T.escapeHtml(ov.version || "—")}</strong></div>`;
       const memUsed = (sys.total_memory_bytes || 0) - (sys.available_memory_bytes || 0);
       const memPct = sys.total_memory_bytes > 0 ? Math.round(memUsed / sys.total_memory_bytes * 100) : 0;
       const diskUsed = (sys.data_dir_total_bytes || 0) - (sys.data_dir_free_bytes || 0);
       const diskPct = sys.data_dir_total_bytes > 0 ? Math.round(diskUsed / sys.data_dir_total_bytes * 100) : 0;
       const loadPct = Math.min(100, Math.round((sys.load_average_1m || 0) * 50));
-      system.innerHTML = `<dl class="admin-dl">
-        <dt>Host</dt><dd>${T.escapeHtml(sys.hostname)}</dd>
-        <dt>OS</dt><dd>${T.escapeHtml(sys.os)} / ${T.escapeHtml(sys.arch)}</dd>
-      </dl>
-      <div class="sys-bars">
-        ${sysBar("CPU load", `${Number(sys.load_average_1m || 0).toFixed(2)} (1m)`, loadPct)}
-        ${sysBar("Memory", `${T.formatBytes(memUsed)} / ${T.formatBytes(sys.total_memory_bytes)}`, memPct)}
-        ${sysBar("Data disk", `${T.formatBytes(diskUsed)} / ${T.formatBytes(sys.data_dir_total_bytes)}`, diskPct)}
+      system.innerHTML = `<div class="admin-sys-layout">
+        <dl class="admin-dl">
+          <dt>Host</dt><dd>${T.escapeHtml(sys.hostname)}</dd>
+          <dt>OS</dt><dd>${T.escapeHtml(sys.os)}</dd>
+          <dt>Arch</dt><dd>${T.escapeHtml(sys.arch)}</dd>
+          <dt>Uptime</dt><dd>${sys.uptime_seconds ? T.formatUptime(sys.uptime_seconds) : "—"}</dd>
+        </dl>
+        <div class="sys-bars">
+          ${sysBar("CPU load", `${Number(sys.load_average_1m || 0).toFixed(2)} avg`, loadPct)}
+          ${sysBar("Memory", `${T.formatBytes(memUsed)} / ${T.formatBytes(sys.total_memory_bytes)}`, memPct)}
+          ${sysBar("Disk", `${T.formatBytes(diskUsed)} / ${T.formatBytes(sys.data_dir_total_bytes)}`, diskPct)}
+        </div>
       </div>`;
       usersEl.innerHTML = renderAdminUsers(users.users || []);
       devicesEl.innerHTML = renderAdminDevices(devices.devices || []);

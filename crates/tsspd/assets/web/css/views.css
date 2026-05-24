@@ -39,15 +39,15 @@
   gap: 8px;
   margin-bottom: 12px;
   padding: 10px;
-  border: 1px solid rgba(168, 85, 247, 0.28);
+  border: 1px solid rgba(37, 99, 235, 0.28);
   border-radius: var(--radius-md);
-  background: rgba(168, 85, 247, 0.08);
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .drop-zone.dragover {
-  border-color: var(--accent);
-  background: var(--accent-dim);
-  color: var(--accent-hover);
+  border-color: var(--brand);
+  background: var(--brand-dim);
+  color: var(--blue);
 }
 
 .drop-zone strong {
@@ -363,7 +363,7 @@
 .console-cmd-name {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--accent-hover);
+  color: var(--brand-hover);
 }
 
 .console-cmd-desc {
@@ -402,7 +402,7 @@
 
 .console-result-header strong {
   font-family: var(--font-mono);
-  color: var(--accent-hover);
+  color: var(--brand-hover);
 }
 
 .console-ok {
@@ -502,7 +502,7 @@
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--accent-muted, rgba(168,85,247,0.15));
+  background: var(--accent-muted, rgba(37,99,235,0.15));
   color: var(--accent, #a855f7);
   font-weight: 600;
   text-transform: uppercase;
@@ -849,7 +849,7 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: var(--accent-muted, rgba(168,85,247,0.15));
+  background: var(--accent-muted, rgba(37,99,235,0.15));
   color: var(--accent, #a855f7);
   font-weight: 600;
   margin-left: 4px;
@@ -881,7 +881,7 @@
 .notes-search-input:focus,
 .notes-tag-input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--brand);
 }
 
 .notes-loading,
@@ -890,6 +890,46 @@
   text-align: center;
   color: var(--text-muted);
   grid-column: 1 / -1;
+}
+
+.notes-empty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 64px 24px;
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.notes-empty-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.notes-empty-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.notes-empty-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.notes-empty-hero kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
 }
 
 .notes-grid {
@@ -1174,11 +1214,23 @@
 
 
 /* ── Admin system bars ───────────────────────────────────────────────── */
+.admin-sys-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 600px) {
+  .admin-sys-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sys-bars {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 12px;
 }
 
 .sys-bar-row {
@@ -1272,7 +1324,7 @@
 }
 
 .search-type-file   { background: rgba(99,102,241,0.15); color: #818cf8; }
-.search-type-note   { background: rgba(168,85,247,0.15); color: #c084fc; }
+.search-type-note   { background: rgba(37,99,235,0.15); color: #93C5FD; }
 .search-type-workspace { background: rgba(52,211,153,0.12); color: #34d399; }
 
 .search-result-name {
@@ -1451,38 +1503,62 @@
 }
 
 /* ── Admin overview grid stats ───────────────────────────────────────── */
-.admin-overview-grid {
+.admin-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.admin-stat {
-  padding: 10px 12px;
-  background: var(--bg-elevated);
+.admin-metric-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast);
 }
 
-.admin-stat-label {
+.admin-metric-card.admin-metric-alert {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.admin-metric-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.admin-metric-body {
+  min-width: 0;
+}
+
+.admin-metric-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-family: var(--font-mono);
+}
+
+.admin-metric-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-dim);
-  margin-bottom: 3px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.admin-stat-value {
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.admin-stat-version {
+.admin-version-bar {
   font-size: 11px;
   color: var(--text-dim);
   font-family: var(--font-mono);
-  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 /* ── Notes tag filter bar ────────────────────────────────────────────── */
@@ -1964,4 +2040,70 @@
 .slash-desc {
   font-size: 11px;
   color: var(--text-dim);
+}
+
+/* ── Share dialog ────────────────────────────────────────────────── */
+.share-modal {
+  max-width: 480px;
+}
+
+.share-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.share-url-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--blue);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: text;
+}
+
+.share-path-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  margin-bottom: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-qr-section {
+  margin-bottom: 14px;
+}
+
+.share-qr-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.share-qr {
+  margin: 0;
+  padding: 12px 16px;
+  background: #fff;
+  color: #000;
+  border-radius: var(--radius-md);
+  font-size: 5px;
+  line-height: 1.15;
+  overflow-x: auto;
+  font-family: monospace;
+  letter-spacing: 0;
+}
+
+.share-actions-row {
+  display: flex;
+  gap: 8px;
 }

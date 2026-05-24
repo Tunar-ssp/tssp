@@ -87,9 +87,9 @@ window.Tssp = window.Tssp || {};
     if (!body || !grid) return;
     if (!T.currentFiles.length) {
       const empty = `<div class="drive-empty-state">
-        <div class="drive-empty-icon">OBJ</div>
-        <strong>No objects in this folder</strong>
-        <span>Drop files into the Drive surface, click Upload, or choose another folder.</span>
+        <div class="drive-empty-icon">☁</div>
+        <strong>This folder is empty</strong>
+        <span>Drag &amp; drop files here, or click Upload to get started.</span>
         <div class="empty-actions">
           <button type="button" class="btn btn-primary" data-upload-trigger>Upload files</button>
         </div>
