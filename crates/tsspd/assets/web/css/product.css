@@ -571,7 +571,7 @@ textarea:focus {
   border-radius: 999px;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  background: var(--accent-dim);
+  background: var(--bg-elevated);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;

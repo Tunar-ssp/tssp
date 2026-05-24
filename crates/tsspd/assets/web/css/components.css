@@ -118,8 +118,9 @@
 }
 
 .banner.info {
-  background: var(--accent-dim);
-  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: var(--cyan);
 }
 
 .banner.success {
