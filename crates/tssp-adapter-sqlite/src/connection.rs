@@ -14,6 +14,15 @@ pub(crate) fn configure_connection(connection: &Connection) -> Result<(), Sqlite
     connection
         .pragma_update(None, "foreign_keys", "ON")
         .map_err(SqliteRepositoryError::Configure)?;
+    // Keep 8 MiB of pages in memory — avoids repeated disk I/O on Orange Pi.
+    // Negative value = kibibytes; -8192 = 8 MiB.
+    connection
+        .pragma_update(None, "cache_size", -8192_i32)
+        .map_err(SqliteRepositoryError::Configure)?;
+    // Use RAM for temp tables instead of the (slow) SD card.
+    connection
+        .pragma_update(None, "temp_store", 2_i32)
+        .map_err(SqliteRepositoryError::Configure)?;
     connection
         .busy_timeout(std::time::Duration::from_secs(5))
         .map_err(SqliteRepositoryError::Configure)
