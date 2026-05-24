@@ -112,6 +112,7 @@
             <p class="page-subtitle">Bucket health and usage</p>
           </div>
           <div class="metric-grid" id="metric-grid"></div>
+          <div id="overview-details"></div>
         </section>
 
         <section id="view-objects" class="view">
@@ -523,7 +524,22 @@
       <label for="workspace-name-input">Name</label>
       <input id="workspace-name-input" type="text" maxlength="120" required>
       <label for="workspace-language-input">Language</label>
-      <input id="workspace-language-input" type="text" maxlength="40" value="text" required>
+      <select id="workspace-language-input">
+        <option value="text">text</option>
+        <option value="markdown">markdown</option>
+        <option value="javascript">javascript</option>
+        <option value="typescript">typescript</option>
+        <option value="python">python</option>
+        <option value="rust">rust</option>
+        <option value="go">go</option>
+        <option value="bash">bash</option>
+        <option value="sql">sql</option>
+        <option value="json">json</option>
+        <option value="yaml">yaml</option>
+        <option value="toml">toml</option>
+        <option value="html">html</option>
+        <option value="css">css</option>
+      </select>
       <p class="form-hint">Script execution is not available yet — workspaces store metadata and source only.</p>
       <label for="workspace-body-input">Body</label>
       <textarea id="workspace-body-input" rows="14"></textarea>
@@ -543,7 +559,22 @@
       <label for="editor-document-path-input">Path</label>
       <input id="editor-document-path-input" type="text" maxlength="160" placeholder="notes/plan.md" required>
       <label for="editor-document-language-input">Language</label>
-      <input id="editor-document-language-input" type="text" maxlength="40" value="text" required>
+      <select id="editor-document-language-input">
+        <option value="text">text</option>
+        <option value="markdown">markdown</option>
+        <option value="javascript">javascript</option>
+        <option value="typescript">typescript</option>
+        <option value="python">python</option>
+        <option value="rust">rust</option>
+        <option value="go">go</option>
+        <option value="bash">bash</option>
+        <option value="sql">sql</option>
+        <option value="json">json</option>
+        <option value="yaml">yaml</option>
+        <option value="toml">toml</option>
+        <option value="html">html</option>
+        <option value="css">css</option>
+      </select>
       <label class="checkbox-row" for="editor-document-primary-input">
         <input type="checkbox" id="editor-document-primary-input">
         Use as entry file
@@ -557,9 +588,15 @@
   </dialog>
 
   <dialog id="preview-dialog" class="preview-dialog">
-    <header>
-      <h3 id="preview-title">Preview</h3>
-      <button type="button" class="icon-btn" id="preview-close" aria-label="Close">×</button>
+    <header class="preview-dialog-header">
+      <div class="preview-dialog-title-wrap">
+        <h3 id="preview-title">Preview</h3>
+        <div id="preview-meta" class="preview-meta"></div>
+      </div>
+      <div class="preview-dialog-actions">
+        <a id="preview-download-btn" class="btn btn-secondary btn-sm" download hidden>Download</a>
+        <button type="button" class="icon-btn" id="preview-close" aria-label="Close">×</button>
+      </div>
     </header>
     <div id="preview-content" class="preview-content"></div>
   </dialog>

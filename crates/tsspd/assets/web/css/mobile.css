@@ -108,3 +108,43 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+@media (max-width: 900px) {
+  .note-full-editor-grid {
+    grid-template-columns: 1fr;
+  }
+  .note-editor-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 720px) {
+  .notes-cards-row {
+    grid-template-columns: 1fr;
+  }
+  .note-card-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .notes-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .notes-search-input,
+  .notes-tag-input {
+    max-width: none;
+  }
+  .note-editor-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .note-editor-topbar-end {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .preview-dialog-header {
+    flex-wrap: wrap;
+  }
+}

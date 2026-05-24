@@ -446,13 +446,45 @@ window.Tssp = window.Tssp || {};
         event.preventDefault();
         const start = area.selectionStart;
         const end = area.selectionEnd;
-        area.value = `${area.value.slice(0, start)}  ${area.value.slice(end)}`;
-        area.selectionStart = area.selectionEnd = start + 2;
+        const val = area.value;
+        const indent = "  ";
+        if (start === end) {
+          area.value = val.slice(0, start) + indent + val.slice(end);
+          area.selectionStart = area.selectionEnd = start + indent.length;
+        } else {
+          const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+          const lineEnd = val.indexOf("\n", end - 1);
+          const block = val.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+          let replaced;
+          if (event.shiftKey) {
+            replaced = block.split("\n").map((l) => l.startsWith(indent) ? l.slice(indent.length) : l.startsWith(" ") ? l.slice(1) : l).join("\n");
+          } else {
+            replaced = block.split("\n").map((l) => indent + l).join("\n");
+          }
+          area.value = val.slice(0, lineStart) + replaced + (lineEnd === -1 ? "" : val.slice(lineEnd));
+          area.selectionStart = lineStart;
+          area.selectionEnd = lineStart + replaced.length;
+        }
         markDirty();
       }
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
         event.preventDefault();
         T.saveEditorDocument(false);
+      }
+      if (event.key === "Enter") {
+        const start = area.selectionStart;
+        const val = area.value;
+        const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+        const currentLine = val.slice(lineStart, start);
+        const indentMatch = currentLine.match(/^(\s+)/);
+        if (indentMatch) {
+          event.preventDefault();
+          const ins = "\n" + indentMatch[1];
+          area.value = val.slice(0, start) + ins + val.slice(area.selectionEnd);
+          area.selectionStart = area.selectionEnd = start + ins.length;
+          markDirty();
+          updateStatusBar();
+        }
       }
     });
 

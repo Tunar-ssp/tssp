@@ -302,7 +302,21 @@ window.Tssp = window.Tssp || {};
     }
     const title = T.$("#preview-title");
     const content = T.$("#preview-content");
+    const meta = T.$("#preview-meta");
+    const dlBtn = T.$("#preview-download-btn");
     title.textContent = file.name || file.id;
+    if (meta) {
+      meta.innerHTML = [
+        T.stateBadge(file.visibility),
+        `<span class="preview-meta-item">${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>`,
+        file.mime_type ? `<span class="preview-meta-item mono">${T.escapeHtml(file.mime_type)}</span>` : "",
+        file.folder_path ? `<span class="preview-meta-item">${T.escapeHtml(file.folder_path)}</span>` : "",
+      ].join("");
+    }
+    if (dlBtn) {
+      dlBtn.href = T.fileDownloadUrl(file.id);
+      dlBtn.removeAttribute("hidden");
+    }
     const inline = T.fileInlineUrl(file.id);
     const mime = file.mime_type || "";
     const name = (file.name || "").toLowerCase();

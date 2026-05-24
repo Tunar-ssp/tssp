@@ -28,7 +28,9 @@ window.Tssp = window.Tssp || {};
 
   T.loadOverview = async function loadOverview() {
     const grid = T.$("#metric-grid");
+    const details = T.$("#overview-details");
     grid.innerHTML = '<div class="metric-card"><span class="label">Loading…</span></div>';
+    if (details) details.innerHTML = "";
     try {
       const [status, publicFiles] = await Promise.allSettled([
         T.api("/status"),
@@ -38,27 +40,47 @@ window.Tssp = window.Tssp || {};
       const s = status.value;
       const publicCount =
         publicFiles.status === "fulfilled" ? (publicFiles.value.files || []).length : 0;
-      const metrics = [
-        ["Files", s.file_count],
-        ["Notes", s.note_count],
-        ["Tags", s.tag_count],
-        ["Pinned", s.pinned_count],
-        ["Public files", publicCount],
-        ["Uploads 24h", s.recent_upload_count_24h],
-        ["Storage", T.formatBytes(s.storage_bytes_used)],
-        ["Uptime", T.formatUptime(s.uptime_seconds)],
-        ["Health", s.status],
-      ];
-      grid.innerHTML = metrics
-        .map(
-          ([label, value]) =>
-            `<div class="metric-card"><div class="label">${T.escapeHtml(label)}</div><div class="value">${T.escapeHtml(String(value ?? "—"))}</div></div>`
-        )
-        .join("");
+
+      const health = s.status === "ok" ? "Healthy" : T.escapeHtml(s.status || "—");
+      const healthClass = s.status === "ok" ? "metric-health-ok" : "metric-health-warn";
+
+      grid.innerHTML = [
+        metricCard("Files", s.file_count, "total objects stored"),
+        metricCard("Notes", s.note_count, "markdown notes"),
+        metricCard("Storage", T.formatBytes(s.storage_bytes_used), "used"),
+        metricCard("Public", publicCount, "publicly shared"),
+        metricCard("Pinned", s.pinned_count, "files + notes"),
+        metricCard("Tags", s.tag_count, "unique tags"),
+        metricCard("Uploaded (24h)", s.recent_upload_count_24h ?? "—", "recent"),
+        metricCard("Uptime", T.formatUptime(s.uptime_seconds), "since last restart"),
+        `<div class="metric-card metric-health ${healthClass}"><div class="label">Health</div><div class="value">${health}</div></div>`,
+      ].join("");
+
+      if (details) {
+        const recentHtml = (s.recent_uploads || []).length
+          ? `<div class="overview-section"><h3>Recent uploads</h3><div class="recent-uploads">${
+              (s.recent_uploads || []).slice(0, 8).map((f) =>
+                `<div class="recent-upload-row">
+                  <span class="recent-upload-name">${T.escapeHtml(f.name || f.id)}</span>
+                  <span class="recent-upload-meta">${T.escapeHtml(T.formatBytes(f.size_bytes))} · ${T.escapeHtml(T.formatDate(f.uploaded_at))}</span>
+                </div>`
+              ).join("")
+            }</div></div>`
+          : "";
+        details.innerHTML = recentHtml;
+      }
     } catch (error) {
       grid.innerHTML = `<div class="metric-card"><span class="label">Error</span><div class="value">${T.escapeHtml(error.message)}</div></div>`;
     }
   };
+
+  function metricCard(label, value, sub) {
+    return `<div class="metric-card">
+      <div class="label">${T.escapeHtml(label)}</div>
+      <div class="value">${T.escapeHtml(String(value ?? "—"))}</div>
+      ${sub ? `<div class="metric-sub">${T.escapeHtml(sub)}</div>` : ""}
+    </div>`;
+  }
 
   // Search
 
@@ -314,7 +336,8 @@ window.Tssp = window.Tssp || {};
     T.editingWorkspaceId = workspace ? workspace.id : null;
     T.$("#workspace-dialog-title").textContent = workspace ? "Edit workspace" : "New workspace";
     T.$("#workspace-name-input").value = workspace ? workspace.name || "" : "";
-    T.$("#workspace-language-input").value = workspace ? workspace.language || "text" : "text";
+    const langEl = T.$("#workspace-language-input");
+    if (langEl) langEl.value = workspace ? workspace.language || "text" : "text";
     T.$("#workspace-body-input").value = workspace ? workspace.body || "" : "";
     T.$("#workspace-dialog").showModal();
   };
@@ -322,7 +345,7 @@ window.Tssp = window.Tssp || {};
   T.saveWorkspace = async function saveWorkspace() {
     const payload = {
       name: T.$("#workspace-name-input").value.trim(),
-      language: T.$("#workspace-language-input").value.trim() || "text",
+      language: (T.$("#workspace-language-input").value || "text").trim(),
       body: T.$("#workspace-body-input").value,
     };
     if (!payload.name) {
