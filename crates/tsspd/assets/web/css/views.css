@@ -1435,3 +1435,44 @@
   font-family: var(--font-mono);
   margin-top: 4px;
 }
+
+/* ── Notes tag filter bar ────────────────────────────────────────────── */
+.notes-tag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 12px;
+  min-height: 0;
+}
+
+.note-tag-filter-chip {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+
+.note-tag-filter-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.note-tag-filter-chip.active {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+  color: var(--accent-light, #d8b4fe);
+}
+
+.note-tag-filter-count {
+  opacity: 0.6;
+  font-size: 0.68rem;
+}

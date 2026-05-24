@@ -6,6 +6,7 @@ window.Tssp = window.Tssp || {};
   T.allNotes = [];
   T.noteAutosaveTimer = null;
   T.noteLastSavedBody = "";
+  T.activeNoteTag = null;
 
   // ── Tag chips ────────────────────────────────────────────────────────────
 
@@ -75,24 +76,45 @@ window.Tssp = window.Tssp || {};
     try {
       const data = await T.api("/notes?limit=200");
       T.allNotes = data.notes || [];
+      T.activeNoteTag = null;
       T.renderNoteCards();
     } catch (error) {
       grid.innerHTML = `<div class="notes-empty-state">${T.escapeHtml(error.message)}</div>`;
     }
   };
 
+  function renderNoteTagBar() {
+    const bar = T.$("#notes-tag-bar");
+    if (!bar) return;
+    const tagCounts = new Map();
+    for (const note of T.allNotes) {
+      for (const tag of note.tags || []) {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      }
+    }
+    if (!tagCounts.size) { bar.innerHTML = ""; return; }
+    const sorted = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+    bar.innerHTML = sorted
+      .map(([tag, count]) => {
+        const active = T.activeNoteTag === tag;
+        return `<button type="button" class="note-tag-filter-chip${active ? " active" : ""}" data-tag-filter="${T.escapeHtml(tag)}">${T.escapeHtml(tag)} <span class="note-tag-filter-count">${count}</span></button>`;
+      })
+      .join("");
+  }
+
   T.renderNoteCards = function renderNoteCards() {
     const grid = T.$("#notes-grid");
     if (!grid) return;
 
+    renderNoteTagBar();
+
     const query = (T.$("#notes-local-search")?.value || "").toLowerCase().trim();
-    const tagFilter = (T.$("#notes-tag-filter")?.value || "").trim().toLowerCase();
     const pinnedOnly = T.$("#notes-pinned-filter")?.checked;
 
     let notes = T.allNotes.slice();
 
     if (pinnedOnly) notes = notes.filter((n) => n.pinned_at != null);
-    if (tagFilter) notes = notes.filter((n) => (n.tags || []).some((t) => t.toLowerCase().includes(tagFilter)));
+    if (T.activeNoteTag) notes = notes.filter((n) => (n.tags || []).some((t) => t === T.activeNoteTag));
     if (query) notes = notes.filter((n) =>
       (n.title || "").toLowerCase().includes(query) || (n.body || "").toLowerCase().includes(query)
     );
@@ -247,11 +269,21 @@ window.Tssp = window.Tssp || {};
       titleInput.addEventListener("input", scheduleAutosave);
     }
     const noteSearch = T.$("#notes-local-search");
-    const noteTagFilter = T.$("#notes-tag-filter");
     const notePinnedFilter = T.$("#notes-pinned-filter");
     if (noteSearch) noteSearch.addEventListener("input", () => T.renderNoteCards());
-    if (noteTagFilter) noteTagFilter.addEventListener("input", () => T.renderNoteCards());
     if (notePinnedFilter) notePinnedFilter.addEventListener("change", () => T.renderNoteCards());
+
+    const noteTagBar = T.$("#notes-tag-bar");
+    if (noteTagBar) {
+      noteTagBar.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-tag-filter]");
+        if (!btn) return;
+        const tag = btn.dataset.tagFilter;
+        T.activeNoteTag = T.activeNoteTag === tag ? null : tag;
+        T.renderNoteCards();
+      });
+    }
+
     bindTagChipsInput();
   };
 
