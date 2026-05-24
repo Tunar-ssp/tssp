@@ -49,10 +49,24 @@ window.Tssp = window.Tssp || {};
     const area = T.$("#editor-area");
     const lineCount = T.$("#editor-line-count");
     const charCount = T.$("#editor-char-count");
+    const cursorPos = T.$("#editor-cursor-pos");
+    const wordCountEl = T.$("#editor-word-count");
     if (!area) return;
     const text = area.value;
-    if (lineCount) lineCount.textContent = `${text.split("\n").length} lines`;
+    const lines = text.split("\n");
+    if (lineCount) lineCount.textContent = `${lines.length} lines`;
     if (charCount) charCount.textContent = `${text.length} chars`;
+    if (cursorPos) {
+      const pos = area.selectionStart;
+      const before = text.slice(0, pos);
+      const ln = before.split("\n").length;
+      const col = pos - before.lastIndexOf("\n");
+      cursorPos.textContent = `Ln ${ln}, Col ${col}`;
+    }
+    if (wordCountEl) {
+      const words = text.trim().split(/\s+/).filter(Boolean).length;
+      wordCountEl.textContent = words ? `${words} words` : "";
+    }
   }
 
   function updatePreviewButton() {
@@ -539,6 +553,9 @@ window.Tssp = window.Tssp || {};
       updateStatusBar();
       refreshEditorPreview();
     });
+
+    area.addEventListener("click", updateStatusBar);
+    area.addEventListener("keyup", updateStatusBar);
 
     T.$("#editor-preview-toggle-btn")?.addEventListener("click", () => {
       if (previewVisible) hidePreviewPane();

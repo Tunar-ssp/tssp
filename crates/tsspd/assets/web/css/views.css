@@ -735,6 +735,11 @@
   font-style: italic;
 }
 
+.editor-cursor-pos {
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+}
+
 /* Info panel */
 
 .editor-info-panel {
