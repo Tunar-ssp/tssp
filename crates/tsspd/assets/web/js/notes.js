@@ -304,6 +304,19 @@ window.Tssp = window.Tssp || {};
     if (titleInput) {
       titleInput.addEventListener("input", scheduleAutosave);
     }
+    const pinInput = T.$("#note-pin-input");
+    if (pinInput) {
+      pinInput.addEventListener("change", async () => {
+        if (!T.editingNoteId) return;
+        try {
+          await syncNotePin(T.editingNoteId, pinInput.checked);
+          T.editingNotePinned = pinInput.checked;
+        } catch (e) {
+          T.showBanner(e.message, "error");
+          pinInput.checked = T.editingNotePinned;
+        }
+      });
+    }
     const noteSearch = T.$("#notes-local-search");
     const notePinnedFilter = T.$("#notes-pinned-filter");
     if (noteSearch) noteSearch.addEventListener("input", () => T.renderNoteCards());
