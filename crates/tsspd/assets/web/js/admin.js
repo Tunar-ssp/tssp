@@ -158,6 +158,7 @@ window.Tssp = window.Tssp || {};
       overview.innerHTML = `<div class="admin-overview-grid">
         <div class="admin-stat"><div class="admin-stat-label">Files</div><div class="admin-stat-value">${ov.file_count}</div></div>
         <div class="admin-stat"><div class="admin-stat-label">Notes</div><div class="admin-stat-value">${ov.note_count}</div></div>
+        <div class="admin-stat"><div class="admin-stat-label">Workspaces</div><div class="admin-stat-value">${ov.workspace_count ?? "—"}</div></div>
         <div class="admin-stat"><div class="admin-stat-label">Pinned</div><div class="admin-stat-value">${ov.pinned_count}</div></div>
         <div class="admin-stat"><div class="admin-stat-label">Tags</div><div class="admin-stat-value">${ov.tag_count}</div></div>
         <div class="admin-stat"><div class="admin-stat-label">Storage</div><div class="admin-stat-value">${T.escapeHtml(T.formatBytes(ov.storage_bytes_used))}</div></div>

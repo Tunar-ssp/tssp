@@ -23,6 +23,7 @@ pub struct AdminOverviewResponse {
     pub note_count: u64,
     pub tag_count: u64,
     pub pinned_count: u64,
+    pub workspace_count: u64,
     pub corrupt_file_count: u64,
     pub storage_bytes_used: u64,
     pub public_url: Option<String>,
@@ -73,6 +74,13 @@ pub async fn admin_overview(State(state): State<HttpState>) -> impl IntoResponse
     .await
     .unwrap_or(0);
 
+    let workspace_count = state
+        .workspaces
+        .as_deref()
+        .and_then(|store| store.list_all().ok())
+        .map(|ws| ws.len() as u64)
+        .unwrap_or(0);
+
     (
         StatusCode::OK,
         Json(AdminOverviewResponse {
@@ -83,6 +91,7 @@ pub async fn admin_overview(State(state): State<HttpState>) -> impl IntoResponse
             note_count: repository_stats.note_count,
             tag_count: repository_stats.tag_count,
             pinned_count: repository_stats.pinned_count,
+            workspace_count,
             corrupt_file_count: state.corrupt_file_count,
             storage_bytes_used,
             public_url: Some(state.public_urls().base().to_owned()),
