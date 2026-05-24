@@ -1,7 +1,7 @@
 //! Edge case tests for error handling and boundary conditions.
 
 #[cfg(test)]
-mod error_handling_tests {
+mod error_edge_cases {
     use tssp_domain::FileSize;
 
     #[test]
