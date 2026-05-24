@@ -259,14 +259,17 @@ window.Tssp = window.Tssp || {};
     const body = T.$("#documents-body");
     body.innerHTML = T.tableMessage(6, "Loading documents…");
     try {
-      const data = await T.api("/files?limit=200");
-      const files = (data.files || []).filter((file) => {
+      // Fetch application/ and text/ separately; backend MIME filter is prefix-based
+      const [appData, textData] = await Promise.all([
+        T.api("/files?limit=200&type=application/"),
+        T.api("/files?limit=200&type=text/"),
+      ]);
+      const seen = new Set();
+      const files = [...(appData.files || []), ...(textData.files || [])].filter((file) => {
+        if (seen.has(file.id)) return false;
+        seen.add(file.id);
         const mime = file.mime_type || "";
-        return (
-          (mime.startsWith("application/") || mime.startsWith("text/")) &&
-          !mime.startsWith("image/") &&
-          !mime.startsWith("video/")
-        );
+        return !mime.startsWith("image/") && !mime.startsWith("video/") && !mime.startsWith("audio/");
       });
       if (!files.length) {
         body.innerHTML = T.tableMessage(6, "No documents yet.");
