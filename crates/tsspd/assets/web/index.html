@@ -536,6 +536,13 @@
                   <button type="button" class="btn btn-primary btn-sm" id="editor-save-btn" title="Save (Ctrl+S)">Save</button>
                 </div>
               </div>
+              <div id="editor-find-bar" class="editor-find-bar hidden" role="search" aria-label="Find in file">
+                <input id="editor-find-input" type="search" placeholder="Find…" autocomplete="off" class="editor-find-input">
+                <span id="editor-find-count" class="editor-find-count"></span>
+                <button type="button" class="btn btn-text btn-sm" id="editor-find-prev" title="Previous (Shift+Enter)">↑</button>
+                <button type="button" class="btn btn-text btn-sm" id="editor-find-next" title="Next (Enter)">↓</button>
+                <button type="button" class="btn btn-text btn-sm" id="editor-find-close" aria-label="Close find bar">✕</button>
+              </div>
               <div class="editor-content-wrap" id="editor-content-wrap">
                 <div class="editor-code-wrap">
                   <textarea id="editor-area" class="code-area" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Open or create a workspace to start editing…"></textarea>

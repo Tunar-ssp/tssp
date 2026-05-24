@@ -617,5 +617,80 @@ window.Tssp = window.Tssp || {};
         T.openEditorDocument(documentButton.dataset.editorDocument);
       }
     });
+
+    // Find bar
+    let findMatches = [];
+    let findIndex = 0;
+
+    function updateFindBar() {
+      const query = T.$("#editor-find-input")?.value || "";
+      const countEl = T.$("#editor-find-count");
+      if (!query) { findMatches = []; findIndex = 0; if (countEl) countEl.textContent = ""; return; }
+      const text = area.value;
+      const lower = text.toLowerCase();
+      const q = query.toLowerCase();
+      findMatches = [];
+      let pos = 0;
+      while ((pos = lower.indexOf(q, pos)) !== -1) { findMatches.push(pos); pos += q.length; }
+      if (findMatches.length === 0) {
+        if (countEl) countEl.textContent = "No results";
+        findIndex = 0;
+      } else {
+        findIndex = Math.min(findIndex, findMatches.length - 1);
+        if (countEl) countEl.textContent = `${findIndex + 1} / ${findMatches.length}`;
+        area.focus();
+        area.selectionStart = findMatches[findIndex];
+        area.selectionEnd = findMatches[findIndex] + query.length;
+        updateStatusBar();
+      }
+    }
+
+    function findNavigate(dir) {
+      if (!findMatches.length) return;
+      findIndex = (findIndex + dir + findMatches.length) % findMatches.length;
+      const query = T.$("#editor-find-input")?.value || "";
+      const countEl = T.$("#editor-find-count");
+      if (countEl) countEl.textContent = `${findIndex + 1} / ${findMatches.length}`;
+      area.focus();
+      area.selectionStart = findMatches[findIndex];
+      area.selectionEnd = findMatches[findIndex] + query.length;
+      updateStatusBar();
+    }
+
+    T.openEditorFind = function openEditorFind() {
+      const bar = T.$("#editor-find-bar");
+      if (!bar) return;
+      bar.classList.remove("hidden");
+      const input = T.$("#editor-find-input");
+      // Pre-fill with selected text if any
+      const sel = area.value.slice(area.selectionStart, area.selectionEnd);
+      if (sel && !sel.includes("\n")) input.value = sel;
+      input.focus();
+      input.select();
+      updateFindBar();
+    };
+
+    T.closeEditorFind = function closeEditorFind() {
+      T.$("#editor-find-bar")?.classList.add("hidden");
+      findMatches = [];
+      area.focus();
+    };
+
+    T.$("#editor-find-input")?.addEventListener("input", updateFindBar);
+    T.$("#editor-find-input")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); findNavigate(e.shiftKey ? -1 : 1); }
+      if (e.key === "Escape") T.closeEditorFind();
+    });
+    T.$("#editor-find-prev")?.addEventListener("click", () => findNavigate(-1));
+    T.$("#editor-find-next")?.addEventListener("click", () => findNavigate(1));
+    T.$("#editor-find-close")?.addEventListener("click", () => T.closeEditorFind());
+
+    // Add Ctrl+F to editor area keydown
+    area.addEventListener("keydown", (evt) => {
+      if ((evt.ctrlKey || evt.metaKey) && evt.key === "f") {
+        evt.preventDefault();
+        T.openEditorFind();
+      }
+    });
   };
 })(window.Tssp);
