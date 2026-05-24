@@ -14,6 +14,7 @@ window.Tssp = window.Tssp || {};
     const list = T.$("#note-tag-chips-list");
     if (!list) return;
     list.innerHTML = tags
+      .filter((tag) => !tag.startsWith("color:"))
       .map(
         (tag) =>
           `<span class="tag-chip">${T.escapeHtml(tag)}<button type="button" class="tag-chip-remove" data-remove-tag="${T.escapeHtml(tag)}" aria-label="Remove tag ${T.escapeHtml(tag)}">×</button></span>`
@@ -106,6 +107,7 @@ window.Tssp = window.Tssp || {};
     const tagCounts = new Map();
     for (const note of T.allNotes) {
       for (const tag of note.tags || []) {
+        if (tag.startsWith("color:")) continue;
         tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
       }
     }
@@ -167,9 +169,21 @@ window.Tssp = window.Tssp || {};
     T.updateNotesCount(notes.length);
   };
 
+  const NOTE_COLORS = ["red", "orange", "yellow", "green", "blue", "purple", "pink", "gray"];
+
+  function noteColor(note) {
+    const tag = (note.tags || []).find((t) => t.startsWith("color:"));
+    return tag ? tag.slice(6) : null;
+  }
+
+  function visibleTags(note) {
+    return (note.tags || []).filter((t) => !t.startsWith("color:"));
+  }
+
   function noteCard(note) {
     const id = T.escapeHtml(note.id);
     const pinned = note.pinned_at != null;
+    const color = noteColor(note);
     const preview = (note.body || "")
       .trim()
       .replace(/^#+\s+/gm, "")
@@ -183,10 +197,11 @@ window.Tssp = window.Tssp || {};
       .replace(/\n+/g, " ")
       .trim()
       .slice(0, 180);
-    const tags = T.tagsHtml(note.tags);
+    const tags = T.tagsHtml(visibleTags(note));
     const dateStr = T.escapeHtml(T.formatDate(note.updated_at));
     const wordCount = (note.body || "").trim().split(/\s+/).filter(Boolean).length;
-    return `<article class="note-card${pinned ? " note-card-pinned" : ""}" role="button" tabindex="0" data-edit-note="${id}" aria-label="Open note ${T.escapeHtml(note.title || "Untitled")}">
+    const colorClass = color ? ` note-card-color-${T.escapeHtml(color)}` : "";
+    return `<article class="note-card${pinned ? " note-card-pinned" : ""}${colorClass}" role="button" tabindex="0" data-edit-note="${id}" aria-label="Open note ${T.escapeHtml(note.title || "Untitled")}">
       <div class="note-card-header">
         <strong class="note-card-title">${T.escapeHtml(note.title || "Untitled")}</strong>
         ${pinned ? '<span class="note-pin-star" title="Pinned">★</span>' : ""}
@@ -251,6 +266,31 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  function renderColorPicker(tags) {
+    const current = (tags || []).find((t) => t.startsWith("color:"));
+    const currentColor = current ? current.slice(6) : "";
+    T.$("#note-color-picker")?.querySelectorAll(".note-color-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.color === currentColor);
+    });
+  }
+
+  function bindColorPicker() {
+    const picker = T.$("#note-color-picker");
+    if (!picker || picker.dataset.bound) return;
+    picker.dataset.bound = "1";
+    picker.addEventListener("click", (e) => {
+      const btn = e.target.closest(".note-color-btn");
+      if (!btn) return;
+      const color = btn.dataset.color;
+      // Remove any existing color tag
+      T.editingNoteTags = T.editingNoteTags.filter((t) => !t.startsWith("color:"));
+      if (color) T.editingNoteTags.push(`color:${color}`);
+      renderTagChips(T.editingNoteTags);
+      renderColorPicker(T.editingNoteTags);
+      scheduleTagSync();
+    });
+  }
+
   T.openNoteDialog = function openNoteDialog(note) {
     T.editingNoteId = note ? note.id : null;
     T.editingNoteTags = note ? note.tags || [] : [];
@@ -260,6 +300,8 @@ window.Tssp = window.Tssp || {};
     T.$("#note-title-input").value = note ? note.title || "" : "";
     T.$("#note-tags-input").value = "";
     renderTagChips(T.editingNoteTags);
+    renderColorPicker(T.editingNoteTags);
+    bindColorPicker();
     T.$("#note-pin-input").checked = T.editingNotePinned;
     T.$("#note-body-input").value = note ? note.body || "" : "";
     T.$("#note-save-status").textContent = "";

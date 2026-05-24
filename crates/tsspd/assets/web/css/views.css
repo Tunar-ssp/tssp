@@ -1548,3 +1548,50 @@
   color: var(--accent-light);
   flex: 1;
 }
+
+/* ── Note color picker ────────────────────────────────────────────────── */
+.note-color-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.note-color-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, transform 0.1s;
+}
+
+.note-color-btn.active {
+  border-color: var(--text);
+  transform: scale(1.2);
+}
+
+.note-color-none { background: var(--bg-surface); color: var(--text-dim); border-color: var(--border); }
+.note-color-red { background: #ef4444; }
+.note-color-orange { background: #f97316; }
+.note-color-yellow { background: #eab308; }
+.note-color-green { background: #22c55e; }
+.note-color-blue { background: #3b82f6; }
+.note-color-purple { background: #a855f7; }
+.note-color-pink { background: #ec4899; }
+.note-color-gray { background: #6b7280; }
+
+/* ── Note card color variants ─────────────────────────────────────────── */
+.note-card-color-red    { border-left: 3px solid #ef4444; }
+.note-card-color-orange { border-left: 3px solid #f97316; }
+.note-card-color-yellow { border-left: 3px solid #eab308; }
+.note-card-color-green  { border-left: 3px solid #22c55e; }
+.note-card-color-blue   { border-left: 3px solid #3b82f6; }
+.note-card-color-purple { border-left: 3px solid #a855f7; }
+.note-card-color-pink   { border-left: 3px solid #ec4899; }
+.note-card-color-gray   { border-left: 3px solid #6b7280; }
