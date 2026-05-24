@@ -6,6 +6,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection};
 use thiserror::Error;
+use tssp_domain::UserId;
 
 const MIGRATION_VERSION: i64 = 3;
 
@@ -26,6 +27,18 @@ pub struct AuthStore {
     pool: Pool<SqliteConnectionManager>,
 }
 
+/// Active auth token metadata exposed to internal admin flows.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthTokenRecord {
+    pub(crate) token: String,
+    pub(crate) kind: String,
+    pub(crate) user_id: Option<String>,
+    pub(crate) user_name: Option<String>,
+    pub(crate) role: Option<String>,
+    pub(crate) created_at: i64,
+    pub(crate) expires_at: i64,
+}
+
 impl AuthStore {
     /// Creates an auth store from an existing pool.
     pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
@@ -39,23 +52,22 @@ impl AuthStore {
     /// Returns an error when the database cannot be opened or migrated.
     pub fn open(path: &Path) -> Result<Self, AuthStoreError> {
         let manager = SqliteConnectionManager::file(path);
-        let pool = Pool::builder()
-            .max_size(10)
-            .build(manager)
-            .map_err(|e| AuthStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+        let pool = Pool::builder().max_size(10).build(manager).map_err(|e| {
+            AuthStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
+        })?;
 
-        let connection = pool
-            .get()
-            .map_err(|e| AuthStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+        let connection = pool.get().map_err(|e| {
+            AuthStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
+        })?;
 
         run_auth_migration(&connection)?;
         Ok(Self { pool })
     }
 
     fn connect(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, AuthStoreError> {
-        self.pool
-            .get()
-            .map_err(|e| AuthStoreError::Database(rusqlite::Error::from_error(Box::new(e))))
+        self.pool.get().map_err(|e| {
+            AuthStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
+        })
     }
 
     /// Returns the stored bcrypt password hash, if configured.
@@ -169,6 +181,80 @@ impl AuthStore {
         Ok(())
     }
 
+    /// Deletes a token and returns whether a row existed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the delete fails.
+    pub(crate) fn revoke_token_existing(&self, token: &str) -> Result<bool, AuthStoreError> {
+        let connection = self.connect()?;
+        let removed =
+            connection.execute("DELETE FROM auth_tokens WHERE token = ?1", params![token])?;
+        Ok(removed > 0)
+    }
+
+    /// Lists active auth tokens, optionally scoped to one user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the query fails.
+    pub(crate) fn list_tokens(
+        &self,
+        now: i64,
+        user_id: Option<&UserId>,
+        limit: u64,
+    ) -> Result<Vec<AuthTokenRecord>, AuthStoreError> {
+        let connection = self.connect()?;
+        let limit = match i64::try_from(limit.clamp(1, 500)) {
+            Ok(value) => value,
+            Err(_) => 500,
+        };
+
+        if let Some(user_id) = user_id {
+            let mut statement = connection.prepare(
+                "SELECT t.token, t.kind, t.user_id, u.name, u.role, t.created_at, t.expires_at
+                 FROM auth_tokens t
+                 LEFT JOIN users u ON u.id = t.user_id
+                 WHERE t.expires_at > ?1 AND t.user_id = ?2
+                 ORDER BY t.created_at DESC
+                 LIMIT ?3",
+            )?;
+            let rows = statement.query_map(params![now, user_id.as_str(), limit], map_token_row)?;
+            return rows
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(AuthStoreError::from);
+        }
+
+        let mut statement = connection.prepare(
+            "SELECT t.token, t.kind, t.user_id, u.name, u.role, t.created_at, t.expires_at
+             FROM auth_tokens t
+             LEFT JOIN users u ON u.id = t.user_id
+             WHERE t.expires_at > ?1
+             ORDER BY t.created_at DESC
+             LIMIT ?2",
+        )?;
+        let rows = statement.query_map(params![now, limit], map_token_row)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(AuthStoreError::from)
+    }
+
+    /// Revokes every token for a user and returns the number removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the delete fails.
+    pub(crate) fn revoke_all_tokens_for_user(
+        &self,
+        user_id: &UserId,
+    ) -> Result<u64, AuthStoreError> {
+        let connection = self.connect()?;
+        let removed = connection.execute(
+            "DELETE FROM auth_tokens WHERE user_id = ?1",
+            params![user_id.as_str()],
+        )?;
+        Ok(u64::try_from(removed).unwrap_or(0))
+    }
+
     /// Removes expired tokens.
     ///
     /// # Errors
@@ -216,4 +302,16 @@ fn run_auth_migration(connection: &Connection) -> Result<(), AuthStoreError> {
         params![MIGRATION_VERSION],
     )?;
     Ok(())
+}
+
+fn map_token_row(row: &rusqlite::Row<'_>) -> Result<AuthTokenRecord, rusqlite::Error> {
+    Ok(AuthTokenRecord {
+        token: row.get(0)?,
+        kind: row.get(1)?,
+        user_id: row.get(2)?,
+        user_name: row.get(3)?,
+        role: row.get(4)?,
+        created_at: row.get(5)?,
+        expires_at: row.get(6)?,
+    })
 }

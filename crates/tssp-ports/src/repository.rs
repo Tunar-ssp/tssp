@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use tssp_domain::{
-    ContentHash, FileId, FileRecord, FileName, NoteBody, NoteId, NoteRecord, NoteTitle, Tag,
+    ContentHash, FileId, FileName, FileRecord, NoteBody, NoteId, NoteRecord, NoteTitle, Tag,
     TagKey, UnixTimestamp, Visibility,
 };
 

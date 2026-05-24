@@ -10,9 +10,19 @@ window.Tssp = window.Tssp || {};
   T.editingNoteTags = [];
   T.editingNotePinned = false;
   T.editingWorkspaceId = null;
+  T.workspaceDialogSource = "workspaces";
   T.currentFolder = "";
   T.currentFiles = [];
   T.selectedFileIds = new Set();
+  T.editorCurrentWorkspaceId = null;
+  T.editorCurrentWorkspace = null;
+  T.editorCurrentDocumentId = null;
+  T.editorCurrentDocument = null;
+  T.editorDocuments = [];
+  T.editorWorkspaces = [];
+  T.editorDirty = false;
+  T.editorSaving = false;
+  T.editorDocumentDialogMode = "create";
 
   T.showLogin = function showLogin() {
     T.$("#login-screen").classList.remove("hidden");

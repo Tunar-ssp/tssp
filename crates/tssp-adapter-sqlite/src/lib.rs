@@ -17,7 +17,7 @@ use std::path::Path;
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, params_from_iter, types::Value, Connection};
+use rusqlite::{params, params_from_iter, types::Value};
 use tssp_domain::{ContentHash, FileId, FileName, FileRecord, Tag, TagKey, UnixTimestamp};
 use tssp_ports::{
     DeletedFileRecord, FileRepository, ListQuery, NewFileRecord, PagedFiles, RepositoryError,
@@ -57,13 +57,11 @@ impl SqliteFileRepository {
         let pool = Pool::builder()
             .max_size(10)
             .build(manager)
-            .map_err(|error| {
-                SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
-            })?;
+            .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
-        let connection = pool.get().map_err(|error| {
-            SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
-        })?;
+        let connection = pool
+            .get()
+            .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
         connection::configure_connection(&connection)?;
         connection::run_integrity_check(&connection)?;
@@ -83,13 +81,11 @@ impl SqliteFileRepository {
         let pool = Pool::builder()
             .max_size(1) // Single connection for in-memory tests to maintain state
             .build(manager)
-            .map_err(|error| {
-                SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
-            })?;
+            .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
-        let connection = pool.get().map_err(|error| {
-            SqliteRepositoryError::Open(rusqlite::Error::from_error(Box::new(error)))
-        })?;
+        let connection = pool
+            .get()
+            .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
         connection::configure_connection(&connection)?;
         connection::run_integrity_check(&connection)?;
@@ -843,7 +839,7 @@ impl FileRepository for SqliteFileRepository {
 pub enum SqliteRepositoryError {
     /// `SQLite` open failed.
     #[error("could not open sqlite database: {0}")]
-    Open(rusqlite::Error),
+    Open(String),
 
     /// `SQLite` setup failed.
     #[error("could not configure sqlite database: {0}")]

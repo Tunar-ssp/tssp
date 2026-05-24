@@ -17,6 +17,16 @@
     grid-template-columns: 1fr;
   }
 
+  .editor-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .editor-sidebar,
+  .editor-info-panel {
+    border: 1px solid var(--border);
+  }
+
   .admin-card-wide {
     grid-column: auto;
   }
@@ -77,6 +87,21 @@
   .table-card,
   .admin-card {
     overflow-x: auto;
+  }
+
+  .editor-topbar {
+    flex-wrap: wrap;
+  }
+
+  .editor-title-stack,
+  .editor-topbar-actions {
+    width: 100%;
+  }
+
+  .editor-doc-actions,
+  .editor-sidebar-actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .metric-grid {

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::{Cursor, Read};
+use std::path::Path;
 
 use tssp_domain::{
     ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag, TagKey,
@@ -67,6 +68,15 @@ impl BlobStore for FakeBlobStore {
                 }
             }
         }
+        Ok(self.outcome.clone())
+    }
+
+    fn put_staged(
+        &self,
+        _temp_path: &Path,
+        _content_hash: &ContentHash,
+        _size: FileSize,
+    ) -> Result<BlobWriteOutcome, BlobStoreError> {
         Ok(self.outcome.clone())
     }
 
@@ -362,6 +372,9 @@ fn upload_streams_blob_and_inserts_metadata() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);
@@ -397,6 +410,9 @@ fn deduplicated_upload_returns_existing_record_without_insert() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);
@@ -429,6 +445,9 @@ fn upload_cleans_blob_when_metadata_commit_fails() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);
@@ -465,6 +484,9 @@ fn upload_rejects_invalid_request_metadata_before_storage() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);
@@ -492,6 +514,9 @@ fn upload_reports_id_generation_failure_after_blob_write() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);
@@ -518,6 +543,9 @@ fn upload_reports_blob_read_failure() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);
@@ -549,6 +577,9 @@ fn deduplicated_upload_reports_lookup_failure() {
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
         source: &mut source,
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let result = service.upload(&mut request);

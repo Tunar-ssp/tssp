@@ -85,6 +85,7 @@ pub enum DeleteFileError {
 mod tests {
     use std::cell::RefCell;
     use std::io::Read;
+    use std::path::Path;
 
     use tssp_domain::{
         ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag, TagKey,
@@ -105,6 +106,17 @@ mod tests {
 
     impl BlobStore for FakeBlobStore {
         fn put_stream(&self, _source: &mut dyn Read) -> Result<BlobWriteOutcome, BlobStoreError> {
+            Err(BlobStoreError::WriteFailed {
+                message: "not used by delete tests".to_owned(),
+            })
+        }
+
+        fn put_staged(
+            &self,
+            _temp_path: &Path,
+            _content_hash: &ContentHash,
+            _size: FileSize,
+        ) -> Result<BlobWriteOutcome, BlobStoreError> {
             Err(BlobStoreError::WriteFailed {
                 message: "not used by delete tests".to_owned(),
             })

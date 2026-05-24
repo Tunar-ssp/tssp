@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use tokio::net::TcpListener;
 use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::{SqliteFileRepository, SqliteSessionRepository};
@@ -139,7 +141,9 @@ fn create_connection_pool(metadata_path: &Path) -> Result<Pool<SqliteConnectionM
         .map_err(|e| format!("could not create metadata connection pool: {e}"))
 }
 
-fn open_repository(pool: Pool<SqliteConnectionManager>) -> Result<Arc<SqliteFileRepository>, String> {
+fn open_repository(
+    pool: Pool<SqliteConnectionManager>,
+) -> Result<Arc<SqliteFileRepository>, String> {
     Ok(Arc::new(SqliteFileRepository::new(pool)))
 }
 

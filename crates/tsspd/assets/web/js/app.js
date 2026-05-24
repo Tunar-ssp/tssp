@@ -137,9 +137,7 @@
       if (typeof T.refreshNotePreview === "function") T.refreshNotePreview();
     });
 
-    T.$("#note-body-input")?.addEventListener("input", () => {
-      if (typeof T.refreshNotePreview === "function") T.refreshNotePreview();
-    });
+    if (typeof T.bindNoteEditorEvents === "function") T.bindNoteEditorEvents();
 
     T.$("#new-workspace-btn")?.addEventListener("click", () => {
       if (typeof T.openWorkspaceDialog === "function") T.openWorkspaceDialog(null);
@@ -241,9 +239,19 @@
         T.adminRevokeUserDevices(adminRevokeUserDevices.dataset.adminRevokeUserDevices);
         return;
       }
+      const adminRevokeUserSessions = ev.target.closest("[data-admin-revoke-user-sessions]");
+      if (adminRevokeUserSessions && typeof T.adminRevokeUserSessions === "function") {
+        T.adminRevokeUserSessions(adminRevokeUserSessions.dataset.adminRevokeUserSessions);
+        return;
+      }
       const adminRevokeDevice = ev.target.closest("[data-admin-revoke-device]");
       if (adminRevokeDevice && typeof T.adminRevokeDevice === "function") {
         T.adminRevokeDevice(adminRevokeDevice.dataset.adminRevokeDevice);
+        return;
+      }
+      const adminRevokeSession = ev.target.closest("[data-admin-revoke-session]");
+      if (adminRevokeSession && typeof T.adminRevokeSession === "function") {
+        T.adminRevokeSession(adminRevokeSession.dataset.adminRevokeSession);
         return;
       }
       const adminDeleteFile = ev.target.closest("[data-admin-delete-file]");
@@ -292,6 +300,15 @@
       const vis = ev.target.closest("[data-vis]");
       if (vis && typeof T.setFileVisibility === "function") {
         T.setFileVisibility(vis.dataset.vis, vis.dataset.v);
+      }
+    });
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const card = ev.target.closest(".note-card[data-edit-note]");
+      if (card && ev.target === card && typeof T.openNote === "function") {
+        ev.preventDefault();
+        T.openNote(card.dataset.editNote);
       }
     });
 

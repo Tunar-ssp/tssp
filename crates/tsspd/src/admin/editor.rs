@@ -1,16 +1,18 @@
 //! Admin-only code editor endpoints for workspace management.
 //!
-//! Admins can view and open any user's workspace. These endpoints are distinct
-//! from the regular `/api/v1/workspaces` routes which scope to the caller's own
-//! workspaces (unless the caller is already an admin).
+//! Admins can inspect and edit any user's workspace and its stored documents.
+//! The editor is intentionally limited to structured document operations: no
+//! shell access, no filesystem paths, and no code execution.
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use tssp_ports::Clock;
 
 use crate::auth::AuthContext;
+use crate::workspaces::{WorkspaceDocumentSummary, WorkspaceError};
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
 #[derive(Debug, Serialize)]
@@ -29,12 +31,40 @@ struct EditorWorkspaceSummary {
 }
 
 #[derive(Debug, Serialize)]
+struct EditorWorkspaceDetail {
+    schema_version: u8,
+    workspace: crate::workspaces::WorkspaceRecord,
+    documents: Vec<WorkspaceDocumentSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct EditorDocumentList {
+    schema_version: u8,
+    documents: Vec<WorkspaceDocumentSummary>,
+}
+
+#[derive(Debug, Serialize)]
 struct ExecutionCheckResponse {
     execution_disabled: bool,
     message: &'static str,
 }
 
-fn forbidden() -> axum::response::Response {
+#[derive(Debug, Deserialize)]
+pub(crate) struct EditorDocumentBody {
+    path: String,
+    #[serde(default = "default_language")]
+    language: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    make_primary: bool,
+}
+
+fn default_language() -> String {
+    "text".to_owned()
+}
+
+fn forbidden() -> Response {
     (
         StatusCode::FORBIDDEN,
         Json(ErrorResponse {
@@ -47,12 +77,25 @@ fn forbidden() -> axum::response::Response {
         .into_response()
 }
 
-fn internal_error(message: String) -> axum::response::Response {
+fn unavailable() -> Response {
     (
-        StatusCode::INTERNAL_SERVER_ERROR,
+        StatusCode::SERVICE_UNAVAILABLE,
         Json(ErrorResponse {
             error: ErrorBody {
-                code: "internal_error",
+                code: "workspaces_unavailable",
+                message: "workspace store is not configured".to_owned(),
+            },
+        }),
+    )
+        .into_response()
+}
+
+fn error_response(code: StatusCode, error_code: &'static str, message: String) -> Response {
+    (
+        code,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: error_code,
                 message,
             },
         }),
@@ -60,9 +103,34 @@ fn internal_error(message: String) -> axum::response::Response {
         .into_response()
 }
 
+fn editor_error(error: WorkspaceError, conflict_message: &'static str) -> Response {
+    match error {
+        WorkspaceError::NotFound => error_response(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "workspace or document not found".to_owned(),
+        ),
+        WorkspaceError::Conflict => error_response(
+            StatusCode::CONFLICT,
+            "workspace_conflict",
+            conflict_message.to_owned(),
+        ),
+        WorkspaceError::InvalidOperation(message) => {
+            error_response(StatusCode::BAD_REQUEST, "invalid_request", message)
+        }
+        WorkspaceError::Database(error) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            error.to_string(),
+        ),
+    }
+}
+
+fn now_seconds() -> i64 {
+    tssp_adapter_system::SystemClock.now().seconds()
+}
+
 /// `GET /api/v1/admin/editor/workspaces`
-///
-/// Lists all workspaces across all users. Admin-only.
 pub(crate) async fn admin_editor_list_workspaces(
     State(state): State<HttpState>,
     auth: AuthContext,
@@ -71,18 +139,18 @@ pub(crate) async fn admin_editor_list_workspaces(
         return forbidden();
     }
     let Some(store) = state.workspaces.as_deref() else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return unavailable();
     };
     match store.list_all() {
         Ok(items) => {
             let summaries = items
                 .into_iter()
-                .map(|w| EditorWorkspaceSummary {
-                    id: w.id,
-                    owner_id: w.owner_id,
-                    name: w.name,
-                    language: w.language,
-                    updated_at: w.updated_at,
+                .map(|workspace| EditorWorkspaceSummary {
+                    id: workspace.id,
+                    owner_id: workspace.owner_id,
+                    name: workspace.name,
+                    language: workspace.language,
+                    updated_at: workspace.updated_at,
                 })
                 .collect();
             (
@@ -94,13 +162,11 @@ pub(crate) async fn admin_editor_list_workspaces(
             )
                 .into_response()
         }
-        Err(error) => internal_error(error.to_string()),
+        Err(error) => editor_error(error, "workspace list could not be loaded"),
     }
 }
 
 /// `GET /api/v1/admin/editor/workspaces/{id}`
-///
-/// Returns any workspace by id. Admin-only.
 pub(crate) async fn admin_editor_get_workspace(
     State(state): State<HttpState>,
     auth: AuthContext,
@@ -110,29 +176,147 @@ pub(crate) async fn admin_editor_get_workspace(
         return forbidden();
     }
     let Some(store) = state.workspaces.as_deref() else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        return unavailable();
     };
-    match store.get(&id, None) {
-        Ok(record) => (StatusCode::OK, Json(record)).into_response(),
-        Err(crate::workspaces::WorkspaceError::NotFound) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "not_found",
-                    message: "workspace not found".to_owned(),
-                },
+    match (store.get(&id, None), store.list_documents(&id, None)) {
+        (Ok(workspace), Ok(documents)) => (
+            StatusCode::OK,
+            Json(EditorWorkspaceDetail {
+                schema_version: 1,
+                workspace,
+                documents,
             }),
         )
             .into_response(),
-        Err(error) => internal_error(error.to_string()),
+        (Err(error), _) | (_, Err(error)) => {
+            editor_error(error, "workspace detail could not be loaded")
+        }
+    }
+}
+
+/// `GET /api/v1/admin/editor/workspaces/{id}/documents`
+pub(crate) async fn admin_editor_list_documents(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if !auth.is_admin() {
+        return forbidden();
+    }
+    let Some(store) = state.workspaces.as_deref() else {
+        return unavailable();
+    };
+    match store.list_documents(&id, None) {
+        Ok(documents) => (
+            StatusCode::OK,
+            Json(EditorDocumentList {
+                schema_version: 1,
+                documents,
+            }),
+        )
+            .into_response(),
+        Err(error) => editor_error(error, "workspace documents could not be loaded"),
+    }
+}
+
+/// `POST /api/v1/admin/editor/workspaces/{id}/documents`
+pub(crate) async fn admin_editor_create_document(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Path(id): Path<String>,
+    Json(body): Json<EditorDocumentBody>,
+) -> impl IntoResponse {
+    if !auth.is_admin() {
+        return forbidden();
+    }
+    let Some(store) = state.workspaces.as_deref() else {
+        return unavailable();
+    };
+    match store.create_document(
+        &id,
+        None,
+        &body.path,
+        &body.language,
+        body.body,
+        body.make_primary,
+        now_seconds(),
+    ) {
+        Ok(document) => (StatusCode::CREATED, Json(document)).into_response(),
+        Err(error) => editor_error(
+            error,
+            "a document with this path already exists in the workspace",
+        ),
+    }
+}
+
+/// `GET /api/v1/admin/editor/workspaces/{id}/documents/{document_id}`
+pub(crate) async fn admin_editor_get_document(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Path((workspace_id, document_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !auth.is_admin() {
+        return forbidden();
+    }
+    let Some(store) = state.workspaces.as_deref() else {
+        return unavailable();
+    };
+    match store.get_document(&workspace_id, &document_id, None) {
+        Ok(document) => (StatusCode::OK, Json(document)).into_response(),
+        Err(error) => editor_error(error, "workspace document could not be loaded"),
+    }
+}
+
+/// `PUT /api/v1/admin/editor/workspaces/{id}/documents/{document_id}`
+pub(crate) async fn admin_editor_update_document(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Path((workspace_id, document_id)): Path<(String, String)>,
+    Json(body): Json<EditorDocumentBody>,
+) -> impl IntoResponse {
+    if !auth.is_admin() {
+        return forbidden();
+    }
+    let Some(store) = state.workspaces.as_deref() else {
+        return unavailable();
+    };
+    match store.update_document(
+        &workspace_id,
+        &document_id,
+        None,
+        &body.path,
+        &body.language,
+        body.body,
+        body.make_primary,
+        now_seconds(),
+    ) {
+        Ok(document) => (StatusCode::OK, Json(document)).into_response(),
+        Err(error) => editor_error(
+            error,
+            "a document with this path already exists in the workspace",
+        ),
+    }
+}
+
+/// `DELETE /api/v1/admin/editor/workspaces/{id}/documents/{document_id}`
+pub(crate) async fn admin_editor_delete_document(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Path((workspace_id, document_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !auth.is_admin() {
+        return forbidden();
+    }
+    let Some(store) = state.workspaces.as_deref() else {
+        return unavailable();
+    };
+    match store.delete_document(&workspace_id, &document_id, None, now_seconds()) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => editor_error(error, "workspace document could not be deleted"),
     }
 }
 
 /// `POST /api/v1/admin/editor/check`
-///
-/// Safe stub: returns a fixed message indicating execution is disabled.
-/// This endpoint exists so the frontend can surface a clear "not available"
-/// message rather than guessing.
 pub(crate) async fn admin_editor_check(auth: AuthContext) -> impl IntoResponse {
     if !auth.is_admin() {
         return forbidden();
@@ -145,4 +329,175 @@ pub(crate) async fn admin_editor_check(auth: AuthContext) -> impl IntoResponse {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use std::sync::Arc;
+
+    use axum::body::{to_bytes, Body};
+    use axum::http::{Request, StatusCode};
+    use axum::middleware;
+    use axum::routing::{get, post};
+    use axum::Router;
+    use serde_json::json;
+    use tempfile::TempDir;
+    use tower::ServiceExt;
+    use tssp_adapter_sqlite::SqliteFileRepository;
+    use tssp_domain::{UserId, UserRole};
+
+    use super::{
+        admin_editor_create_document, admin_editor_get_workspace, admin_editor_list_workspaces,
+    };
+    use crate::auth::AuthContext;
+    use crate::workspaces::{
+        create_workspace, delete_workspace, get_workspace, update_workspace, WorkspaceStore,
+    };
+    use crate::{HttpState, PublicUrlBuilder};
+
+    fn auth(user: &str, role: UserRole) -> AuthContext {
+        AuthContext {
+            user_id: UserId::new(user).expect("valid user"),
+            role,
+            session_token: Some("session".to_owned()),
+            device_token: None,
+        }
+    }
+
+    fn open_store() -> (TempDir, WorkspaceStore) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = temp.path().join("metadata.sqlite3");
+        let _repository = SqliteFileRepository::open(&db).expect("repository");
+        let store = WorkspaceStore::open(&db).expect("workspace store");
+        (temp, store)
+    }
+
+    fn app(store: WorkspaceStore, auth: AuthContext) -> Router {
+        let settings = Arc::new(crate::DaemonSettings::default());
+        let state = HttpState::new(
+            std::time::Instant::now(),
+            std::path::PathBuf::from("/tmp"),
+            settings.clone(),
+            PublicUrlBuilder::from_settings(&settings),
+            0,
+        )
+        .with_workspaces(Arc::new(store));
+        Router::new()
+            .route("/api/v1/workspaces", post(create_workspace))
+            .route(
+                "/api/v1/workspaces/{id}",
+                get(get_workspace)
+                    .put(update_workspace)
+                    .delete(delete_workspace),
+            )
+            .route(
+                "/api/v1/admin/editor/workspaces",
+                get(admin_editor_list_workspaces),
+            )
+            .route(
+                "/api/v1/admin/editor/workspaces/{id}",
+                get(admin_editor_get_workspace),
+            )
+            .route(
+                "/api/v1/admin/editor/workspaces/{id}/documents",
+                post(admin_editor_create_document),
+            )
+            .layer(middleware::from_fn(
+                move |mut request: axum::extract::Request, next: axum::middleware::Next| {
+                    let auth = auth.clone();
+                    async move {
+                        request.extensions_mut().insert(auth);
+                        next.run(request).await
+                    }
+                },
+            ))
+            .with_state(state)
+    }
+
+    async fn request_json(
+        router: &Router,
+        method: &str,
+        uri: &str,
+        body: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .expect("request");
+        let response = router.clone().oneshot(request).await.expect("response");
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let value = if bytes.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::from_slice(&bytes).expect("json")
+        };
+        (status, value)
+    }
+
+    #[tokio::test]
+    async fn non_admin_cannot_use_editor_routes() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-tunar", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/admin/editor/workspaces")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn admin_editor_exposes_workspace_documents() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-admin", UserRole::Admin));
+
+        let (status, created) = request_json(
+            &router,
+            "POST",
+            "/api/v1/workspaces",
+            json!({
+                "name": "Automation",
+                "language": "markdown",
+                "body": "# Launch"
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let workspace_id = created["id"].as_str().expect("workspace id");
+
+        let request = Request::builder()
+            .uri(format!("/api/v1/admin/editor/workspaces/{workspace_id}"))
+            .body(Body::empty())
+            .expect("request");
+        let response = router.clone().oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let detail: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(detail["documents"].as_array().map(Vec::len), Some(1));
+
+        let (status, document) = request_json(
+            &router,
+            "POST",
+            &format!("/api/v1/admin/editor/workspaces/{workspace_id}/documents"),
+            json!({
+                "path": "scripts/deploy.sh",
+                "language": "bash",
+                "body": "echo ready",
+                "make_primary": false
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(document["path"], "scripts/deploy.sh");
+    }
 }

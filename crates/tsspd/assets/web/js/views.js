@@ -309,7 +309,8 @@ window.Tssp = window.Tssp || {};
     }
   };
 
-  T.openWorkspaceDialog = function openWorkspaceDialog(workspace) {
+  T.openWorkspaceDialog = function openWorkspaceDialog(workspace, options) {
+    T.workspaceDialogSource = options?.source || "workspaces";
     T.editingWorkspaceId = workspace ? workspace.id : null;
     T.$("#workspace-dialog-title").textContent = workspace ? "Edit workspace" : "New workspace";
     T.$("#workspace-name-input").value = workspace ? workspace.name || "" : "";
@@ -329,17 +330,25 @@ window.Tssp = window.Tssp || {};
       return;
     }
     try {
-      if (T.editingWorkspaceId) {
-        await T.api("/workspaces/" + encodeURIComponent(T.editingWorkspaceId), {
+      let savedId = T.editingWorkspaceId;
+      if (savedId) {
+        await T.api("/workspaces/" + encodeURIComponent(savedId), {
           method: "PUT",
           body: JSON.stringify(payload),
         });
       } else {
-        await T.api("/workspaces", { method: "POST", body: JSON.stringify(payload) });
+        const created = await T.api("/workspaces", { method: "POST", body: JSON.stringify(payload) });
+        savedId = created.id;
       }
       T.$("#workspace-dialog").close();
       T.showBanner("Workspace saved", "success");
       T.loadWorkspaces();
+      if (typeof T.loadEditorWorkspaces === "function") {
+        await T.loadEditorWorkspaces();
+      }
+      if (T.workspaceDialogSource === "editor" && savedId && typeof T.openEditorWorkspace === "function") {
+        await T.openEditorWorkspace(savedId);
+      }
     } catch (error) {
       T.showBanner(error.message, "error");
     }

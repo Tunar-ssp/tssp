@@ -261,3 +261,19 @@
 .objects-main {
   min-width: 0;
 }
+
+#view-note-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--top-height) - 60px);
+}
+
+#view-note-editor .note-full-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#view-note-editor .note-full-editor-grid {
+  flex: 1;
+}

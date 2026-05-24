@@ -53,11 +53,9 @@ where
             .unwrap_or_else(MimeType::octet_stream);
         let tags = normalize_tags(request.tags)?;
 
-        let blob = if let (Some(path), Some(hash), Some(size)) = (
-            &request.staged_path,
-            &request.content_hash,
-            &request.size,
-        ) {
+        let blob = if let (Some(path), Some(hash), Some(size)) =
+            (&request.staged_path, &request.content_hash, &request.size)
+        {
             self.blob_store.put_staged(path, hash, *size)?
         } else {
             self.blob_store.put_stream(request.source)?

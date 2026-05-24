@@ -10,6 +10,8 @@ description = "Filesystem blob storage adapter for TSSP"
 
 [dependencies]
 blake3.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 tssp-domain = { path = "../tssp-domain" }
 tssp-ports = { path = "../tssp-ports" }
 

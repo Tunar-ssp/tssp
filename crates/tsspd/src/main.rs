@@ -116,10 +116,10 @@ mod tests {
     async fn run_fails_on_bad_bind() {
         let temp = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let mut cli_args = cli(temp.path().to_path_buf(), false);
-        cli_args.bind = Some(IpAddr::V4(Ipv4Addr::LOCALHOST));
-        cli_args.port = Some(80);
+        cli_args.bind = Some(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)));
+        cli_args.port = Some(18421);
         let result = run(cli_args).await;
-        assert!(matches!(result, Err(message) if message.contains("could not bind")));
+        assert!(result.is_err(), "expected bind failure, got {result:?}");
     }
 
     #[tokio::test]

@@ -120,6 +120,108 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn admin_can_list_and_revoke_sessions() {
+        let (_temp, app) = auth_app(true);
+        let admin_token = login_token(&app, "Tunar", "admin-code").await;
+        let user_token = login_token(&app, "Alice", "user-code").await;
+
+        let (status, body) = json_request(
+            &app,
+            "GET",
+            "/api/v1/admin/sessions?limit=10",
+            None,
+            Some(&admin_token),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let sessions = serde_json::from_str::<serde_json::Value>(&body).expect("sessions json");
+        let items = sessions
+            .get("sessions")
+            .and_then(serde_json::Value::as_array)
+            .expect("session list");
+        assert!(items.iter().any(|item| {
+            item.get("token")
+                .and_then(serde_json::Value::as_str)
+                .map(|token| token == admin_token)
+                .unwrap_or(false)
+                && item
+                    .get("current")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+        }));
+        assert!(items.iter().any(|item| {
+            item.get("token")
+                .and_then(serde_json::Value::as_str)
+                .map(|token| token == user_token)
+                .unwrap_or(false)
+        }));
+
+        let path = format!("/api/v1/admin/sessions/{user_token}");
+        let (status, _) = json_request(&app, "DELETE", &path, None, Some(&admin_token)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let (status, _) = json_request(
+            &app,
+            "GET",
+            "/api/v1/files?limit=1",
+            None,
+            Some(&user_token),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn admin_can_revoke_all_sessions_for_user() {
+        let (_temp, app) = auth_app(true);
+        let admin_token = login_token(&app, "Tunar", "admin-code").await;
+        let user_token_a = login_token(&app, "Alice", "user-code").await;
+        let user_token_b = login_token(&app, "Alice", "user-code").await;
+
+        let (status, body) = json_request(
+            &app,
+            "DELETE",
+            "/api/v1/admin/users/user-alice/sessions",
+            None,
+            Some(&admin_token),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("\"removed\":2"));
+
+        let (status, body) = json_request(
+            &app,
+            "GET",
+            "/api/v1/admin/sessions?user_id=user-alice",
+            None,
+            Some(&admin_token),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("\"sessions\":[]"));
+
+        let (status, _) = json_request(
+            &app,
+            "GET",
+            "/api/v1/files?limit=1",
+            None,
+            Some(&user_token_a),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let (status, _) = json_request(
+            &app,
+            "GET",
+            "/api/v1/files?limit=1",
+            None,
+            Some(&user_token_b),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn global_mode_requires_auth_for_files_list() {
         let (_temp, app) = auth_app(true);
         let (status, _) = json_request(&app, "GET", "/api/v1/files?limit=1", None, None).await;

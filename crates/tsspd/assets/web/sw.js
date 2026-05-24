@@ -1,5 +1,5 @@
 /* Minimal offline shell cache for TSSP dashboard */
-const CACHE = "tssp-v3";
+const CACHE = "tssp-v4";
 const ASSETS = [
   "/",
   "/assets/css/tokens.css",

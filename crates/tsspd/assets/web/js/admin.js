@@ -3,6 +3,19 @@ window.Tssp = window.Tssp || {};
 (function (T) {
   "use strict";
 
+  function sysBar(label, detail, pct) {
+    const color = pct > 85 ? "var(--danger)" : pct > 65 ? "var(--warning)" : "var(--accent)";
+    return `<div class="sys-bar-row">
+      <div class="sys-bar-head">
+        <span class="sys-bar-label">${T.escapeHtml(label)}</span>
+        <span class="sys-bar-detail">${T.escapeHtml(detail)}</span>
+      </div>
+      <div class="sys-bar-track">
+        <div class="sys-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+    </div>`;
+  }
+
   function renderAdminUsers(users) {
     if (!users.length) return '<div class="empty-state compact">No users configured.</div>';
     return `<table class="data-table compact-table">
@@ -17,6 +30,7 @@ window.Tssp = window.Tssp || {};
             <td class="col-actions">
               <button type="button" class="btn btn-text btn-sm" data-admin-role="${T.escapeHtml(user.id)}" data-role="${nextRole}">Make ${nextRole}</button>
               <button type="button" class="btn btn-text btn-sm" data-admin-reset-code="${T.escapeHtml(user.id)}">Reset code</button>
+              <button type="button" class="btn btn-text btn-sm" data-admin-revoke-user-sessions="${T.escapeHtml(user.id)}">Revoke sessions</button>
               <button type="button" class="btn btn-text btn-sm" data-admin-revoke-user-devices="${T.escapeHtml(user.id)}">Revoke devices</button>
               <button type="button" class="btn btn-text btn-sm btn-danger" data-admin-delete-user="${T.escapeHtml(user.id)}">Delete</button>
             </td>
@@ -40,6 +54,29 @@ window.Tssp = window.Tssp || {};
             <td class="col-actions"><button type="button" class="btn btn-text btn-sm btn-danger" data-admin-revoke-device="${T.escapeHtml(device.device_token)}">Revoke</button></td>
           </tr>`
         )
+        .join("")}</tbody>
+    </table>`;
+  }
+
+  function renderAdminSessions(sessions) {
+    if (!sessions.length) return '<div class="empty-state compact">No active sessions.</div>';
+    return `<table class="data-table compact-table">
+      <thead><tr><th>User</th><th>Kind</th><th>Created</th><th>Expires</th><th class="col-actions">Actions</th></tr></thead>
+      <tbody>${sessions
+        .map((session) => {
+          const userName = session.user_name || session.user_id || "Legacy";
+          const role = session.role ? `<span class="tag">${T.escapeHtml(session.role)}</span>` : "";
+          const current = session.current ? '<span class="state-badge public">Current</span>' : "";
+          return `<tr>
+            <td><strong>${T.escapeHtml(userName)}</strong><div class="row-meta mono">${T.escapeHtml(session.user_id || session.token_preview)} ${role}${current}</div></td>
+            <td><span class="type-pill">${T.escapeHtml(session.kind)}</span></td>
+            <td>${T.escapeHtml(T.formatDate(session.created_at))}</td>
+            <td>${T.escapeHtml(T.formatDate(session.expires_at))}</td>
+            <td class="col-actions">
+              <button type="button" class="btn btn-text btn-sm btn-danger" data-admin-revoke-session="${T.escapeHtml(session.token)}">Revoke</button>
+            </td>
+          </tr>`;
+        })
         .join("")}</tbody>
     </table>`;
   }
@@ -83,16 +120,19 @@ window.Tssp = window.Tssp || {};
     const system = T.$("#admin-system");
     const usersEl = T.$("#admin-users");
     const devicesEl = T.$("#admin-devices");
+    const sessionsEl = T.$("#admin-sessions");
     overview.innerHTML = "Loading…";
     system.innerHTML = "Loading…";
     usersEl.innerHTML = "Loading…";
     devicesEl.innerHTML = "Loading…";
+    sessionsEl.innerHTML = "Loading…";
     try {
-      const [ov, sys, users, devices] = await Promise.all([
+      const [ov, sys, users, devices, sessions] = await Promise.all([
         T.api("/admin/overview"),
         T.api("/admin/system"),
         T.api("/admin/users"),
         T.api("/admin/devices"),
+        T.api("/admin/sessions?limit=100"),
       ]);
       overview.innerHTML = `<dl class="admin-dl">
         <dt>Files</dt><dd>${ov.file_count}</dd>
@@ -103,15 +143,23 @@ window.Tssp = window.Tssp || {};
         <dt>Storage</dt><dd>${T.escapeHtml(T.formatBytes(ov.storage_bytes_used))}</dd>
         <dt>Version</dt><dd>${T.escapeHtml(ov.version || "—")}</dd>
       </dl>`;
+      const memUsed = (sys.total_memory_bytes || 0) - (sys.available_memory_bytes || 0);
+      const memPct = sys.total_memory_bytes > 0 ? Math.round(memUsed / sys.total_memory_bytes * 100) : 0;
+      const diskUsed = (sys.data_dir_total_bytes || 0) - (sys.data_dir_free_bytes || 0);
+      const diskPct = sys.data_dir_total_bytes > 0 ? Math.round(diskUsed / sys.data_dir_total_bytes * 100) : 0;
+      const loadPct = Math.min(100, Math.round((sys.load_average_1m || 0) * 50));
       system.innerHTML = `<dl class="admin-dl">
         <dt>Host</dt><dd>${T.escapeHtml(sys.hostname)}</dd>
         <dt>OS</dt><dd>${T.escapeHtml(sys.os)} / ${T.escapeHtml(sys.arch)}</dd>
-        <dt>Load 1m</dt><dd>${Number(sys.load_average_1m || 0).toFixed(2)}</dd>
-        <dt>Memory</dt><dd>${T.escapeHtml(T.formatBytes(sys.available_memory_bytes))} free / ${T.escapeHtml(T.formatBytes(sys.total_memory_bytes))}</dd>
-        <dt>Data disk</dt><dd>${T.escapeHtml(T.formatBytes(sys.data_dir_free_bytes))} free / ${T.escapeHtml(T.formatBytes(sys.data_dir_total_bytes))}</dd>
-      </dl>`;
+      </dl>
+      <div class="sys-bars">
+        ${sysBar("CPU load", `${Number(sys.load_average_1m || 0).toFixed(2)} (1m)`, loadPct)}
+        ${sysBar("Memory", `${T.formatBytes(memUsed)} / ${T.formatBytes(sys.total_memory_bytes)}`, memPct)}
+        ${sysBar("Data disk", `${T.formatBytes(diskUsed)} / ${T.formatBytes(sys.data_dir_total_bytes)}`, diskPct)}
+      </div>`;
       usersEl.innerHTML = renderAdminUsers(users.users || []);
       devicesEl.innerHTML = renderAdminDevices(devices.devices || []);
+      sessionsEl.innerHTML = renderAdminSessions(sessions.sessions || []);
       T.loadAdminFiles();
       T.loadConsoleCommands();
     } catch (error) {
@@ -119,6 +167,7 @@ window.Tssp = window.Tssp || {};
       system.innerHTML = "";
       usersEl.innerHTML = "";
       devicesEl.innerHTML = "";
+      sessionsEl.innerHTML = "";
       T.$("#admin-files").innerHTML = "";
     }
   };
@@ -207,6 +256,30 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.adminRevokeSession = async function adminRevokeSession(token) {
+    if (!confirm("Revoke this active session?")) return;
+    try {
+      await T.api("/admin/sessions/" + encodeURIComponent(token), { method: "DELETE" });
+      T.showBanner("Session revoked", "success");
+      T.loadAdmin();
+    } catch (error) {
+      T.showBanner(error.message, "error");
+    }
+  };
+
+  T.adminRevokeUserSessions = async function adminRevokeUserSessions(id) {
+    if (!confirm("Revoke all active sessions for this user?")) return;
+    try {
+      const result = await T.api("/admin/users/" + encodeURIComponent(id) + "/sessions", {
+        method: "DELETE",
+      });
+      T.showBanner(`Revoked ${result.removed || 0} session(s)`, "success");
+      T.loadAdmin();
+    } catch (error) {
+      T.showBanner(error.message, "error");
+    }
+  };
+
   T.adminDeleteFile = async function adminDeleteFile(id) {
     if (!confirm("Delete this file as admin?")) return;
     try {
@@ -225,7 +298,7 @@ window.Tssp = window.Tssp || {};
       T.showBanner(
         kind === "temp"
           ? `Removed ${result.removed ?? 0} temp file(s)`
-          : result.message || "Cleanup requested",
+          : result.message || "Expired sessions cleaned up",
         "success"
       );
       T.loadAdmin();

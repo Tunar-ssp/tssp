@@ -90,7 +90,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_folders_schema(connection)?;
     migrate_cloud_schema(connection)?;
     migrate_search_indexes(connection)?;
-    migrate_content_hash_index(connection)
+    migrate_content_hash_index(connection)?;
+    migrate_workspace_documents_schema(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -192,6 +193,87 @@ pub(crate) fn migrate_content_hash_index(
         .execute_batch("CREATE INDEX IF NOT EXISTS idx_files_content_hash ON files(content_hash);")
         .map_err(SqliteRepositoryError::Migration)?;
     record_migration(connection, 10)?;
+    Ok(())
+}
+
+/// Adds normalized workspace document storage for the admin editor (schema v11).
+pub(crate) fn migrate_workspace_documents_schema(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 11)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS workspace_documents (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                owner_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'text',
+                body TEXT NOT NULL,
+                is_primary INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0, 1)),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(workspace_id, path)
+            ) STRICT;
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_documents_workspace
+                ON workspace_documents(workspace_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_workspace_documents_owner
+                ON workspace_documents(owner_id, updated_at DESC);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_documents_primary
+                ON workspace_documents(workspace_id)
+                WHERE is_primary = 1;
+
+            INSERT INTO workspace_documents (
+                id,
+                workspace_id,
+                owner_id,
+                path,
+                language,
+                body,
+                is_primary,
+                created_at,
+                updated_at
+            )
+            SELECT
+                'wdoc-' || lower(hex(randomblob(16))),
+                workspaces.id,
+                workspaces.owner_id,
+                CASE
+                    WHEN workspaces.language = 'markdown' THEN 'main.md'
+                    WHEN workspaces.language = 'rust' THEN 'main.rs'
+                    WHEN workspaces.language = 'python' THEN 'main.py'
+                    WHEN workspaces.language = 'javascript' THEN 'main.js'
+                    WHEN workspaces.language = 'typescript' THEN 'main.ts'
+                    WHEN workspaces.language = 'json' THEN 'main.json'
+                    WHEN workspaces.language = 'yaml' THEN 'main.yaml'
+                    WHEN workspaces.language = 'toml' THEN 'main.toml'
+                    WHEN workspaces.language = 'html' THEN 'main.html'
+                    WHEN workspaces.language = 'css' THEN 'main.css'
+                    WHEN workspaces.language = 'sql' THEN 'main.sql'
+                    WHEN workspaces.language = 'bash' THEN 'main.sh'
+                    ELSE 'main.txt'
+                END,
+                workspaces.language,
+                workspaces.body,
+                1,
+                workspaces.created_at,
+                workspaces.updated_at
+            FROM workspaces
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM workspace_documents
+                WHERE workspace_documents.workspace_id = workspaces.id
+            );
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 11)?;
     Ok(())
 }
 

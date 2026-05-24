@@ -240,12 +240,25 @@ pub fn build_router(state: HttpState) -> Router {
                 .options(options_response),
         )
         .route(
+            "/api/v1/admin/users/{id}/sessions",
+            axum::routing::delete(crate::admin::admin_revoke_user_sessions)
+                .options(options_response),
+        )
+        .route(
             "/api/v1/admin/devices",
             get(crate::admin::admin_list_devices).options(options_response),
         )
         .route(
             "/api/v1/admin/devices/{token}",
             axum::routing::delete(crate::admin::admin_revoke_device).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/sessions",
+            get(crate::admin::admin_list_sessions).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/sessions/{token}",
+            axum::routing::delete(crate::admin::admin_revoke_session).options(options_response),
         )
         .route(
             "/api/v1/admin/console/commands",
@@ -262,6 +275,19 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/admin/editor/workspaces/{id}",
             get(crate::admin::admin_editor_get_workspace).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/editor/workspaces/{id}/documents",
+            get(crate::admin::admin_editor_list_documents)
+                .post(crate::admin::admin_editor_create_document)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/admin/editor/workspaces/{id}/documents/{document_id}",
+            get(crate::admin::admin_editor_get_document)
+                .put(crate::admin::admin_editor_update_document)
+                .delete(crate::admin::admin_editor_delete_document)
+                .options(options_response),
         )
         .route(
             "/api/v1/admin/editor/check",

@@ -274,64 +274,60 @@
           <div class="page-header">
             <div>
               <h2>Notes</h2>
-              <p class="page-subtitle">Markdown notes with tags, pins, and quick search.</p>
+              <p class="page-subtitle" id="notes-count">Loading…</p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-secondary" id="new-note-btn">New note</button>
+              <button type="button" class="btn btn-primary" id="new-note-btn">New note</button>
             </div>
           </div>
-          <div class="table-card">
-            <table class="data-table" id="notes-table">
-              <thead>
-                <tr>
-                  <th scope="col">Title</th>
-                  <th scope="col">Updated</th>
-                  <th scope="col">Tags</th>
-                  <th scope="col">Preview</th>
-                  <th scope="col" class="col-actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="notes-body">
-                <tr><td colspan="5" class="table-empty">Loading…</td></tr>
-              </tbody>
-            </table>
+          <div class="notes-filter-bar">
+            <input id="notes-local-search" type="search" placeholder="Search notes…" autocomplete="off" class="notes-search-input">
+            <input id="notes-tag-filter" type="text" placeholder="Filter by tag…" autocomplete="off" class="notes-tag-input">
+            <label class="chip-toggle">
+              <input type="checkbox" id="notes-pinned-filter">
+              Pinned only
+            </label>
+          </div>
+          <div id="notes-grid" class="notes-grid">
+            <div class="notes-loading">Loading notes…</div>
           </div>
         </section>
 
         <section id="view-note-editor" class="view hidden">
-          <div class="page-header note-editor-header">
-            <div>
-              <button type="button" class="btn btn-text" id="note-back">← Back to notes</button>
-              <h2 id="note-dialog-title">New note</h2>
-              <p class="page-subtitle">Markdown with live preview. Changes save to your bucket.</p>
+          <div class="note-editor-topbar">
+            <div class="note-editor-topbar-start">
+              <button type="button" class="btn btn-text" id="note-back">← Notes</button>
+              <h2 id="note-dialog-title" class="note-editor-title">New note</h2>
             </div>
-            <div class="page-actions">
+            <div class="note-editor-topbar-end">
               <span id="note-save-status" class="save-status"></span>
-              <button type="button" class="btn btn-text" id="note-cancel">Cancel</button>
+              <span id="note-word-count" class="note-word-count"></span>
+              <button type="button" class="btn btn-text" id="note-cancel">Discard</button>
               <button type="submit" form="note-form" class="btn btn-primary" id="note-save">Save</button>
             </div>
           </div>
-          <form id="note-form" class="note-form note-form-page">
-            <div class="editor-grid">
-              <section>
-                <label for="note-title-input">Title</label>
-                <input id="note-title-input" type="text" placeholder="Optional">
-                <label for="note-tags-input">Tags</label>
-                <input id="note-tags-input" type="text" placeholder="ops, ideas, todo">
+          <form id="note-form" class="note-full-form">
+            <div class="note-full-meta">
+              <input id="note-title-input" type="text" placeholder="Note title…" class="note-title-input" autocomplete="off">
+              <div class="note-meta-row">
+                <input id="note-tags-input" type="text" placeholder="Tags: ops, ideas, todo" class="note-tags-bare-input" autocomplete="off">
                 <label class="chip-toggle editor-pin">
                   <input type="checkbox" id="note-pin-input">
-                  Pin note
+                  Pin
                 </label>
-                <label for="note-body-input">Markdown body</label>
-                <textarea id="note-body-input" rows="22" required></textarea>
-              </section>
-              <section class="markdown-preview-wrap">
+              </div>
+            </div>
+            <div class="note-full-editor-grid">
+              <div class="note-editor-pane">
+                <textarea id="note-body-input" class="note-body-textarea" spellcheck="true" autocomplete="off" placeholder="Write in Markdown…" required></textarea>
+              </div>
+              <div class="note-preview-pane">
                 <div class="preview-header">
                   <span>Preview</span>
                   <button type="button" class="btn btn-text btn-sm" id="note-preview-refresh">Refresh</button>
                 </div>
-                <article id="note-preview" class="markdown-preview"></article>
-              </section>
+                <article id="note-preview" class="markdown-preview note-preview-body"></article>
+              </div>
             </div>
           </form>
         </section>
@@ -424,6 +420,10 @@
               <div id="admin-devices">Loading…</div>
             </div>
             <div class="admin-card admin-card-wide">
+              <h3>Active sessions</h3>
+              <div id="admin-sessions">Loading…</div>
+            </div>
+            <div class="admin-card admin-card-wide">
               <div class="admin-card-head">
                 <h3>Files</h3>
                 <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh-files">Refresh files</button>
@@ -434,7 +434,7 @@
               <h3>Maintenance</h3>
               <div class="admin-actions">
                 <button type="button" class="btn btn-secondary" id="admin-cleanup-temp">Clean temp uploads</button>
-                <button type="button" class="btn btn-secondary" id="admin-cleanup-sessions">Session cleanup info</button>
+                <button type="button" class="btn btn-secondary" id="admin-cleanup-sessions">Clean expired sessions</button>
               </div>
             </div>
             <div class="admin-card admin-card-wide">
@@ -461,21 +461,35 @@
           <div class="editor-layout">
             <aside class="editor-sidebar">
               <div class="editor-sidebar-head">
-                <span class="editor-sidebar-title">Workspaces</span>
+                <span class="editor-sidebar-title">Admin editor</span>
                 <span class="editor-admin-badge">admin</span>
               </div>
               <div class="editor-sidebar-actions">
-                <button type="button" class="btn btn-secondary btn-sm" id="editor-new-btn">+ New</button>
+                <span class="editor-section-label">Workspaces</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="editor-new-btn">New workspace</button>
               </div>
               <div id="editor-ws-list" class="editor-ws-list"></div>
+              <div class="editor-sidebar-actions editor-doc-actions">
+                <span class="editor-section-label">Files</span>
+                <div class="editor-sidebar-inline-actions">
+                  <button type="button" class="btn btn-text btn-sm" id="editor-edit-workspace-btn">Edit</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="editor-new-document-btn">New file</button>
+                </div>
+              </div>
+              <div id="editor-doc-list" class="editor-doc-list">
+                <div class="editor-empty-state">Open a workspace to load documents.</div>
+              </div>
             </aside>
             <div class="editor-main">
               <div class="editor-topbar">
-                <span id="editor-filename" class="editor-filename">No workspace open</span>
+                <div class="editor-title-stack">
+                  <span id="editor-workspace-name" class="editor-workspace-name">No workspace open</span>
+                  <span id="editor-filename" class="editor-filename">No file open</span>
+                </div>
                 <span id="editor-lang-badge" class="editor-lang-badge"></span>
                 <span id="editor-save-status" class="editor-save-status"></span>
                 <div class="editor-topbar-actions">
-                  <button type="button" class="btn btn-danger btn-sm" id="editor-delete-btn" title="Delete workspace">Delete</button>
+                  <button type="button" class="btn btn-danger btn-sm" id="editor-delete-btn" title="Delete current file or workspace">Delete</button>
                   <button type="button" class="btn btn-primary btn-sm" id="editor-save-btn" title="Save (Ctrl+S)">Save</button>
                 </div>
               </div>
@@ -516,6 +530,28 @@
       <footer>
         <button type="button" class="btn btn-text" id="workspace-cancel">Cancel</button>
         <button type="submit" class="btn btn-primary" id="workspace-save">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="editor-document-dialog" class="note-dialog workspace-dialog">
+    <form method="dialog" id="editor-document-form" class="note-form">
+      <header>
+        <h3 id="editor-document-dialog-title">New file</h3>
+        <button type="button" class="icon-btn" id="editor-document-close" aria-label="Close">×</button>
+      </header>
+      <label for="editor-document-path-input">Path</label>
+      <input id="editor-document-path-input" type="text" maxlength="160" placeholder="notes/plan.md" required>
+      <label for="editor-document-language-input">Language</label>
+      <input id="editor-document-language-input" type="text" maxlength="40" value="text" required>
+      <label class="checkbox-row" for="editor-document-primary-input">
+        <input type="checkbox" id="editor-document-primary-input">
+        Use as entry file
+      </label>
+      <p class="form-hint">Stored inside TSSP metadata only. No host filesystem paths are exposed.</p>
+      <footer>
+        <button type="button" class="btn btn-text" id="editor-document-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="editor-document-save">Create</button>
       </footer>
     </form>
   </dialog>

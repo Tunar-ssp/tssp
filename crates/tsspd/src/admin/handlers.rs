@@ -5,6 +5,8 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use tssp_adapter_system::SystemClock;
+use tssp_ports::Clock;
 use tssp_ports::ListQuery;
 
 use crate::admin::system::collect_system_snapshot;
@@ -214,15 +216,31 @@ pub async fn admin_cleanup_temp(State(state): State<HttpState>) -> impl IntoResp
 }
 
 /// `POST /api/v1/admin/cleanup/sessions`
-pub async fn admin_cleanup_sessions(State(_state): State<HttpState>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "schema_version": 1,
-            "message": "session cleanup runs on daemon startup",
-        })),
-    )
-        .into_response()
+pub async fn admin_cleanup_sessions(State(state): State<HttpState>) -> impl IntoResponse {
+    match state.auth.cleanup_expired(SystemClock.now().seconds()) {
+        Ok((sessions_removed, devices_removed)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "schema_version": 1,
+                "sessions_removed": sessions_removed,
+                "devices_removed": devices_removed,
+                "message": format!(
+                    "removed {sessions_removed} expired session(s) and {devices_removed} expired device trust record(s)"
+                ),
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "cleanup_sessions_failed",
+                    message: error.to_string(),
+                },
+            }),
+        )
+            .into_response(),
+    }
 }
 
 /// `GET /api/v1/admin/folders`

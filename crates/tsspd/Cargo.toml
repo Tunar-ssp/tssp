@@ -10,7 +10,10 @@ description = "TSSP backend daemon"
 
 [dependencies]
 axum.workspace = true
+blake3.workspace = true
 clap.workspace = true
+r2d2.workspace = true
+r2d2_sqlite.workspace = true
 rustix = { version = "0.38", features = ["fs"] }
 rusqlite.workspace = true
 serde.workspace = true

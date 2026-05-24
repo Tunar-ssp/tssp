@@ -62,14 +62,13 @@ impl UserStore {
     /// Returns an error when migration fails.
     pub fn open(path: &Path) -> Result<Self, UserStoreError> {
         let manager = SqliteConnectionManager::file(path);
-        let pool = Pool::builder()
-            .max_size(10)
-            .build(manager)
-            .map_err(|e| UserStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+        let pool = Pool::builder().max_size(10).build(manager).map_err(|e| {
+            UserStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
+        })?;
 
-        let connection = pool
-            .get()
-            .map_err(|e| UserStoreError::Database(rusqlite::Error::from_error(Box::new(e))))?;
+        let connection = pool.get().map_err(|e| {
+            UserStoreError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
+        })?;
 
         run_users_migration(&connection)?;
         Ok(Self { pool })

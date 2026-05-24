@@ -607,11 +607,12 @@ async fn write_field_to_temp(
             })?;
     }
 
-    let hash = tssp_domain::ContentHash::new(hasher.finalize().to_hex().as_str()).map_err(
-        |error| HttpUploadError::Internal {
-            message: format!("could not compute hash: {error}"),
-        },
-    )?;
+    let hash =
+        tssp_domain::ContentHash::new(hasher.finalize().to_hex().as_str()).map_err(|error| {
+            HttpUploadError::Internal {
+                message: format!("could not compute hash: {error}"),
+            }
+        })?;
 
     Ok((hash, tssp_domain::FileSize::new(size)))
 }

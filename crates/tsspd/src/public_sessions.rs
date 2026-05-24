@@ -211,6 +211,9 @@ pub async fn post_receive_session_upload(
         folder_path: staged.folder_path,
         owner_id: None,
         source: Box::new(source),
+        staged_path: None,
+        content_hash: None,
+        size: None,
     };
 
     let outcome = match state.upload_provider.upload(upload_req) {

@@ -183,16 +183,13 @@ impl BlobStore for FilesystemBlobStore {
     fn cleanup_unreferenced(&self, handle: &StorageHandle) -> Result<(), BlobStoreError> {
         let path = self.path_for_handle(handle)?;
         let handle_clone = handle.clone();
-        tokio::task::spawn(async move {
-            match fs::remove_file(&path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => tracing::warn!(
-                    "background cleanup failed for {}: {error}",
-                    handle_clone.as_str()
-                ),
-            }
-        });
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::spawn(async move {
+                remove_unreferenced_blob(&path, &handle_clone);
+            });
+        } else {
+            remove_unreferenced_blob(&path, &handle_clone);
+        }
         Ok(())
     }
 }
@@ -281,6 +278,14 @@ fn remove_file_best_effort(path: &Path) {
     let _ignored = fs::remove_file(path);
 }
 
+fn remove_unreferenced_blob(path: &Path, handle: &StorageHandle) {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!("background cleanup failed for {}: {error}", handle.as_str()),
+    }
+}
+
 struct Fanout<'a> {
     first: &'a str,
     second: &'a str,
@@ -358,15 +363,16 @@ mod tests {
 
         let content = b"staged content";
         let hash = blake3::hash(content);
-        let content_hash = tssp_domain::ContentHash::new(hash.to_hex().as_str()).unwrap();
+        let content_hash = tssp_domain::ContentHash::new(hash.to_hex().as_str())
+            .unwrap_or_else(|error| panic!("invalid content hash: {error}"));
         let size = tssp_domain::FileSize::new(content.len() as u64);
 
         let temp_file_path = temp.path().join("my-staged-upload.tmp");
-        fs::write(&temp_file_path, content).unwrap();
+        fs::write(&temp_file_path, content).unwrap_or_else(|error| panic!("write failed: {error}"));
 
         let outcome = store
             .put_staged(&temp_file_path, &content_hash, size)
-            .unwrap();
+            .unwrap_or_else(|error| panic!("put staged failed: {error}"));
 
         assert_eq!(outcome.content_hash, content_hash);
         assert!(!outcome.deduplicated);
@@ -374,8 +380,8 @@ mod tests {
         assert!(temp.path().join(outcome.handle.as_str()).is_file());
     }
 
-    #[test]
-    fn cleanup_unreferenced_removes_existing_blob() {
+    #[tokio::test]
+    async fn cleanup_unreferenced_removes_existing_blob() {
         let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
         let store = FilesystemBlobStore::new(temp.path())
             .unwrap_or_else(|error| panic!("store init failed: {error}"));
@@ -389,6 +395,7 @@ mod tests {
             .cleanup_unreferenced(&outcome.handle)
             .unwrap_or_else(|error| panic!("cleanup failed: {error}"));
 
+        tokio::task::yield_now().await;
         assert!(!path.exists());
     }
 

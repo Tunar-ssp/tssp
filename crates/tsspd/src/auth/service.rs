@@ -353,6 +353,50 @@ impl AuthService {
         Ok((tokens, devices))
     }
 
+    /// Lists currently active auth sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the token store query fails.
+    pub(crate) fn list_active_sessions(
+        &self,
+        now: i64,
+        user_id: Option<&UserId>,
+        limit: u64,
+    ) -> Result<Vec<super::store::AuthTokenRecord>, AuthStoreError> {
+        let Some(store) = &self.store else {
+            return Ok(Vec::new());
+        };
+        store.list_tokens(now, user_id, limit)
+    }
+
+    /// Revokes one auth session token and returns whether it existed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the token store delete fails.
+    pub(crate) fn revoke_token_existing(&self, token: &str) -> Result<bool, AuthStoreError> {
+        let Some(store) = &self.store else {
+            return Ok(false);
+        };
+        store.revoke_token_existing(token)
+    }
+
+    /// Revokes every auth session for a user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the token store delete fails.
+    pub(crate) fn revoke_all_sessions_for_user(
+        &self,
+        user_id: &UserId,
+    ) -> Result<u64, AuthStoreError> {
+        let Some(store) = &self.store else {
+            return Ok(0);
+        };
+        store.revoke_all_tokens_for_user(user_id)
+    }
+
     /// User store for admin handlers.
     #[must_use]
     pub fn users(&self) -> Option<&UserStore> {

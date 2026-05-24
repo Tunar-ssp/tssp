@@ -42,8 +42,7 @@ pub use session::SessionRepository;
 #[cfg(test)]
 mod tests {
     use tssp_domain::{
-        ContentHash, FileId, FileRecord, FileSize, FileName, MimeType, StorageHandle,
-        UnixTimestamp,
+        ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, UnixTimestamp,
     };
 
     use super::*;

@@ -1,7 +1,7 @@
 //! Input and output record types for repository write operations.
 
 use tssp_domain::{
-    ContentHash, FileId, FileRecord, FileSize, FileName, MimeType, NoteBody, NoteId, NoteTitle,
+    ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, NoteBody, NoteId, NoteTitle,
     StorageHandle, Tag, UnixTimestamp, UserId, Visibility,
 };
 
