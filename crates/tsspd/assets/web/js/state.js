@@ -68,8 +68,16 @@ window.Tssp = window.Tssp || {};
           T.showLogin();
           return;
         }
+        const meData = me.ok ? await me.json().catch(() => null) : null;
+        T.currentUserRole = meData?.role || null;
+        T.currentUserName = meData?.name || null;
+        const isAdmin = T.currentUserRole === "admin";
+        document.querySelectorAll(".admin-only").forEach((el) => {
+          if (isAdmin) el.classList.remove("hidden");
+          else el.classList.add("hidden");
+        });
         const authStatus = T.$("#auth-status");
-        if (authStatus) authStatus.textContent = "Signed in";
+        if (authStatus) authStatus.textContent = meData?.name ? `${meData.name}${isAdmin ? " · admin" : ""}` : "Signed in";
         T.$("#logout-btn")?.removeAttribute("hidden");
       } else {
         const authStatus = T.$("#auth-status");
