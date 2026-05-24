@@ -80,6 +80,9 @@ window.Tssp = window.Tssp || {};
 
     const file = selected[0];
     const link = T.publicLink(file);
+    const tagsHtml = (file.tags && file.tags.length)
+      ? file.tags.map((t) => `<span class="tag">${T.escapeHtml(t)}</span>`).join(" ")
+      : '<span class="text-dim">—</span>';
     details.innerHTML = `<h3>${T.escapeHtml(file.name)}</h3>
       <dl class="admin-dl">
         <dt>ID</dt><dd class="mono">${T.escapeHtml(file.id)}</dd>
@@ -88,6 +91,7 @@ window.Tssp = window.Tssp || {};
         <dt>Folder</dt><dd>${T.escapeHtml(file.folder_path || "Bucket root")}</dd>
         <dt>Uploaded</dt><dd>${T.escapeHtml(T.formatDate(file.uploaded_at))}</dd>
         <dt>Visibility</dt><dd>${T.stateBadge(file.visibility)}</dd>
+        <dt>Tags</dt><dd class="details-tags">${tagsHtml}</dd>
         <dt>Hash</dt><dd class="mono hash">${T.escapeHtml(file.content_hash || "—")}</dd>
       </dl>
       <div class="details-actions">
@@ -203,6 +207,8 @@ window.Tssp = window.Tssp || {};
     const params = new URLSearchParams({ limit: "200" });
     if (T.$("#pinned-only")?.checked) params.set("pinned", "true");
     if (T.currentFolder) params.set("folder", T.currentFolder);
+    const sort = T.$("#files-sort")?.value;
+    if (sort && sort !== "-uploaded") params.set("sort", sort);
     try {
       const data = await T.api("/files?" + params.toString());
       T.currentFiles = data.files || [];

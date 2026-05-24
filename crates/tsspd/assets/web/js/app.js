@@ -67,6 +67,10 @@
       if (typeof T.loadFiles === "function") T.loadFiles();
     });
 
+    T.$("#files-sort")?.addEventListener("change", () => {
+      if (typeof T.loadFiles === "function") T.loadFiles();
+    });
+
     T.$("#global-search")?.addEventListener("input", (ev) => {
       const q = ev.target.value.trim();
       clearTimeout(T.searchTimer);

@@ -126,6 +126,14 @@
               <h2>Objects</h2>
             </div>
             <div class="page-actions">
+              <select id="files-sort" class="filter-select" aria-label="Sort files by">
+                <option value="-uploaded">Newest first</option>
+                <option value="uploaded">Oldest first</option>
+                <option value="name">Name A–Z</option>
+                <option value="-name">Name Z–A</option>
+                <option value="-size">Largest first</option>
+                <option value="size">Smallest first</option>
+              </select>
               <label class="chip-toggle">
                 <input type="checkbox" id="pinned-only">
                 Pinned only
