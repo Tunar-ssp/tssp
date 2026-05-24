@@ -55,6 +55,50 @@ window.Tssp = window.Tssp || {};
     if (charCount) charCount.textContent = `${text.length} chars`;
   }
 
+  function updatePreviewButton() {
+    const btn = T.$("#editor-preview-toggle-btn");
+    if (!btn) return;
+    const lang = T.editorCurrentDocument?.language || "";
+    if (lang === "markdown") {
+      btn.removeAttribute("hidden");
+    } else {
+      btn.setAttribute("hidden", "");
+      hidePreviewPane();
+    }
+  }
+
+  let previewVisible = false;
+
+  function showPreviewPane() {
+    const wrap = T.$("#editor-content-wrap");
+    const pane = T.$("#editor-preview-pane");
+    if (!wrap || !pane) return;
+    wrap.classList.add("editor-split");
+    pane.classList.remove("hidden");
+    previewVisible = true;
+    const btn = T.$("#editor-preview-toggle-btn");
+    if (btn) btn.textContent = "Editor";
+    refreshEditorPreview();
+  }
+
+  function hidePreviewPane() {
+    const wrap = T.$("#editor-content-wrap");
+    const pane = T.$("#editor-preview-pane");
+    if (!wrap || !pane) return;
+    wrap.classList.remove("editor-split");
+    pane.classList.add("hidden");
+    previewVisible = false;
+    const btn = T.$("#editor-preview-toggle-btn");
+    if (btn) btn.textContent = "Preview";
+  }
+
+  function refreshEditorPreview() {
+    if (!previewVisible) return;
+    const area = T.$("#editor-area");
+    const preview = T.$("#editor-md-preview");
+    if (area && preview) preview.innerHTML = T.simpleMarkdown(area.value);
+  }
+
   function updateDeleteButton() {
     const button = T.$("#editor-delete-btn");
     if (!button) return;
@@ -298,6 +342,8 @@ window.Tssp = window.Tssp || {};
       setInfoPanel();
       setSaveStatus("saved");
       updateStatusBar();
+      updatePreviewButton();
+      hidePreviewPane();
     } catch (error) {
       T.showBanner(error.message, "error");
     }
@@ -491,8 +537,13 @@ window.Tssp = window.Tssp || {};
     area.addEventListener("input", () => {
       markDirty();
       updateStatusBar();
+      refreshEditorPreview();
     });
 
+    T.$("#editor-preview-toggle-btn")?.addEventListener("click", () => {
+      if (previewVisible) hidePreviewPane();
+      else showPreviewPane();
+    });
     T.$("#editor-save-btn")?.addEventListener("click", () => T.saveEditorDocument(false));
     T.$("#editor-new-btn")?.addEventListener("click", () => T.openWorkspaceDialog(null, { source: "editor" }));
     T.$("#editor-edit-workspace-btn")?.addEventListener("click", () => T.editCurrentWorkspace());
