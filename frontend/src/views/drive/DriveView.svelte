@@ -44,6 +44,7 @@
   import { matchesDriveLens } from "../../lib/utils/files";
   import { formatAbsoluteDate, formatBytes } from "../../lib/utils/format";
   import PreviewDialog from "../../lib/components/PreviewDialog.svelte";
+  import ContextMenu from "../../lib/components/ContextMenu.svelte";
 
   export let lens: DriveLens = "all";
 
@@ -54,6 +55,21 @@
   let shareQr = "";
   let shareUrl = "";
   let uploadInput: HTMLInputElement | null = null;
+  let ctxFile: FileRecord | null = null;
+  let ctxX = 0;
+  let ctxY = 0;
+
+  function openContextMenu(ev: MouseEvent, file: FileRecord) {
+    ev.preventDefault();
+    ctxFile = file;
+    ctxX = ev.clientX;
+    ctxY = ev.clientY;
+    focusedFileId.set(file.id);
+  }
+
+  function closeContextMenu() {
+    ctxFile = null;
+  }
 
   async function refresh() {
     driveLoading.set(true);
@@ -133,6 +149,12 @@
     const name = prompt("New name", file.name);
     if (!name || name === file.name) return;
     await renameFile(file.id, name);
+    await refresh();
+  }
+
+  async function handleToggleVisibility(file: FileRecord) {
+    const visibility = file.visibility === "public" ? "private" : "public";
+    await setFileVisibility(file.id, visibility);
     await refresh();
   }
 
@@ -312,7 +334,7 @@
       {:else if $driveViewMode === "grid"}
         <div class="file-grid">
           {#each filtered as file}
-            <article class="file-card" class:focused={$focusedFileId === file.id}>
+            <article class="file-card" class:focused={$focusedFileId === file.id} on:contextmenu={(e) => openContextMenu(e, file)}>
               <label class="select-check">
                 <input type="checkbox" checked={$selectedIds.has(file.id)} on:change={(e) => toggleSelection(file.id, e.currentTarget.checked)} />
               </label>
@@ -344,7 +366,7 @@
           </thead>
           <tbody>
             {#each filtered as file}
-              <tr class:focused={$focusedFileId === file.id} on:click={() => focusedFileId.set(file.id)}>
+              <tr class:focused={$focusedFileId === file.id} on:click={() => focusedFileId.set(file.id)} on:contextmenu={(e) => openContextMenu(e, file)}>
                 <td><input type="checkbox" checked={$selectedIds.has(file.id)} on:change={(e) => toggleSelection(file.id, e.currentTarget.checked)} /></td>
                 <td><button type="button" class="linkish" on:click={() => previewFileId.set(file.id)}>{file.name}</button></td>
                 <td>{formatBytes(file.size_bytes)}</td>
@@ -389,6 +411,18 @@
 {#if $previewFileId}
   <PreviewDialog file={filtered.find((f) => f.id === $previewFileId) || null} files={filtered} onClose={() => previewFileId.set(null)} onShare={openShare} />
 {/if}
+
+<ContextMenu
+  file={ctxFile}
+  x={ctxX}
+  y={ctxY}
+  onClose={closeContextMenu}
+  onPreview={(f) => previewFileId.set(f.id)}
+  onShare={openShare}
+  onRename={handleRename}
+  onDelete={handleDelete}
+  onToggleVisibility={handleToggleVisibility}
+/>
 
 {#if showShareModal}
   <div class="modal-backdrop" role="presentation" on:click={() => (showShareModal = false)}>

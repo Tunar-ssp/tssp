@@ -68,7 +68,3 @@ pub use upload::{
 pub use urls::PublicUrlBuilder;
 
 pub(crate) use http_error::{ErrorBody, ErrorResponse};
-
-// Re-exports from tssp_ports for test modules
-#[cfg(test)]
-pub(crate) use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};

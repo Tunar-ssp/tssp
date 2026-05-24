@@ -127,6 +127,9 @@ mod tests {
         UserId, UserRole, Visibility,
     };
 
+    use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};
+
+    use crate::MetadataStatsProvider;
     use super::*;
 
     #[derive(Clone)]

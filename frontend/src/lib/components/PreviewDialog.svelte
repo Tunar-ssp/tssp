@@ -8,49 +8,58 @@
   export let onClose: () => void;
   export let onShare: (file: FileRecord) => void;
 
-  $: index = file ? files.findIndex((f) => f.id === file.id) : -1;
+  let current: FileRecord | null = null;
+  $: current = file;
+
+  $: index = current ? files.findIndex((f) => f.id === current!.id) : -1;
   $: prev = index > 0 ? files[index - 1] : null;
   $: next = index >= 0 && index < files.length - 1 ? files[index + 1] : null;
 
   function keydown(ev: KeyboardEvent) {
     if (ev.key === "Escape") onClose();
-    if (ev.key === "ArrowLeft" && prev) file = prev;
-    if (ev.key === "ArrowRight" && next) file = next;
+    if (ev.key === "ArrowLeft" && prev) current = prev;
+    if (ev.key === "ArrowRight" && next) current = next;
+  }
+
+  function shareCurrent() {
+    if (current) onShare(current);
   }
 </script>
 
 <svelte:window on:keydown={keydown} />
 
-{#if file}
-  <div class="preview-backdrop" role="presentation" on:click={onClose}>
-    <div class="preview-dialog" role="dialog" aria-modal="true" on:click|stopPropagation>
+{#if current}
+  <div class="preview-backdrop" role="presentation" on:click={onClose} on:keydown={() => undefined}>
+    <div class="preview-dialog" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown={() => undefined}>
       <header class="preview-head">
-        <h2>{file.name}</h2>
+        <h2>{current.name}</h2>
         <button type="button" class="btn btn-ghost" on:click={onClose}>✕</button>
       </header>
       <div class="preview-body">
-        {#if file.mime_type?.startsWith("image/")}
-          <img class="preview-media" src={fileContentUrl(file.id)} alt={file.name} />
-        {:else if file.mime_type?.startsWith("video/")}
-          <video class="preview-media" src={fileContentUrl(file.id)} controls></video>
-        {:else if file.mime_type?.startsWith("audio/")}
-          <audio class="preview-audio" src={fileContentUrl(file.id)} controls></audio>
-        {:else if file.mime_type === "application/pdf"}
-          <iframe class="preview-frame" title={file.name} src={fileContentUrl(file.id)}></iframe>
-        {:else if file.mime_type?.startsWith("text/") || file.name.match(/\.(md|txt|json|rs|js|ts|css)$/i)}
-          <iframe class="preview-frame" title={file.name} src={fileContentUrl(file.id)}></iframe>
+        {#if current.mime_type?.startsWith("image/")}
+          <img class="preview-media" src={fileContentUrl(current.id)} alt={current.name} />
+        {:else if current.mime_type?.startsWith("video/")}
+          <video class="preview-media" src={fileContentUrl(current.id)} controls>
+            <track kind="captions" />
+          </video>
+        {:else if current.mime_type?.startsWith("audio/")}
+          <audio class="preview-audio" src={fileContentUrl(current.id)} controls></audio>
+        {:else if current.mime_type === "application/pdf"}
+          <iframe class="preview-frame" title={current.name} src={fileContentUrl(current.id)}></iframe>
+        {:else if current.mime_type?.startsWith("text/") || current.name.match(/\.(md|txt|json|rs|js|ts|css)$/i)}
+          <iframe class="preview-frame" title={current.name} src={fileContentUrl(current.id)}></iframe>
         {:else}
           <div class="empty-state">
             <strong>Preview not available</strong>
-            <p>{file.mime_type || "Unknown type"} · {formatBytes(file.size_bytes)}</p>
+            <p>{current.mime_type || "Unknown type"} · {formatBytes(current.size_bytes)}</p>
           </div>
         {/if}
       </div>
       <footer class="preview-foot">
-        <button type="button" class="btn btn-sm" disabled={!prev} on:click={() => prev && (file = prev)}>← Prev</button>
-        <button type="button" class="btn btn-sm" disabled={!next} on:click={() => next && (file = next)}>Next →</button>
-        <a class="btn btn-sm" href={fileDownloadUrl(file.id)} download>Download</a>
-        <button type="button" class="btn btn-sm btn-primary" on:click={() => onShare(file)}>Share</button>
+        <button type="button" class="btn btn-sm" disabled={!prev} on:click={() => prev && (current = prev)}>← Prev</button>
+        <button type="button" class="btn btn-sm" disabled={!next} on:click={() => next && (current = next)}>Next →</button>
+        <a class="btn btn-sm" href={fileDownloadUrl(current.id)} download>Download</a>
+        <button type="button" class="btn btn-sm btn-primary" on:click={shareCurrent}>Share</button>
       </footer>
     </div>
   </div>

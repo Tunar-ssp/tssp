@@ -2,192 +2,223 @@
   import { onMount } from "svelte";
   import {
     createAdminWorkspaceDocument,
+    createWorkspace,
     deleteAdminWorkspaceDocument,
     getAdminWorkspaceDetail,
     getAdminWorkspaceDocument,
-    getEditorExecutionState,
     listWorkspaces,
     updateAdminWorkspaceDocument,
     type WorkspaceDocumentRecord,
     type WorkspaceRecord,
   } from "../../lib/api";
-  import { formatRelativeDate } from "../../lib/utils/format";
-  import WorkspaceEditor from "./WorkspaceEditor.svelte";
+  import { inferLanguageFromPath } from "../../lib/utils/workspace";
+  import CodeEditor from "./CodeEditor.svelte";
   import WorkspaceExplorer from "./WorkspaceExplorer.svelte";
+
+  interface OpenTab {
+    id: string;
+    path: string;
+    language: string;
+    body: string;
+    dirty: boolean;
+  }
 
   let workspaces: WorkspaceRecord[] = [];
   let activeWorkspace: WorkspaceRecord | null = null;
   let documents: WorkspaceDocumentRecord[] = [];
-  let activeDocumentId: string | null = null;
+  let tabs: OpenTab[] = [];
+  let activeTabId: string | null = null;
   let loading = true;
   let error = "";
   let saveStatus = "";
-  let executionMessage = "";
-  let bodyDraft = "";
+
+  function activeTab(): OpenTab | null {
+    return tabs.find((t) => t.id === activeTabId) || null;
+  }
 
   async function loadWorkspaceDetail(workspaceId: string) {
     const detail = await getAdminWorkspaceDetail(workspaceId);
     activeWorkspace = detail.workspace;
-    documents = detail.documents.map((document) => ({
-      ...document,
-      body: "",
-      created_at: detail.workspace.created_at,
-    }));
-    activeDocumentId = detail.documents.find((document) => document.is_primary)?.id || detail.documents[0]?.id || null;
-    if (activeDocumentId) {
-      const document = await getAdminWorkspaceDocument(workspaceId, activeDocumentId);
-      documents = documents.map((item) => (item.id === document.id ? document : item));
-      bodyDraft = document.body;
+    documents = [];
+    tabs = [];
+    activeTabId = null;
+    for (const summary of detail.documents) {
+      const doc = await getAdminWorkspaceDocument(workspaceId, summary.id);
+      documents = [...documents, doc];
     }
+    if (documents[0]) await openTab(documents[0].id);
   }
 
   async function loadWorkspaces() {
     loading = true;
     error = "";
     try {
-      const [workspaceResponse, executionCheck] = await Promise.all([
-        listWorkspaces(),
-        getEditorExecutionState(),
-      ]);
-      workspaces = workspaceResponse.workspaces || [];
-      executionMessage = executionCheck.message;
-      if (workspaces[0]) {
-        await loadWorkspaceDetail(workspaces[0].id);
-      }
-    } catch (nextError) {
-      error = nextError instanceof Error ? nextError.message : "Failed to load workspaces";
+      const res = await listWorkspaces();
+      workspaces = res.workspaces || [];
+      if (workspaces[0]) await loadWorkspaceDetail(workspaces[0].id);
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to load workspaces";
     } finally {
       loading = false;
     }
   }
 
-  function activeDocument() {
-    return documents.find((document) => document.id === activeDocumentId) || null;
-  }
-
-  async function selectWorkspace(workspace: WorkspaceRecord) {
-    try {
-      await loadWorkspaceDetail(workspace.id);
-      saveStatus = `Loaded ${workspace.name}`;
-    } catch (nextError) {
-      saveStatus = nextError instanceof Error ? nextError.message : "Failed to load workspace";
-    }
-  }
-
-  async function selectDocument(documentId: string) {
+  async function openTab(documentId: string) {
     if (!activeWorkspace) return;
-    activeDocumentId = documentId;
-    const document = await getAdminWorkspaceDocument(activeWorkspace.id, documentId);
-    documents = documents.map((item) => (item.id === document.id ? document : item));
-    bodyDraft = document.body;
-  }
-
-  async function saveDocument() {
-    const workspace = activeWorkspace;
-    const document = activeDocument();
-    if (!workspace || !document) return;
-    try {
-      const updated = await updateAdminWorkspaceDocument(workspace.id, document.id, {
-        path: document.path,
-        language: document.language,
-        body: bodyDraft,
-        make_primary: document.is_primary,
-      });
-      documents = documents.map((item) => (item.id === updated.id ? updated : item));
-      bodyDraft = updated.body;
-      saveStatus = `Saved ${formatRelativeDate(updated.updated_at)}`;
-    } catch (nextError) {
-      saveStatus = nextError instanceof Error ? nextError.message : "Save failed";
+    const existing = tabs.find((t) => t.id === documentId);
+    if (existing) {
+      activeTabId = documentId;
+      return;
     }
+    const doc = documents.find((d) => d.id === documentId) || (await getAdminWorkspaceDocument(activeWorkspace.id, documentId));
+    if (!documents.some((d) => d.id === doc.id)) documents = [...documents, doc];
+    tabs = [
+      ...tabs,
+      {
+        id: doc.id,
+        path: doc.path,
+        language: doc.language || inferLanguageFromPath(doc.path),
+        body: doc.body,
+        dirty: false,
+      },
+    ];
+    activeTabId = doc.id;
   }
 
-  async function createDocument() {
-    const workspace = activeWorkspace;
-    if (!workspace) return;
-    try {
-      const created = await createAdminWorkspaceDocument(workspace.id, {
-        path: `notes/${workspace.name.toLowerCase().replace(/\s+/g, "-")}.md`,
-        language: workspace.language,
-        body: "# Workspace note\n\nStart here.",
-        make_primary: false,
-      });
-      documents = [created, ...documents];
-      activeDocumentId = created.id;
-      bodyDraft = created.body;
-      saveStatus = "Document created";
-    } catch (nextError) {
-      saveStatus = nextError instanceof Error ? nextError.message : "Create failed";
-    }
+  async function saveTab() {
+    const tab = activeTab();
+    const ws = activeWorkspace;
+    if (!tab || !ws) return;
+    const updated = await updateAdminWorkspaceDocument(ws.id, tab.id, {
+      path: tab.path,
+      language: tab.language,
+      body: tab.body,
+      make_primary: false,
+    });
+    documents = documents.map((d) => (d.id === updated.id ? updated : d));
+    tabs = tabs.map((t) => (t.id === tab.id ? { ...t, body: updated.body, dirty: false } : t));
+    saveStatus = "Saved";
   }
 
-  async function deleteDocument() {
-    const workspace = activeWorkspace;
-    const document = activeDocument();
-    if (!workspace || !document) return;
-    try {
-      await deleteAdminWorkspaceDocument(workspace.id, document.id);
-      documents = documents.filter((item) => item.id !== document.id);
-      const nextDocument = documents[0] || null;
-      activeDocumentId = nextDocument?.id || null;
-      bodyDraft = nextDocument?.body || "";
-      saveStatus = "Document deleted";
-    } catch (nextError) {
-      saveStatus = nextError instanceof Error ? nextError.message : "Delete failed";
-    }
+  async function createFile() {
+    const ws = activeWorkspace;
+    if (!ws) return;
+    const path = prompt("File path (e.g. src/main.rs)", "src/main.rs");
+    if (!path?.trim()) return;
+    const created = await createAdminWorkspaceDocument(ws.id, {
+      path: path.trim(),
+      language: inferLanguageFromPath(path),
+      body: "",
+      make_primary: false,
+    });
+    documents = [created, ...documents];
+    await openTab(created.id);
   }
 
-  onMount(() => {
-    void loadWorkspaces();
-  });
+  async function createProject() {
+    const name = prompt("Project name", "my-project");
+    if (!name?.trim()) return;
+    const created = await createWorkspace({ name: name.trim(), language: "rust", body: "" });
+    workspaces = [created, ...workspaces];
+    await loadWorkspaceDetail(created.id);
+  }
 
-  $: activeWorkspaceLanguage = activeWorkspace?.language || "text";
+  async function deleteTab() {
+    const tab = activeTab();
+    const ws = activeWorkspace;
+    if (!tab || !ws || !confirm(`Delete ${tab.path}?`)) return;
+    await deleteAdminWorkspaceDocument(ws.id, tab.id);
+    documents = documents.filter((d) => d.id !== tab.id);
+    tabs = tabs.filter((t) => t.id !== tab.id);
+    activeTabId = tabs[0]?.id || null;
+  }
+
+  function closeTab(id: string) {
+    tabs = tabs.filter((t) => t.id !== id);
+    if (activeTabId === id) activeTabId = tabs[0]?.id || null;
+  }
+
+  function updateBody(value: string) {
+    const id = activeTabId;
+    if (!id) return;
+    tabs = tabs.map((t) => (t.id === id ? { ...t, body: value, dirty: true } : t));
+  }
+
+  onMount(() => void loadWorkspaces());
 </script>
 
-<section class="ide-scaffold">
-  <WorkspaceExplorer
-    workspace={activeWorkspace}
-    documents={documents}
-    activeDocumentId={activeDocumentId}
-    onSelectWorkspace={(workspace) => void selectWorkspace(workspace)}
-    onSelectDocument={(documentId) => void selectDocument(documentId)}
-  />
+<section class="workspace">
+  {#if loading}
+    <div class="empty-state"><strong>Loading workspace…</strong></div>
+  {:else if error}
+    <div class="empty-state"><strong>{error}</strong></div>
+  {:else}
+    <div class="workspace-body">
+      <WorkspaceExplorer
+        {workspaces}
+        workspace={activeWorkspace}
+        {documents}
+        activeDocumentId={activeTabId}
+        onSelectWorkspace={(ws) => void loadWorkspaceDetail(ws.id)}
+        onSelectDocument={(id) => void openTab(id)}
+        onCreateProject={createProject}
+        onCreateFile={createFile}
+      />
 
-  <div class="ide-main">
-    <div class="ide-tabs">
-      {#each documents.slice(0, 3) as document}
-        <button
-          type="button"
-          class:active={activeDocumentId === document.id}
-          class="ide-tab"
-          on:click={() => void selectDocument(document.id)}
-        >
-          {document.path}
-        </button>
-      {/each}
+      <div class="editor-column">
+        <div class="tab-bar">
+          {#each tabs as tab}
+            <button
+              type="button"
+              class="tab"
+              class:active={activeTabId === tab.id}
+              on:click={() => (activeTabId = tab.id)}
+            >
+              {tab.dirty ? "● " : ""}{tab.path.split("/").pop()}
+              <span
+                role="button"
+                tabindex="0"
+                class="tab-close"
+                on:click|stopPropagation={() => closeTab(tab.id)}
+                on:keydown|stopPropagation={(e) => e.key === "Enter" && closeTab(tab.id)}
+              >×</span>
+            </button>
+          {/each}
+          <button type="button" class="btn btn-sm btn-ghost" on:click={createFile}>+ File</button>
+        </div>
+
+        {#if activeTab()}
+          {@const tab = activeTab()!}
+          <CodeEditor
+            value={tab.body}
+            language={tab.language}
+            dirty={tab.dirty}
+            onChange={updateBody}
+            onSave={saveTab}
+            onCloseTab={() => activeTabId && closeTab(activeTabId)}
+          />
+          <div class="editor-actions">
+            <button type="button" class="btn btn-sm btn-primary" on:click={saveTab}>Save (Ctrl+S)</button>
+            <button type="button" class="btn btn-sm btn-danger" on:click={deleteTab}>Delete file</button>
+            <span class="muted">{saveStatus}</span>
+          </div>
+        {:else}
+          <div class="empty-state"><strong>No file open</strong>Create or select a file from the explorer.</div>
+        {/if}
+      </div>
     </div>
-
-    <WorkspaceEditor
-      workspace={activeWorkspace}
-      document={activeDocument()}
-      bodyDraft={bodyDraft}
-      saveStatus={saveStatus || executionMessage}
-      onBodyChange={(value) => (bodyDraft = value)}
-      onSave={saveDocument}
-      onCreateDocument={createDocument}
-      onDeleteDocument={deleteDocument}
-    />
-  </div>
-
-  <aside class="ide-panel">
-    <header class="panel-head">
-      <strong>Workspace metadata</strong>
-      <span>project health</span>
-    </header>
-    <div class="detail-stack">
-      <div class="detail-row"><span>Project</span><strong>{activeWorkspace?.name || "No project open"}</strong></div>
-      <div class="detail-row"><span>Workspaces</span><strong>{workspaces.length}</strong></div>
-      <div class="detail-row"><span>Language</span><strong>{activeWorkspaceLanguage}</strong></div>
-      <div class="detail-row"><span>Execution</span><strong>{executionMessage || "Disabled until sandbox"}</strong></div>
-    </div>
-  </aside>
+  {/if}
 </section>
+
+<style>
+  .workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .workspace-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+  .editor-column { display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 8px; }
+  .tab-bar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--bg-card); font-size: 12px; }
+  .tab.active { background: var(--brand-dim); border-color: rgba(37,99,235,0.4); }
+  .tab-close { opacity: 0.6; padding: 0 4px; }
+  .editor-actions { display: flex; gap: 8px; align-items: center; }
+  .muted { color: var(--text-muted); font-size: 12px; }
+  @media (max-width: 900px) { .workspace-body { grid-template-columns: 1fr; } }
+</style>
