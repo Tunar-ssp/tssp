@@ -28,6 +28,7 @@ window.Tssp = window.Tssp || {};
     if (T.editingNoteTags.some((t) => t.toLowerCase() === key)) return false;
     T.editingNoteTags = [...T.editingNoteTags, tag];
     renderTagChips(T.editingNoteTags);
+    scheduleTagSync();
     return true;
   }
 
@@ -35,6 +36,22 @@ window.Tssp = window.Tssp || {};
     const key = tag.toLowerCase();
     T.editingNoteTags = T.editingNoteTags.filter((t) => t.toLowerCase() !== key);
     renderTagChips(T.editingNoteTags);
+    scheduleTagSync();
+  }
+
+  let tagSyncTimer = null;
+  function scheduleTagSync() {
+    if (!T.editingNoteId) return;
+    clearTimeout(tagSyncTimer);
+    const id = T.editingNoteId;
+    tagSyncTimer = setTimeout(async () => {
+      if (T.editingNoteId !== id) return;
+      try {
+        await syncNoteTags(id, T.editingNoteTags);
+      } catch {
+        // silent — user can still save manually
+      }
+    }, 1500);
   }
 
   function bindTagChipsInput() {
