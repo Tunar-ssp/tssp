@@ -139,36 +139,42 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
         return Ok(());
     }
 
+    let count = response.result_count.unwrap_or(response.results.len());
     if response.results.is_empty() {
         println!("no matches");
         return Ok(());
     }
 
+    println!("{count} result{}:", if count == 1 { "" } else { "s" });
     for item in &response.results {
         match item {
             SearchResultItem::File { record: file } => {
-                println!(
-                    "file\t{}\t{}\t{}\t{}",
-                    file.id,
-                    file.name,
-                    file.size_bytes,
-                    file.tags.join(",")
-                );
+                let tags = if file.tags.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{}]", file.tags.join(", "))
+                };
+                println!("  file      {}  {}{}", file.id, file.name, tags);
             }
             SearchResultItem::Note { record: note } => {
-                println!(
-                    "note\t{}\t{}\tupdated={}\t{}",
-                    note.id,
-                    note.title,
-                    note.updated_at,
-                    note.tags.join(",")
-                );
+                let tags = if note.tags.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{}]", note.tags.join(", "))
+                };
+                println!("  note      {}  {}{}", note.id, note.title, tags);
+                if !note.snippet.is_empty() {
+                    println!("            {}", note.snippet.lines().next().unwrap_or_default());
+                }
             }
             SearchResultItem::Workspace { record: workspace } => {
                 println!(
-                    "workspace\t{}\t{}\tupdated={}\t{}",
-                    workspace.id, workspace.name, workspace.updated_at, workspace.language
+                    "  workspace {}  {}  ({})",
+                    workspace.id, workspace.name, workspace.language
                 );
+                if !workspace.snippet.is_empty() {
+                    println!("            {}", workspace.snippet.lines().next().unwrap_or_default());
+                }
             }
         }
     }
@@ -178,6 +184,8 @@ fn print_search_results(response: &SearchResponse, json: bool, quiet: bool) -> R
 #[derive(Debug, Deserialize, Serialize)]
 struct SearchResponse {
     schema_version: u8,
+    #[serde(default)]
+    result_count: Option<usize>,
     results: Vec<SearchResultItem>,
 }
 
@@ -211,7 +219,10 @@ struct NoteRecordResponse {
     id: String,
     title: String,
     updated_at: i64,
+    #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    snippet: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -359,6 +370,7 @@ mod tests {
     fn apply_filters_limits_results() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![
                 file_hit("id-1", "first.txt", &["Docs"]),
                 file_hit("id-2", "second.txt", &["Notes"]),
@@ -387,6 +399,7 @@ mod tests {
     fn apply_filters_matches_tags_case_insensitively() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![
                 file_hit("id-1", "first.txt", &["Family Photos"]),
                 file_hit("id-2", "second.txt", &["Docs"]),
@@ -420,6 +433,7 @@ mod tests {
     fn print_search_results_quiet() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![],
         };
         assert!(print_search_results(&response, false, true).is_ok());
@@ -429,6 +443,7 @@ mod tests {
     fn print_search_results_json() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![],
         };
         assert!(print_search_results(&response, true, false).is_ok());
@@ -438,6 +453,7 @@ mod tests {
     fn print_search_results_empty() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![],
         };
         assert!(print_search_results(&response, false, false).is_ok());
@@ -447,6 +463,7 @@ mod tests {
     fn print_search_results_with_files() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![file_hit("id1", "test.txt", &["Docs"])],
         };
         assert!(print_search_results(&response, false, false).is_ok());
@@ -456,6 +473,7 @@ mod tests {
     fn print_search_results_with_workspace() {
         let response = SearchResponse {
             schema_version: 1,
+            result_count: None,
             results: vec![workspace_hit("ws-1", "Ops")],
         };
         assert!(print_search_results(&response, false, false).is_ok());
