@@ -21,22 +21,33 @@ T.allWorkspaces = [];
         : '<div class="notes-empty-state">No workspaces match your filters.</div>';
       return;
     }
+    const langColors = {
+      rust: "var(--orange)", python: "var(--blue)", js: "var(--yellow)",
+      javascript: "var(--yellow)", typescript: "var(--blue)", json: "var(--cyan)",
+      yaml: "var(--green)", toml: "var(--orange)", bash: "var(--green)",
+      sh: "var(--green)", html: "var(--red)", css: "var(--violet)",
+      sql: "var(--cyan)", markdown: "var(--text-muted)", md: "var(--text-muted)",
+    };
     container.innerHTML = `<div class="workspace-cards">${items
       .map((workspace) => {
         const id = T.escapeHtml(workspace.id);
-        const lineCount = (workspace.body || "").split("\n").length;
-        const preview = (workspace.body || "").trim().slice(0, 160);
+        const lang = (workspace.language || "text").toLowerCase();
+        const lineCount = (workspace.body || "").split("\n").filter(Boolean).length;
+        const charCount = (workspace.body || "").length;
+        const preview = (workspace.body || "").trim().split("\n").slice(0, 3).join("\n");
+        const langColor = langColors[lang] || "var(--text-dim)";
         return `<article class="workspace-card">
           <div class="workspace-card-head">
             <div class="workspace-card-title-row">
               <strong class="workspace-card-name">${T.escapeHtml(workspace.name)}</strong>
-              <span class="type-pill">${T.escapeHtml(workspace.language)}</span>
+              <span class="workspace-lang-badge" style="color:${langColor}">${T.escapeHtml(workspace.language || "text")}</span>
             </div>
-            <div class="workspace-card-meta">${lineCount} lines · Updated ${T.escapeHtml(T.formatDate(workspace.updated_at))}</div>
+            <div class="workspace-card-meta">${lineCount} lines · ${charCount} chars · ${T.escapeHtml(T.formatDate(workspace.updated_at))}</div>
           </div>
-          ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : ""}
+          ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : '<div class="workspace-card-empty">Empty file</div>'}
           <div class="workspace-card-actions">
-            <button type="button" class="btn btn-secondary btn-sm" data-ws-edit="${id}">Edit</button>
+            <button type="button" class="btn btn-primary btn-sm" data-ws-open-editor="${id}">Open in editor</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-ws-edit="${id}">Settings</button>
             <button type="button" class="btn btn-text btn-sm btn-danger" data-ws-del="${id}">Delete</button>
           </div>
         </article>`;

@@ -345,6 +345,17 @@
         T.toggleNotePin(pinNote.dataset.pinNote, pinNote.dataset.pinned === "1");
         return;
       }
+      const openEditorWs = ev.target.closest("[data-ws-open-editor]");
+      if (openEditorWs) {
+        const wsId = openEditorWs.dataset.wsOpenEditor;
+        if (typeof T.openEditorWorkspace === "function") {
+          T.setView("editor");
+          T.openEditorWorkspace(wsId);
+        } else {
+          T.setView("editor");
+        }
+        return;
+      }
       const editWorkspace = ev.target.closest("[data-ws-edit]");
       if (editWorkspace && typeof T.openWorkspace === "function") {
         T.openWorkspace(editWorkspace.dataset.wsEdit);

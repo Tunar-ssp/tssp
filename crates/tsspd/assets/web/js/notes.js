@@ -405,14 +405,148 @@ window.Tssp = window.Tssp || {};
     T.setView("notes");
   };
 
+  // ── Slash command menu ───────────────────────────────────────────────────
+
+  const SLASH_COMMANDS = [
+    { icon: "H1", label: "Heading 1",       key: "h1",       snippet: "# ",                   desc: "Large section title" },
+    { icon: "H2", label: "Heading 2",       key: "h2",       snippet: "## ",                  desc: "Medium section title" },
+    { icon: "H3", label: "Heading 3",       key: "h3",       snippet: "### ",                 desc: "Subsection title" },
+    { icon: "•",  label: "Bullet list",     key: "bullet",   snippet: "- ",                   desc: "Unordered list" },
+    { icon: "1.",  label: "Numbered list",  key: "numbered", snippet: "1. ",                  desc: "Ordered list" },
+    { icon: "☑",  label: "Checklist",       key: "todo",     snippet: "- [ ] ",              desc: "Task item" },
+    { icon: ">",  label: "Quote / Callout", key: "callout",  snippet: "> [!NOTE]\n> ",        desc: "Callout block" },
+    { icon: "</>", label: "Code block",     key: "code",     snippet: "```\n\n```",            desc: "Code or terminal output" },
+    { icon: "—",  label: "Divider",         key: "hr",       snippet: "\n---\n",              desc: "Horizontal rule" },
+    { icon: "⊞",  label: "Table",           key: "table",    snippet: "| Column | Column |\n| --- | --- |\n| Cell | Cell |\n", desc: "Markdown table" },
+    { icon: "↗",  label: "Link",            key: "link",     snippet: "[link text](url)",     desc: "Hyperlink" },
+    { icon: "``", label: "Inline code",     key: "icode",    snippet: "``",                   desc: "Inline code span" },
+    { icon: "**", label: "Bold",            key: "bold",     snippet: "****",                 desc: "Bold text" },
+    { icon: "_",  label: "Italic",          key: "italic",   snippet: "__",                   desc: "Italic text" },
+  ];
+
+  let slashMenu = null;
+  let slashStart = -1;
+  let slashItems = [];
+  let slashSelected = 0;
+
+  function showSlashMenu(area, query) {
+    closeSlashMenu();
+    slashItems = query
+      ? SLASH_COMMANDS.filter((c) =>
+          c.label.toLowerCase().includes(query.toLowerCase()) ||
+          c.key.includes(query.toLowerCase()))
+      : SLASH_COMMANDS;
+    if (!slashItems.length) return;
+
+    slashSelected = 0;
+    const rect = area.getBoundingClientRect();
+    // approximate position: use cursor line
+    const textBefore = area.value.slice(0, area.selectionStart);
+    const lines = textBefore.split("\n");
+    const lineIdx = lines.length - 1;
+    const lineHeight = parseFloat(getComputedStyle(area).lineHeight) || 22;
+    const paddingTop = parseFloat(getComputedStyle(area).paddingTop) || 8;
+    const top = rect.top + window.scrollY + paddingTop + lineIdx * lineHeight + lineHeight;
+    const left = rect.left + window.scrollX + 12;
+
+    slashMenu = document.createElement("div");
+    slashMenu.className = "slash-menu";
+    slashMenu.style.cssText = `position:fixed;left:${Math.min(left, window.innerWidth - 280)}px;top:${Math.min(top, window.innerHeight - 320)}px;z-index:300;`;
+    renderSlashMenu(area);
+    document.body.appendChild(slashMenu);
+  }
+
+  function renderSlashMenu(area) {
+    if (!slashMenu) return;
+    slashMenu.innerHTML = `<div class="slash-menu-list">${
+      slashItems.map((cmd, i) =>
+        `<button type="button" class="slash-menu-item${i === slashSelected ? " active" : ""}" data-slash-key="${T.escapeHtml(cmd.key)}">
+          <span class="slash-icon">${T.escapeHtml(cmd.icon)}</span>
+          <span class="slash-main">
+            <span class="slash-label">${T.escapeHtml(cmd.label)}</span>
+            <span class="slash-desc">${T.escapeHtml(cmd.desc)}</span>
+          </span>
+        </button>`
+      ).join("")
+    }</div>`;
+
+    slashMenu.querySelectorAll(".slash-menu-item").forEach((btn, i) => {
+      btn.addEventListener("mouseenter", () => { slashSelected = i; renderSlashMenu(area); });
+      btn.addEventListener("click", () => applySlashCommand(area, btn.dataset.slashKey));
+    });
+  }
+
+  function applySlashCommand(area, key) {
+    const cmd = SLASH_COMMANDS.find((c) => c.key === key);
+    if (!cmd || slashStart < 0) { closeSlashMenu(); return; }
+    // Replace from slashStart to current cursor with the snippet
+    const before = area.value.slice(0, slashStart);
+    const after = area.value.slice(area.selectionStart);
+    let snippet = cmd.snippet;
+    // Place cursor at end of snippet (or inside paired chars)
+    let cursorOffset = snippet.length;
+    if (cmd.key === "icode") cursorOffset = 1;
+    if (cmd.key === "bold") cursorOffset = 2;
+    if (cmd.key === "italic") cursorOffset = 1;
+    if (cmd.key === "code") cursorOffset = "```\n".length;
+    area.value = before + snippet + after;
+    area.selectionStart = area.selectionEnd = before.length + cursorOffset;
+    area.focus();
+    closeSlashMenu();
+    T.refreshNotePreview();
+    T.updateNoteWordCount();
+    scheduleAutosave();
+  }
+
+  function closeSlashMenu() {
+    if (slashMenu) { slashMenu.remove(); slashMenu = null; }
+    slashStart = -1;
+  }
+
   T.bindNoteEditorEvents = function bindNoteEditorEvents() {
     const bodyInput = T.$("#note-body-input");
     const titleInput = T.$("#note-title-input");
     if (bodyInput) {
-      bodyInput.addEventListener("input", () => {
+      bodyInput.addEventListener("input", (e) => {
         T.refreshNotePreview();
         T.updateNoteWordCount();
         scheduleAutosave();
+
+        // Slash command detection
+        const val = bodyInput.value;
+        const pos = bodyInput.selectionStart;
+        const textBefore = val.slice(0, pos);
+        const lineStart = textBefore.lastIndexOf("\n") + 1;
+        const lineText = textBefore.slice(lineStart);
+        if (lineText.startsWith("/")) {
+          slashStart = lineStart;
+          showSlashMenu(bodyInput, lineText.slice(1));
+        } else {
+          closeSlashMenu();
+        }
+      });
+
+      bodyInput.addEventListener("keydown", (e) => {
+        if (!slashMenu) return;
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          slashSelected = (slashSelected + 1) % slashItems.length;
+          renderSlashMenu(bodyInput);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          slashSelected = (slashSelected - 1 + slashItems.length) % slashItems.length;
+          renderSlashMenu(bodyInput);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          applySlashCommand(bodyInput, slashItems[slashSelected]?.key);
+        } else if (e.key === "Escape") {
+          closeSlashMenu();
+        }
+      });
+
+      bodyInput.addEventListener("blur", () => {
+        // Delay to allow click on slash menu item
+        setTimeout(closeSlashMenu, 180);
       });
     }
     if (titleInput) {
