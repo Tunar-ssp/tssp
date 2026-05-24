@@ -1,6 +1,7 @@
 //! Axum handlers for note endpoints.
 
 use axum::extract::{Path, Query, State};
+use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -221,6 +222,36 @@ async fn pin_with_position(state: HttpState, id: String, position: Option<u32>) 
     .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(response) => response,
+    }
+}
+
+/// `GET /api/v1/notes/export` — download all notes as newline-delimited JSON.
+pub(crate) async fn export_notes(State(state): State<HttpState>) -> Response {
+    let query = tssp_ports::NoteListQuery {
+        limit: 10_000,
+        ..tssp_ports::NoteListQuery::default()
+    };
+    let provider = state.note_provider.clone();
+    match run_blocking(provider, move |provider| provider.list_notes(query)).await {
+        Ok(page) => {
+            let mut body = String::new();
+            for note in &page.notes {
+                if let Ok(line) = serde_json::to_string(&NoteRecordResponse::from_record(note)) {
+                    body.push_str(&line);
+                    body.push('\n');
+                }
+            }
+            (
+                StatusCode::OK,
+                [
+                    (CONTENT_TYPE, "application/x-ndjson; charset=utf-8"),
+                    (CONTENT_DISPOSITION, "attachment; filename=\"notes-export.ndjson\""),
+                ],
+                body,
+            )
+                .into_response()
+        }
         Err(response) => response,
     }
 }

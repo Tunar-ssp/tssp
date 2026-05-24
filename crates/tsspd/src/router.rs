@@ -101,6 +101,10 @@ pub fn build_router(state: HttpState) -> Router {
             get(crate::search::search_files).options(options_response),
         )
         .route(
+            "/api/v1/notes/export",
+            get(crate::notes::export_notes).options(options_response),
+        )
+        .route(
             "/api/v1/notes",
             post(crate::notes::create_note)
                 .get(crate::notes::list_notes)
