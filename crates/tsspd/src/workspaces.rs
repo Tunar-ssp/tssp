@@ -57,14 +57,14 @@ enum WorkspaceValidationError {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct WorkspaceRecord {
-    id: String,
-    owner_id: String,
-    name: String,
-    language: String,
-    body: String,
-    created_at: i64,
-    updated_at: i64,
+pub(crate) struct WorkspaceRecord {
+    pub(crate) id: String,
+    pub(crate) owner_id: String,
+    pub(crate) name: String,
+    pub(crate) language: String,
+    pub(crate) body: String,
+    pub(crate) created_at: i64,
+    pub(crate) updated_at: i64,
 }
 
 /// Bounded workspace search result returned to the search API.
@@ -113,7 +113,7 @@ impl WorkspaceStore {
             .map_err(WorkspaceError::Database)
     }
 
-    fn get(&self, id: &str, owner_id: Option<&str>) -> Result<WorkspaceRecord, WorkspaceError> {
+    pub(crate) fn get(&self, id: &str, owner_id: Option<&str>) -> Result<WorkspaceRecord, WorkspaceError> {
         let connection = self.lock()?;
         let mut statement = connection.prepare(
             "SELECT id, owner_id, name, language, body, created_at, updated_at
@@ -190,7 +190,7 @@ impl WorkspaceStore {
         Ok(())
     }
 
-    fn list_all(&self) -> Result<Vec<WorkspaceRecord>, WorkspaceError> {
+    pub(crate) fn list_all(&self) -> Result<Vec<WorkspaceRecord>, WorkspaceError> {
         let connection = self.lock()?;
         let mut statement = connection.prepare(
             "SELECT id, owner_id, name, language, body, created_at, updated_at

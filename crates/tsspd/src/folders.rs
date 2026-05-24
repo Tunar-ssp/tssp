@@ -1,9 +1,35 @@
 //! Logical folder rename/move/delete.
 
+const MAX_FOLDER_PATH_BYTES: usize = 1024;
+
 /// Normalizes a folder path for storage (no leading/trailing slashes).
 #[must_use]
 pub fn normalize_folder_path(value: &str) -> String {
     value.trim().trim_matches('/').replace('\\', "/")
+}
+
+/// Validates a normalized folder path.
+///
+/// Returns `Err` with a human-readable message when the path contains null bytes,
+/// `..` traversal components, or exceeds the length limit.
+///
+/// # Errors
+///
+/// Returns `Err(&'static str)` when the path fails validation.
+pub fn validate_folder_path(path: &str) -> Result<(), &'static str> {
+    if path.contains('\0') {
+        return Err("folder path must not contain null bytes");
+    }
+    if path.len() > MAX_FOLDER_PATH_BYTES {
+        return Err("folder path is too long (max 1024 bytes)");
+    }
+    // Reject any component that is exactly ".." after splitting on "/"
+    for component in path.split('/') {
+        if component == ".." {
+            return Err("folder path must not contain '..' components");
+        }
+    }
+    Ok(())
 }
 
 use axum::extract::State;

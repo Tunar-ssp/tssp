@@ -62,6 +62,10 @@ pub(crate) const JS_ADMIN: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/admin.js"
 ));
+pub(crate) const JS_EDITOR: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/editor.js"
+));
 pub(crate) const JS_APP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
 
@@ -88,6 +92,7 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "js/files.js" => Some((JS_FILES, "application/javascript; charset=utf-8")),
         "js/notes.js" => Some((JS_NOTES, "application/javascript; charset=utf-8")),
         "js/admin.js" => Some((JS_ADMIN, "application/javascript; charset=utf-8")),
+        "js/editor.js" => Some((JS_EDITOR, "application/javascript; charset=utf-8")),
         "js/app.js" => Some((JS_APP, "application/javascript; charset=utf-8")),
         _ => None,
     }

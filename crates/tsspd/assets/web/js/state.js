@@ -81,5 +81,6 @@ window.Tssp = window.Tssp || {};
     else if (view === "public") T.loadPublic();
     else if (view === "workspaces") T.loadWorkspaces();
     else if (view === "admin") T.loadAdmin();
+    else if (view === "editor") T.loadEditor();
   };
 })(window.Tssp);

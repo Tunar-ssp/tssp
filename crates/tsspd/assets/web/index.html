@@ -97,6 +97,10 @@
         <a href="#admin" class="nav-item" data-view="admin">
           <span>Admin</span>
         </a>
+        <a href="#editor" class="nav-item admin-only hidden" data-view="editor">
+          <span>Editor</span>
+          <span class="nav-badge">admin</span>
+        </a>
       </nav>
 
       <main class="main" id="main">
@@ -452,6 +456,46 @@
             </div>
           </div>
         </section>
+
+        <section id="view-editor" class="view hidden">
+          <div class="editor-layout">
+            <aside class="editor-sidebar">
+              <div class="editor-sidebar-head">
+                <span class="editor-sidebar-title">Workspaces</span>
+                <span class="editor-admin-badge">admin</span>
+              </div>
+              <div class="editor-sidebar-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="editor-new-btn">+ New</button>
+              </div>
+              <div id="editor-ws-list" class="editor-ws-list"></div>
+            </aside>
+            <div class="editor-main">
+              <div class="editor-topbar">
+                <span id="editor-filename" class="editor-filename">No workspace open</span>
+                <span id="editor-lang-badge" class="editor-lang-badge"></span>
+                <span id="editor-save-status" class="editor-save-status"></span>
+                <div class="editor-topbar-actions">
+                  <button type="button" class="btn btn-danger btn-sm" id="editor-delete-btn" title="Delete workspace">Delete</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="editor-save-btn" title="Save (Ctrl+S)">Save</button>
+                </div>
+              </div>
+              <div class="editor-code-wrap">
+                <textarea id="editor-area" class="code-area" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Open or create a workspace to start editing…"></textarea>
+              </div>
+              <div class="editor-status-bar">
+                <span id="editor-line-count">0 lines</span>
+                <span id="editor-char-count">0 chars</span>
+                <span class="editor-status-exec-disabled" title="Script execution requires a sandboxed runtime not yet available">Execution disabled — sandbox not available</span>
+              </div>
+            </div>
+            <aside class="editor-info-panel">
+              <div class="editor-info-head">Details</div>
+              <div id="editor-info-panel">
+                <p class="muted">Open a workspace to see details.</p>
+              </div>
+            </aside>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -491,6 +535,7 @@
   <script src="/assets/js/files.js" defer></script>
   <script src="/assets/js/notes.js" defer></script>
   <script src="/assets/js/admin.js" defer></script>
+  <script src="/assets/js/editor.js" defer></script>
   <script src="/assets/js/app.js" defer></script>
   <script>
     if ("serviceWorker" in navigator) {

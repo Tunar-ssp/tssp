@@ -256,6 +256,18 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::admin::run_command).options(options_response),
         )
         .route(
+            "/api/v1/admin/editor/workspaces",
+            get(crate::admin::admin_editor_list_workspaces).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/editor/workspaces/{id}",
+            get(crate::admin::admin_editor_get_workspace).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/editor/check",
+            post(crate::admin::admin_editor_check).options(options_response),
+        )
+        .route(
             "/api/v1/public/files",
             get(crate::public_api::list_public_files).options(options_response),
         )

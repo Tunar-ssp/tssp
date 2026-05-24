@@ -252,6 +252,7 @@
     });
 
     T.bindUpload();
+    T.bindEditorEvents();
   }
 
   try {
