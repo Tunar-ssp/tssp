@@ -193,6 +193,22 @@
 
     T.$("#preview-close")?.addEventListener("click", () => T.$("#preview-dialog")?.close());
 
+    T.$("#preview-prev")?.addEventListener("click", () => {
+      if (T.currentPreviewId && T.currentFiles) {
+        const idx = T.currentFiles.findIndex((f) => f.id === T.currentPreviewId);
+        if (idx > 0 && typeof T.previewFile === "function") T.previewFile(T.currentFiles[idx - 1].id);
+      }
+    });
+
+    T.$("#preview-next")?.addEventListener("click", () => {
+      if (T.currentPreviewId && T.currentFiles) {
+        const idx = T.currentFiles.findIndex((f) => f.id === T.currentPreviewId);
+        if (idx >= 0 && idx < T.currentFiles.length - 1 && typeof T.previewFile === "function") {
+          T.previewFile(T.currentFiles[idx + 1].id);
+        }
+      }
+    });
+
     document.addEventListener("change", (ev) => {
       const fileSelect = ev.target.closest("[data-file-select]");
       if (fileSelect && typeof T.setSelectedFile === "function") {
@@ -340,6 +356,17 @@
           T.openNoteDialog(null);
         }
         return;
+      }
+
+      // Arrow keys — navigate preview dialog
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
+        const dialog = T.$("#preview-dialog");
+        if (dialog?.open) {
+          ev.preventDefault();
+          const btn = ev.key === "ArrowLeft" ? T.$("#preview-prev") : T.$("#preview-next");
+          btn?.click();
+          return;
+        }
       }
 
       // Escape — close open dialogs or go back from editor views

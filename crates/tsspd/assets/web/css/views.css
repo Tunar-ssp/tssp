@@ -1624,3 +1624,23 @@
   color: var(--text-dim);
   min-width: 60px;
 }
+
+/* ── Preview dialog nav & tags ───────────────────────────────────────── */
+#preview-prev, #preview-next {
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  min-width: 28px;
+}
+
+.preview-meta-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.preview-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+}

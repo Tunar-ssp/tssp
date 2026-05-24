@@ -323,6 +323,8 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.currentPreviewId = null;
+
   T.previewFile = async function previewFile(id) {
     const file =
       T.currentFiles.find((item) => item.id === id) ||
@@ -331,19 +333,31 @@ window.Tssp = window.Tssp || {};
       T.showBanner("Object metadata could not be loaded", "error");
       return;
     }
+    T.currentPreviewId = id;
     const title = T.$("#preview-title");
     const content = T.$("#preview-content");
     const meta = T.$("#preview-meta");
     const dlBtn = T.$("#preview-download-btn");
     title.textContent = file.name || file.id;
     if (meta) {
+      const tagHtml = (file.tags || []).map(
+        (t) => `<span class="tag preview-tag">${T.escapeHtml(t)}</span>`
+      ).join("");
+      const pinnedHtml = file.pinned ? `<span class="preview-meta-item preview-pinned" title="Pinned">📌</span>` : "";
       meta.innerHTML = [
+        pinnedHtml,
         T.stateBadge(file.visibility),
         `<span class="preview-meta-item">${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>`,
         file.mime_type ? `<span class="preview-meta-item mono">${T.escapeHtml(file.mime_type)}</span>` : "",
         file.folder_path ? `<span class="preview-meta-item">${T.escapeHtml(file.folder_path)}</span>` : "",
+        tagHtml ? `<span class="preview-meta-tags">${tagHtml}</span>` : "",
       ].join("");
     }
+    const idx = T.currentFiles.findIndex((f) => f.id === id);
+    const prevBtn = T.$("#preview-prev");
+    const nextBtn = T.$("#preview-next");
+    if (prevBtn) prevBtn.style.visibility = idx > 0 ? "" : "hidden";
+    if (nextBtn) nextBtn.style.visibility = idx >= 0 && idx < T.currentFiles.length - 1 ? "" : "hidden";
     if (dlBtn) {
       dlBtn.href = T.fileDownloadUrl(file.id);
       dlBtn.removeAttribute("hidden");
