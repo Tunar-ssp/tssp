@@ -304,11 +304,36 @@
     });
 
     document.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      const card = ev.target.closest(".note-card[data-edit-note]");
-      if (card && ev.target === card && typeof T.openNote === "function") {
-        ev.preventDefault();
-        T.openNote(card.dataset.editNote);
+      // Note card keyboard activation
+      if (ev.key === "Enter" || ev.key === " ") {
+        const card = ev.target.closest(".note-card[data-edit-note]");
+        if (card && ev.target === card && typeof T.openNote === "function") {
+          ev.preventDefault();
+          T.openNote(card.dataset.editNote);
+          return;
+        }
+      }
+
+      // Ctrl+K / Cmd+K — focus global search
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "k") {
+        const search = T.$("#global-search");
+        if (search) {
+          ev.preventDefault();
+          T.setView("search");
+          search.focus();
+          search.select();
+        }
+        return;
+      }
+
+      // Escape — close open dialogs or go back from editor views
+      if (ev.key === "Escape") {
+        const openDialog = document.querySelector("dialog[open]");
+        if (openDialog) { openDialog.close(); return; }
+        const view = document.querySelector(".view:not(.hidden)");
+        if (view?.id === "view-note-editor" && typeof T.closeNoteEditor === "function") {
+          T.closeNoteEditor();
+        }
       }
     });
 

@@ -148,3 +148,27 @@
     flex-wrap: wrap;
   }
 }
+
+@media (max-width: 720px) {
+  .upload-queue-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .upload-queue-status {
+    min-width: unset;
+    text-align: left;
+  }
+  .tag-chips-field {
+    min-width: 0;
+  }
+  .notes-tag-bar {
+    padding-bottom: 8px;
+  }
+  .admin-card-head-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .admin-files-search-input {
+    width: 100%;
+  }
+}
