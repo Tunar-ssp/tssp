@@ -37,11 +37,24 @@ window.Tssp = window.Tssp || {};
       if (pinned) fd.append("pin", "1");
       for (const tag of tags) fd.append("tag", tag);
       try {
-        await T.api("/files", { method: "POST", body: fd });
+        const res = await fetch(T.API + "/files", {
+          method: "POST",
+          credentials: "same-origin",
+          body: fd,
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({}));
+          throw new Error(b.error?.message || `HTTP ${res.status}`);
+        }
         ok++;
-        if (statusEl) { statusEl.textContent = "Done"; statusEl.className = "upload-queue-status done"; }
+        const deduped = res.headers.get("x-tssp-deduplicated") === "true";
+        if (statusEl) {
+          statusEl.textContent = deduped ? "Dedup" : "Done";
+          statusEl.className = `upload-queue-status ${deduped ? "dedup" : "done"}`;
+          if (deduped) statusEl.title = "File already exists — blob reused";
+        }
       } catch (e) {
-        if (statusEl) { statusEl.textContent = `Failed: ${e.message}`; statusEl.className = "upload-queue-status failed"; }
+        if (statusEl) { statusEl.textContent = `Failed`; statusEl.className = "upload-queue-status failed"; statusEl.title = e.message; }
       }
     }
 

@@ -877,3 +877,5 @@ select:focus {
 .upload-queue-status.uploading { color: var(--accent); }
 .upload-queue-status.done { color: var(--success, #4ade80); }
 .upload-queue-status.failed { color: var(--danger); }
+
+.upload-queue-status.dedup { color: var(--warning, #fbbf24); }
