@@ -1,6 +1,6 @@
 //! HTTP integration tests split across focused modules.
 
-mod common;
+pub(crate) mod common;
 mod files;
 mod folders;
 mod imports;
