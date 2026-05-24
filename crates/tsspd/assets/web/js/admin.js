@@ -81,14 +81,35 @@ window.Tssp = window.Tssp || {};
     </table>`;
   }
 
+  let adminSelectedIds = new Set();
+
+  function updateBulkBar() {
+    const bar = T.$("#admin-bulk-bar");
+    if (!bar) return;
+    const count = adminSelectedIds.size;
+    if (count > 0) {
+      bar.classList.remove("hidden");
+      const label = bar.querySelector(".bulk-bar-label");
+      if (label) label.textContent = `${count} file${count !== 1 ? "s" : ""} selected`;
+    } else {
+      bar.classList.add("hidden");
+    }
+  }
+
   function renderAdminFiles(files) {
+    adminSelectedIds.clear();
+    updateBulkBar();
     if (!files.length) return '<div class="empty-state compact">No files found.</div>';
     return `<table class="data-table compact-table">
-      <thead><tr><th>Name</th><th>Size</th><th>Folder</th><th>Visibility</th><th class="col-actions">Actions</th></tr></thead>
+      <thead><tr>
+        <th style="width:32px"><input type="checkbox" id="admin-select-all" title="Select all"></th>
+        <th>Name</th><th>Size</th><th>Folder</th><th>Visibility</th><th class="col-actions">Actions</th>
+      </tr></thead>
       <tbody>${files
         .map((file) => {
           const nextVis = file.visibility === "public" ? "private" : "public";
           return `<tr>
+            <td><input type="checkbox" class="admin-file-check" data-file-id="${T.escapeHtml(file.id)}"></td>
             <td><strong>${T.escapeHtml(file.name)}</strong><div class="row-meta mono">${T.escapeHtml(file.id)}</div></td>
             <td class="mono">${T.escapeHtml(T.formatBytes(file.size_bytes))}</td>
             <td>${T.escapeHtml(file.folder_path || "Bucket root")}</td>
@@ -104,6 +125,28 @@ window.Tssp = window.Tssp || {};
     </table>`;
   }
 
+  function bindAdminFileCheckboxes() {
+    const container = T.$("#admin-files");
+    if (!container || container.dataset.checkBound) return;
+    container.dataset.checkBound = "1";
+    container.addEventListener("change", (e) => {
+      const box = e.target.closest(".admin-file-check");
+      const all = e.target.closest("#admin-select-all");
+      if (box) {
+        const id = box.dataset.fileId;
+        if (box.checked) adminSelectedIds.add(id); else adminSelectedIds.delete(id);
+        updateBulkBar();
+      } else if (all) {
+        container.querySelectorAll(".admin-file-check").forEach((cb) => {
+          cb.checked = all.checked;
+          if (all.checked) adminSelectedIds.add(cb.dataset.fileId);
+          else adminSelectedIds.delete(cb.dataset.fileId);
+        });
+        updateBulkBar();
+      }
+    });
+  }
+
   let adminAllFiles = [];
 
   function renderFilteredAdminFiles() {
@@ -116,6 +159,8 @@ window.Tssp = window.Tssp || {};
       (f.folder_path || "").toLowerCase().includes(q)
     ) : adminAllFiles;
     filesEl.innerHTML = renderAdminFiles(visible);
+    delete filesEl.dataset.checkBound;
+    bindAdminFileCheckboxes();
   }
 
   T.loadAdminFiles = async function loadAdminFiles() {
@@ -132,6 +177,37 @@ window.Tssp = window.Tssp || {};
       }
     } catch (error) {
       filesEl.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;
+    }
+  };
+
+  T.bindAdminBulkBar = function bindAdminBulkBar() {
+    const deleteBtn = T.$("#admin-bulk-delete");
+    const clearBtn = T.$("#admin-bulk-clear");
+    if (deleteBtn && !deleteBtn.dataset.bound) {
+      deleteBtn.dataset.bound = "1";
+      deleteBtn.addEventListener("click", async () => {
+        const ids = [...adminSelectedIds];
+        if (!ids.length) return;
+        if (!confirm(`Delete ${ids.length} file${ids.length !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+        let ok = 0, failed = 0;
+        for (const id of ids) {
+          try {
+            await T.api("/files/" + encodeURIComponent(id), { method: "DELETE" });
+            ok++;
+          } catch (_) { failed++; }
+        }
+        if (failed === 0) T.showBanner(`Deleted ${ok} file${ok !== 1 ? "s" : ""}`, "success");
+        else T.showBanner(`${ok} deleted, ${failed} failed`, "error");
+        await T.loadAdminFiles();
+      });
+    }
+    if (clearBtn && !clearBtn.dataset.bound) {
+      clearBtn.dataset.bound = "1";
+      clearBtn.addEventListener("click", () => {
+        adminSelectedIds.clear();
+        T.$("#admin-files")?.querySelectorAll(".admin-file-check, #admin-select-all").forEach((cb) => { cb.checked = false; });
+        updateBulkBar();
+      });
     }
   };
 
@@ -183,6 +259,7 @@ window.Tssp = window.Tssp || {};
       devicesEl.innerHTML = renderAdminDevices(devices.devices || []);
       sessionsEl.innerHTML = renderAdminSessions(sessions.sessions || []);
       T.loadAdminFiles();
+      T.bindAdminBulkBar();
       T.loadConsoleCommands();
     } catch (error) {
       overview.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;

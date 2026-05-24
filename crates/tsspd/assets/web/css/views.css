@@ -1530,3 +1530,21 @@
   color: var(--text-primary);
   cursor: pointer;
 }
+
+/* ── Admin bulk actions bar ───────────────────────────────────────────── */
+.admin-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-muted);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.bulk-bar-label {
+  font-size: 0.85rem;
+  color: var(--accent-light);
+  flex: 1;
+}
