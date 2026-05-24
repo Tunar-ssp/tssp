@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { commandPaletteOpen, commandQuery, closeCommandPalette } from "../stores/ui";
-  import { navigateApp, navigateDriveLens, type AppId } from "../router";
+  import { navigateApp } from "../router";
   import { runSearch, type SearchResult } from "../api";
 
   let queryInput: HTMLInputElement | null = null;
@@ -52,7 +52,14 @@
 
 {#if $commandPaletteOpen}
   <div class="command-overlay" role="presentation" on:click={closeCommandPalette}>
-    <section class="command-surface" role="dialog" aria-modal="true" on:click|stopPropagation>
+    <section
+      class="command-surface"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      on:click|stopPropagation
+      on:keydown|stopPropagation
+    >
       <div class="command-header">
         <input
           bind:this={queryInput}

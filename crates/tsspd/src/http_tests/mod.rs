@@ -2,6 +2,7 @@
 
 mod common;
 mod files;
+mod folders;
 mod imports;
 mod pins;
 mod tags;

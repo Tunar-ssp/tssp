@@ -308,6 +308,10 @@ export function deleteFolder(path: string) {
   });
 }
 
+export function listFolders() {
+  return apiFetch<{ schema_version: number; folders: FolderEntry[] }>("/folders");
+}
+
 export async function uploadFilesBatch(
   files: File[],
   options: { folderPath?: string; tags?: string[]; pin?: boolean } = {},

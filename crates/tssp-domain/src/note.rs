@@ -128,6 +128,8 @@ pub struct NoteRecord {
     pub tags: Vec<Tag>,
     /// Pin ordering position when pinned.
     pub pinned_at: Option<u32>,
+    /// Virtual folder path for note organization.
+    pub folder_path: String,
 }
 
 /// Derives a title from Markdown when the caller did not supply one.
@@ -214,6 +216,7 @@ mod tests {
             updated_at: created,
             tags: vec![],
             pinned_at: None,
+            folder_path: String::new(),
         };
         assert_eq!(record.title.as_str(), "Title");
     }
