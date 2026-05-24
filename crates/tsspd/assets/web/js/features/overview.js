@@ -108,7 +108,7 @@ window.Tssp = window.Tssp || {};
               <span class="overview-qa-icon" style="background:rgba(37,99,235,0.15);color:var(--blue)">📁</span>
               <span>Browse files</span>
             </button>
-            <button class="overview-qa-btn" onclick="window.Tssp.openNoteDialog && window.Tssp.openNoteDialog(null);window.Tssp.setView('notes')">
+            <button class="overview-qa-btn" onclick="window.Tssp.openNoteDialog && window.Tssp.openNoteDialog(null)">
               <span class="overview-qa-icon" style="background:rgba(251,191,36,0.15);color:var(--yellow)">📝</span>
               <span>New note</span>
             </button>
