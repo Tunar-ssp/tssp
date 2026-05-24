@@ -149,6 +149,7 @@ mod tests {
     use std::sync::Arc;
     use tower::util::ServiceExt;
     use tssp_domain::{FileId, FileRecord, Visibility};
+    use tssp_ports::PagedFiles;
 
     use crate::router::build_router;
     use crate::state::HttpState;
@@ -168,8 +169,8 @@ mod tests {
             })
         }
 
-        fn list_files(&self, _: &tssp_ports::ListQuery) -> Result<tssp_ports::PagedFiles, String> {
-            Ok(tssp_ports::PagedFiles {
+        fn list_files(&self, _: &tssp_ports::ListQuery) -> Result<PagedFiles, String> {
+            Ok(PagedFiles {
                 files: Vec::new(),
                 next_cursor: None,
             })
