@@ -9,6 +9,8 @@ pub mod auth;
 mod config;
 mod content;
 mod delete;
+mod edge_cases_tests;
+mod error_handling_tests;
 mod file;
 mod folders;
 mod http_error;
