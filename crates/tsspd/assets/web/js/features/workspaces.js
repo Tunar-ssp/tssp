@@ -50,7 +50,7 @@ T.allWorkspaces = [];
               <strong class="workspace-card-name">${T.escapeHtml(workspace.name)}</strong>
               <span class="workspace-lang-badge" style="color:${langColor}">${T.escapeHtml(workspace.language || "text")}</span>
             </div>
-            <div class="workspace-card-meta">${lineCount} lines · ${charCount} chars · ${T.escapeHtml(T.formatDate(workspace.updated_at))}</div>
+            <div class="workspace-card-meta">${lineCount} lines · ${charCount} chars · <span title="${T.escapeHtml(T.formatDate(workspace.updated_at))}">${T.escapeHtml(T.formatRelativeTime(workspace.updated_at) || T.formatDate(workspace.updated_at))}</span></div>
           </div>
           ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : '<div class="workspace-card-empty">Empty file</div>'}
           <div class="workspace-card-actions">

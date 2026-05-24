@@ -69,7 +69,7 @@ window.Tssp = window.Tssp || {};
       </button>
       <div class="drive-file-card-meta">
         <span class="type-pill">${T.escapeHtml(T.fileKind(file))}</span>
-        <span>${T.escapeHtml(T.formatDate(file.uploaded_at))}</span>
+        <span title="${T.escapeHtml(T.formatDate(file.uploaded_at))}">${T.escapeHtml(T.formatRelativeTime(file.uploaded_at) || T.formatDate(file.uploaded_at))}</span>
       </div>
       ${tags ? `<div class="drive-file-card-tags">${tags}</div>` : ""}
       <div class="drive-file-card-actions">

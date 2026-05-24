@@ -31,6 +31,22 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  T.formatRelativeTime = function formatRelativeTime(value) {
+    if (value == null || value === "") return "";
+    try {
+      const ms = typeof value === "number" ? value * 1000 : Date.parse(String(value));
+      if (Number.isNaN(ms)) return "";
+      const diff = Math.round((Date.now() - ms) / 1000);
+      if (diff < 60) return "just now";
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+      return T.formatDate(value);
+    } catch {
+      return "";
+    }
+  };
+
   T.formatUptime = function formatUptime(sec) {
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);

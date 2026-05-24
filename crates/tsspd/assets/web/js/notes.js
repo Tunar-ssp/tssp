@@ -208,6 +208,7 @@ window.Tssp = window.Tssp || {};
     const dateStr = T.escapeHtml(T.formatDate(note.updated_at));
     const wordCount = (note.body || "").trim().split(/\s+/).filter(Boolean).length;
     const colorClass = color ? ` note-card-color-${T.escapeHtml(color)}` : "";
+    const relTime = T.escapeHtml(T.formatRelativeTime(note.updated_at));
     return `<article class="note-card${pinned ? " note-card-pinned" : ""}${colorClass}" role="button" tabindex="0" data-edit-note="${id}" aria-label="Open note ${T.escapeHtml(note.title || "Untitled")}">
       <div class="note-card-header">
         <strong class="note-card-title">${T.escapeHtml(note.title || "Untitled")}</strong>
@@ -218,7 +219,7 @@ window.Tssp = window.Tssp || {};
         <div class="note-card-tags">${tags || ""}</div>
         <div class="note-card-meta">
           <span>${wordCount} words</span>
-          <span>${dateStr}</span>
+          <span title="${dateStr}">${relTime || dateStr}</span>
         </div>
       </div>
 	      <div class="note-card-actions">
