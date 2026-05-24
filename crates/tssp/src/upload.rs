@@ -164,8 +164,8 @@ fn upload_batch(
     items: &[UploadItem],
     cli: &Cli,
 ) -> Result<CliExitCode, String> {
-    let started_at = Instant::now();
     use reqwest::blocking::multipart::{Form, Part};
+    let started_at = Instant::now();
 
     let mut form = Form::new();
 

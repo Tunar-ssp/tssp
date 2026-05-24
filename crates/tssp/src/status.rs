@@ -101,6 +101,7 @@ fn format_bytes(b: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
     const GB: u64 = MB * 1024;
+    #[allow(clippy::cast_precision_loss)]
     if b >= GB {
         format!("{:.1} GiB", b as f64 / GB as f64)
     } else if b >= MB {

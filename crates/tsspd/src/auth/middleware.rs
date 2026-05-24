@@ -152,6 +152,8 @@ pub async fn auth_middleware(
                 .into_response();
         }
         request.extensions_mut().insert(ctx);
+    } else if !required {
+        request.extensions_mut().insert(AuthContext::open_access());
     }
 
     next.run(request).await

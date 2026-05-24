@@ -61,7 +61,13 @@ async fn embedded_index_matches_runtime_fallback() {
 
 #[tokio::test]
 async fn serve_asset_returns_new_js_modules() {
-    for path in ["js/files.js", "js/notes.js", "js/admin.js", "js/views.js"] {
+    for path in [
+        "js/files.js",
+        "js/notes.js",
+        "js/admin.js",
+        "js/features/search.js",
+        "js/features/overview.js",
+    ] {
         let response = serve_asset(axum::extract::Path(path.to_owned())).await;
         assert_eq!(response.status(), StatusCode::OK, "expected 200 for {path}");
         let ct = response
@@ -87,6 +93,8 @@ async fn index_does_not_load_pro_js() {
     assert!(INDEX_HTML.contains("notes.js"));
     assert!(INDEX_HTML.contains("admin.js"));
     assert!(INDEX_HTML.contains("ui/format.js"));
+    assert!(INDEX_HTML.contains("features/search.js"));
+    assert!(!INDEX_HTML.contains("views.js"));
 }
 
 #[tokio::test]

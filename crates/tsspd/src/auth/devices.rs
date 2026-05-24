@@ -52,6 +52,7 @@ pub struct DeviceStore {
 
 impl DeviceStore {
     /// Creates a device store from an existing pool.
+    #[must_use]
     pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { pool }
     }

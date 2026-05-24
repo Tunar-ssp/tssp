@@ -698,6 +698,48 @@ Errors:
 - `404 Not Found` when the file id does not exist.
 - `500 Internal Server Error` when metadata update fails.
 
+## `PATCH /api/v1/files/{id}/visibility`
+
+Sets file visibility to `public` or `private`. Public files receive a durable
+`/p/{token}` link.
+
+## `GET /api/v1/files/{id}/share`
+
+Returns the public URL and a terminal-style Unicode QR code for a public file.
+Requires ownership or admin role.
+
+Response:
+
+```json
+{
+  "schema_version": 1,
+  "public_url": "http://127.0.0.1:8421/p/abc123",
+  "qr_terminal": "..."
+}
+```
+
+## `POST /api/v1/folders/move`
+
+Admin-only. Renames a logical folder by rewriting `folder_path` prefixes on all
+matching files.
+
+Request body:
+
+```json
+{ "from": "photos", "to": "archive/photos" }
+```
+
+## `POST /api/v1/folders/delete`
+
+Admin-only. Removes a logical folder: files directly in the folder move to the
+bucket root; nested paths are flattened (e.g. `photos/2024` becomes `2024`).
+
+Request body:
+
+```json
+{ "path": "photos" }
+```
+
 ## `POST /api/v1/sessions/send`
 
 Creates a send session for sharing a file via a time-limited transfer token.

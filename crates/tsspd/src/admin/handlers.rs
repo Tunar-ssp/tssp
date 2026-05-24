@@ -78,8 +78,7 @@ pub async fn admin_overview(State(state): State<HttpState>) -> impl IntoResponse
         .workspaces
         .as_deref()
         .and_then(|store| store.list_all().ok())
-        .map(|ws| ws.len() as u64)
-        .unwrap_or(0);
+        .map_or(0, |ws| ws.len() as u64);
 
     (
         StatusCode::OK,

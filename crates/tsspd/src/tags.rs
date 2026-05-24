@@ -14,13 +14,25 @@ use crate::{ErrorBody, ErrorResponse, HttpState};
 /// Handles HTTP tag operations through the application layer.
 pub trait FileTagProvider: Send + Sync {
     /// Lists tags.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the repository query fails.
     fn list_tags(&self) -> Result<Vec<TagSummary>, HttpTagError>;
 
     /// Adds tags to a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag operation fails.
     fn add_tags(&self, file_id: FileId, tags: Vec<String>)
         -> Result<HttpTagMutation, HttpTagError>;
 
     /// Removes a tag from a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag operation fails.
     fn remove_tag(&self, file_id: FileId, tag: String) -> Result<HttpTagMutation, HttpTagError>;
 }
 

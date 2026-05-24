@@ -41,6 +41,7 @@ pub(crate) struct AuthTokenRecord {
 
 impl AuthStore {
     /// Creates an auth store from an existing pool.
+    #[must_use]
     pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { pool }
     }
@@ -205,10 +206,7 @@ impl AuthStore {
         limit: u64,
     ) -> Result<Vec<AuthTokenRecord>, AuthStoreError> {
         let connection = self.connect()?;
-        let limit = match i64::try_from(limit.clamp(1, 500)) {
-            Ok(value) => value,
-            Err(_) => 500,
-        };
+        let limit = i64::try_from(limit.clamp(1, 500)).unwrap_or(500);
 
         if let Some(user_id) = user_id {
             let mut statement = connection.prepare(

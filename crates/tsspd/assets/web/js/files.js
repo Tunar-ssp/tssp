@@ -98,7 +98,21 @@ window.Tssp = window.Tssp || {};
         <button type="button" class="btn btn-secondary btn-sm" data-preview-file="${T.escapeHtml(file.id)}">Preview</button>
         <a class="btn btn-secondary btn-sm" href="${T.fileDownloadUrl(file.id)}" download>Download</a>
         ${link ? `<button type="button" class="btn btn-secondary btn-sm" data-copy-link="${T.escapeHtml(link)}">Copy public link</button>` : ""}
+        ${link ? `<button type="button" class="btn btn-secondary btn-sm" data-share-file="${T.escapeHtml(file.id)}">Show QR</button>` : ""}
       </div>`;
+  };
+
+  T.showFileShare = async function showFileShare(id) {
+    try {
+      const data = await T.api("/files/" + encodeURIComponent(id) + "/share");
+      if (typeof T.showShareDialog === "function") {
+        T.showShareDialog(data);
+      } else {
+        T.showBanner(data.public_url, "success");
+      }
+    } catch (error) {
+      T.showBanner(error.message, "error");
+    }
   };
 
   T.setSelectedFile = function setSelectedFile(id, checked) {
@@ -132,6 +146,7 @@ window.Tssp = window.Tssp || {};
                 <span class="folder-count mono">${folder.count}</span>
               </button>
               ${isAdmin && folder.path ? `<button type="button" class="folder-rename-btn btn btn-text btn-sm" data-folder-rename="${T.escapeHtml(folder.path)}" title="Rename folder">✎</button>` : ""}
+              ${isAdmin && folder.path ? `<button type="button" class="folder-delete-btn btn btn-text btn-sm" data-folder-delete="${T.escapeHtml(folder.path)}" title="Delete folder (move files to root)">×</button>` : ""}
             </div>`
         )
         .join("");
@@ -148,6 +163,11 @@ window.Tssp = window.Tssp || {};
       tree.querySelectorAll(".folder-rename-btn").forEach((button) => {
         button.addEventListener("click", () => {
           T.renameFolder(button.dataset.folderRename);
+        });
+      });
+      tree.querySelectorAll(".folder-delete-btn").forEach((button) => {
+        button.addEventListener("click", () => {
+          T.deleteFolder(button.dataset.folderDelete);
         });
       });
     }
@@ -182,6 +202,33 @@ window.Tssp = window.Tssp || {};
         tree.innerHTML =
           '<div class="folder-item active"><button type="button" class="folder-btn" data-folder=""><span class="folder-label">Bucket root</span><span class="folder-count mono">—</span></button></div>';
       }
+    }
+  };
+
+  T.deleteFolder = async function deleteFolder(path) {
+    if (!path) return;
+    if (
+      !confirm(
+        `Delete folder "${path}"? Files move to the bucket root; nested paths are flattened.`
+      )
+    ) {
+      return;
+    }
+    try {
+      const result = await T.api("/folders/delete", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      });
+      T.showBanner(`Folder removed (${result.files_updated || 0} objects updated)`, "success");
+      if (T.currentFolder === path) {
+        T.currentFolder = "";
+        T.$("#breadcrumb-folder").textContent = "default";
+        T.$("#upload-folder").value = "";
+      }
+      T.loadFolderTree();
+      T.loadFiles();
+    } catch (error) {
+      T.showBanner(error.message, "error");
     }
   };
 

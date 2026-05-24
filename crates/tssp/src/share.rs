@@ -97,6 +97,12 @@ fn fetch_file_meta(
     address: &BackendAddress,
     id: &str,
 ) -> Result<FileMeta, String> {
+    #[derive(Deserialize)]
+    struct Body {
+        visibility: String,
+        public_token: Option<String>,
+    }
+
     let response = api_get(client, &file_url(address, id))
         .header(ACCEPT, "application/json")
         .send()
@@ -110,12 +116,6 @@ fn fetch_file_meta(
             "daemon returned {} for file metadata",
             response.status()
         ));
-    }
-
-    #[derive(Deserialize)]
-    struct Body {
-        visibility: String,
-        public_token: Option<String>,
     }
 
     let body: Body = response

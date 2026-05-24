@@ -38,6 +38,22 @@ impl AuthContext {
     pub const fn is_admin(&self) -> bool {
         matches!(self.role, UserRole::Admin)
     }
+
+    /// Synthetic admin identity used when authentication is disabled or not required.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `UserId::new` fails on the static literal (should never happen).
+    #[must_use]
+    #[allow(clippy::expect_used)]
+    pub fn open_access() -> Self {
+        Self {
+            user_id: UserId::new("user-local").expect("static local user id"),
+            role: UserRole::Admin,
+            session_token: None,
+            device_token: None,
+        }
+    }
 }
 
 impl<S> FromRequestParts<S> for AuthContext

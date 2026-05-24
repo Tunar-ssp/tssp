@@ -51,6 +51,7 @@ pub struct UserStore {
 
 impl UserStore {
     /// Creates a user store from an existing pool.
+    #[must_use]
     pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { pool }
     }

@@ -239,6 +239,11 @@
           .catch((e) => typeof T.showBanner === "function" && T.showBanner(e.message, "error"));
         return;
       }
+      const shareFile = ev.target.closest("[data-share-file]");
+      if (shareFile && typeof T.showFileShare === "function") {
+        T.showFileShare(shareFile.dataset.shareFile);
+        return;
+      }
       const adminRole = ev.target.closest("[data-admin-role]");
       if (adminRole && typeof T.adminSetUserRole === "function") {
         T.adminSetUserRole(adminRole.dataset.adminRole, adminRole.dataset.role);

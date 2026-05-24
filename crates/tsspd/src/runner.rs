@@ -141,10 +141,8 @@ fn create_connection_pool(metadata_path: &Path) -> Result<Pool<SqliteConnectionM
         .map_err(|e| format!("could not create metadata connection pool: {e}"))
 }
 
-fn open_repository(
-    pool: Pool<SqliteConnectionManager>,
-) -> Result<Arc<SqliteFileRepository>, String> {
-    Ok(Arc::new(SqliteFileRepository::new(pool)))
+fn open_repository(pool: Pool<SqliteConnectionManager>) -> Arc<SqliteFileRepository> {
+    Arc::new(SqliteFileRepository::new(pool))
 }
 
 fn open_storage(settings: &DaemonSettings) -> Result<Arc<FilesystemBlobStore>, String> {
@@ -256,6 +254,7 @@ fn start_auth_service(
     Ok(auth_service)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_http_state(
     settings: &Arc<DaemonSettings>,
     paths: RuntimePaths,
@@ -265,7 +264,7 @@ fn build_http_state(
     session_service: SessionService<SqliteSessionRepository>,
     auth_service: AuthService,
     corrupt_file_count: u64,
-) -> Result<HttpState, String> {
+) -> HttpState {
     let stats_provider = RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock);
     let upload_service = UploadService::new(
         storage.clone(),
@@ -279,7 +278,7 @@ fn build_http_state(
     let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
     let workspace_store = Arc::new(WorkspaceStore::new(pool));
 
-    Ok(HttpState::new(
+    HttpState::new(
         Instant::now(),
         paths.upload_temp_dir,
         settings.clone(),
@@ -299,7 +298,7 @@ fn build_http_state(
     .with_note_provider(Arc::new(ApplicationNoteProvider::new(note_service)))
     .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(repository)))
     .with_blob_reader(storage)
-    .with_auth(auth_service))
+    .with_auth(auth_service)
 }
 
 async fn shutdown_signal() {
@@ -353,7 +352,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     warn_if_insecure_bind(&settings);
     let paths = prepare_runtime_paths(&settings)?;
     let pool = create_connection_pool(&paths.metadata_path)?;
-    let repository = open_repository(pool.clone())?;
+    let repository = open_repository(pool.clone());
     run_integrity_check(&paths.metadata_path)
         .map_err(|error| format!("database integrity check failed: {error}"))?;
     let storage = open_storage(&settings)?;
@@ -380,7 +379,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         session_service,
         auth_service,
         corrupt_file_count,
-    )?;
+    );
 
     let router = build_router(state);
 

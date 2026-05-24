@@ -533,6 +533,7 @@ fn unknown_field(name: &str) -> HttpUploadError {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn finish_staged_upload(
     filename: Option<String>,
     mime_type: Option<String>,

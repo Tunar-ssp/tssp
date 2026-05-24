@@ -143,8 +143,7 @@ mod tests {
         assert!(items.iter().any(|item| {
             item.get("token")
                 .and_then(serde_json::Value::as_str)
-                .map(|token| token == admin_token)
-                .unwrap_or(false)
+                .is_some_and(|token| token == admin_token)
                 && item
                     .get("current")
                     .and_then(serde_json::Value::as_bool)
@@ -153,8 +152,7 @@ mod tests {
         assert!(items.iter().any(|item| {
             item.get("token")
                 .and_then(serde_json::Value::as_str)
-                .map(|token| token == user_token)
-                .unwrap_or(false)
+                .is_some_and(|token| token == user_token)
         }));
 
         let path = format!("/api/v1/admin/sessions/{user_token}");

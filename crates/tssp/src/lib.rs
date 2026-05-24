@@ -337,7 +337,7 @@ pub struct ShareArgs {
     /// Attach tags when uploading a local file.
     #[arg(long = "tag", value_name = "NAME")]
     pub tags: Vec<String>,
-    /// Future WhatsApp delivery (not implemented).
+    /// Future `WhatsApp` delivery (not implemented).
     #[arg(long, hide = true)]
     pub wp: bool,
 }

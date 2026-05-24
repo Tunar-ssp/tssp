@@ -62,9 +62,25 @@ pub(crate) const JS_UPLOAD: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web/js/upload.js"
 ));
-pub(crate) const JS_VIEWS: &str = include_str!(concat!(
+pub(crate) const JS_FEATURE_OVERVIEW: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/views.js"
+    "/assets/web/js/features/overview.js"
+));
+pub(crate) const JS_FEATURE_SEARCH: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/features/search.js"
+));
+pub(crate) const JS_FEATURE_MEDIA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/features/media.js"
+));
+pub(crate) const JS_FEATURE_PUBLIC: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/features/public.js"
+));
+pub(crate) const JS_FEATURE_WORKSPACES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web/js/features/workspaces.js"
 ));
 pub(crate) const JS_FILES: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -108,7 +124,20 @@ pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
         "js/ui/dialogs.js" => Some((JS_UI_DIALOGS, "application/javascript; charset=utf-8")),
         "js/state.js" => Some((JS_STATE, "application/javascript; charset=utf-8")),
         "js/upload.js" => Some((JS_UPLOAD, "application/javascript; charset=utf-8")),
-        "js/views.js" => Some((JS_VIEWS, "application/javascript; charset=utf-8")),
+        "js/features/overview.js" => {
+            Some((JS_FEATURE_OVERVIEW, "application/javascript; charset=utf-8"))
+        }
+        "js/features/search.js" => {
+            Some((JS_FEATURE_SEARCH, "application/javascript; charset=utf-8"))
+        }
+        "js/features/media.js" => Some((JS_FEATURE_MEDIA, "application/javascript; charset=utf-8")),
+        "js/features/public.js" => {
+            Some((JS_FEATURE_PUBLIC, "application/javascript; charset=utf-8"))
+        }
+        "js/features/workspaces.js" => Some((
+            JS_FEATURE_WORKSPACES,
+            "application/javascript; charset=utf-8",
+        )),
         "js/files.js" => Some((JS_FILES, "application/javascript; charset=utf-8")),
         "js/notes.js" => Some((JS_NOTES, "application/javascript; charset=utf-8")),
         "js/admin.js" => Some((JS_ADMIN, "application/javascript; charset=utf-8")),

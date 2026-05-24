@@ -879,3 +879,60 @@ select:focus {
 .upload-queue-status.failed { color: var(--danger); }
 
 .upload-queue-status.dedup { color: var(--warning, #fbbf24); }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--surface-elevated, #1a1d24);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.modal-header,
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-footer {
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+
+.modal-body {
+  padding: 16px;
+}
+
+.share-url {
+  word-break: break-all;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+}
+
+.share-qr {
+  margin: 0;
+  padding: 12px;
+  background: #fff;
+  color: #000;
+  border-radius: 8px;
+  font-size: 0.55rem;
+  line-height: 1.1;
+  overflow-x: auto;
+}

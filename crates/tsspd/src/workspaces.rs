@@ -136,6 +136,7 @@ pub(crate) struct WorkspaceDocumentSummary {
 
 impl WorkspaceStore {
     /// Creates a workspace store from an existing pool.
+    #[must_use]
     pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { pool }
     }
@@ -339,6 +340,7 @@ impl WorkspaceStore {
         load_document(&connection, workspace_id, document_id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn create_document(
         &self,
         workspace_id: &str,
@@ -383,6 +385,7 @@ impl WorkspaceStore {
         Ok(record)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn update_document(
         &self,
         workspace_id: &str,
@@ -414,7 +417,7 @@ impl WorkspaceStore {
                 path,
                 language,
                 body,
-                if is_primary { 1 } else { 0 },
+                i32::from(is_primary),
                 now,
                 document_id,
                 workspace_id,
@@ -689,7 +692,7 @@ fn insert_document_record(
                 record.path,
                 record.language,
                 record.body,
-                if record.is_primary { 1 } else { 0 },
+                i32::from(record.is_primary),
                 record.created_at,
                 record.updated_at,
             ],

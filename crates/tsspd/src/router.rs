@@ -97,6 +97,14 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::folders::move_folder).options(options_response),
         )
         .route(
+            "/api/v1/folders/delete",
+            post(crate::folders::delete_folder).options(options_response),
+        )
+        .route(
+            "/api/v1/files/{id}/share",
+            get(crate::share::get_file_share).options(options_response),
+        )
+        .route(
             "/api/v1/search",
             get(crate::search::search_files).options(options_response),
         )
