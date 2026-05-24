@@ -24,7 +24,7 @@ window.Tssp = window.Tssp || {};
 
   function addTag(raw) {
     const tag = raw.trim().replace(/,/g, "").slice(0, 32);
-    if (!tag) return false;
+    if (!tag || tag.startsWith("color:")) return false;
     const key = tag.toLowerCase();
     if (T.editingNoteTags.some((t) => t.toLowerCase() === key)) return false;
     T.editingNoteTags = [...T.editingNoteTags, tag];
