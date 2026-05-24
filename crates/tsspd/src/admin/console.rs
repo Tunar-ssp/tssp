@@ -22,6 +22,16 @@ pub const COMMANDS: &[CommandDef] = &[
         category: "storage",
     },
     CommandDef {
+        name: "folder_breakdown",
+        description: "File count per folder in the bucket",
+        category: "storage",
+    },
+    CommandDef {
+        name: "public_files_summary",
+        description: "Count and total size of publicly shared files",
+        category: "storage",
+    },
+    CommandDef {
         name: "cleanup_temp",
         description: "Delete leftover incomplete upload fragments",
         category: "maintenance",
@@ -34,6 +44,11 @@ pub const COMMANDS: &[CommandDef] = &[
     CommandDef {
         name: "version_info",
         description: "Daemon version, build, and configuration summary",
+        category: "system",
+    },
+    CommandDef {
+        name: "uptime",
+        description: "Process uptime and startup timestamp",
         category: "system",
     },
 ];
@@ -99,9 +114,12 @@ pub async fn run_command(
     let (success, output) = match req.command.as_str() {
         "system_status" => run_system_status(&state),
         "storage_stats" => run_storage_stats(&state),
+        "folder_breakdown" => run_folder_breakdown(&state),
+        "public_files_summary" => run_public_files_summary(&state),
         "cleanup_temp" => run_cleanup_temp(&state).await,
         "cleanup_sessions" => run_cleanup_sessions(),
         "version_info" => run_version_info(&state),
+        "uptime" => run_uptime(&state),
         _ => (false, serde_json::json!({"error": "unhandled command"})),
     };
 
@@ -166,6 +184,64 @@ fn run_cleanup_sessions() -> (bool, serde_json::Value) {
         true,
         serde_json::json!({
             "message": "Session cleanup runs automatically at daemon startup. No manual trigger needed."
+        }),
+    )
+}
+
+fn run_folder_breakdown(state: &HttpState) -> (bool, serde_json::Value) {
+    match state.stats_provider.list_folder_counts() {
+        Ok(counts) => {
+            let folders: Vec<_> = counts
+                .into_iter()
+                .map(|(path, count)| {
+                    serde_json::json!({
+                        "folder": if path.is_empty() { "Bucket root".to_owned() } else { path },
+                        "file_count": count,
+                    })
+                })
+                .collect();
+            (true, serde_json::json!({ "folders": folders }))
+        }
+        Err(message) => (false, serde_json::json!({"error": message})),
+    }
+}
+
+fn run_public_files_summary(state: &HttpState) -> (bool, serde_json::Value) {
+    use tssp_ports::ListQuery;
+    let query = ListQuery {
+        visibility: Some(tssp_domain::Visibility::Public),
+        limit: 500,
+        ..ListQuery::default()
+    };
+    match state.stats_provider.list_files(&query) {
+        Ok(paged) => {
+            let total_size: u64 = paged
+                .files
+                .iter()
+                .map(|f| f.size.bytes())
+                .sum();
+            (
+                true,
+                serde_json::json!({
+                    "public_file_count": paged.files.len(),
+                    "total_size_bytes": total_size,
+                }),
+            )
+        }
+        Err(message) => (false, serde_json::json!({"error": message})),
+    }
+}
+
+fn run_uptime(state: &HttpState) -> (bool, serde_json::Value) {
+    let secs = state.started_at.elapsed().as_secs();
+    let hours = secs / 3600;
+    let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
+    (
+        true,
+        serde_json::json!({
+            "uptime_seconds": secs,
+            "uptime_human": format!("{hours}h {minutes}m {seconds}s"),
         }),
     )
 }

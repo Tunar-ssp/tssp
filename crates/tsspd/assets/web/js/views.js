@@ -32,14 +32,17 @@ window.Tssp = window.Tssp || {};
     grid.innerHTML = '<div class="metric-card"><span class="label">Loading…</span></div>';
     if (details) details.innerHTML = "";
     try {
-      const [status, publicFiles] = await Promise.allSettled([
+      const [status, publicFiles, recentFiles] = await Promise.allSettled([
         T.api("/status"),
         T.api("/public/files"),
+        T.api("/files?limit=8"),
       ]);
       if (status.status !== "fulfilled") throw status.reason;
       const s = status.value;
       const publicCount =
         publicFiles.status === "fulfilled" ? (publicFiles.value.files || []).length : 0;
+      const recentUploads =
+        recentFiles.status === "fulfilled" ? (recentFiles.value.files || []) : [];
 
       const health = s.status === "ok" ? "Healthy" : T.escapeHtml(s.status || "—");
       const healthClass = s.status === "ok" ? "metric-health-ok" : "metric-health-warn";
@@ -56,18 +59,15 @@ window.Tssp = window.Tssp || {};
         `<div class="metric-card metric-health ${healthClass}"><div class="label">Health</div><div class="value">${health}</div></div>`,
       ].join("");
 
-      if (details) {
-        const recentHtml = (s.recent_uploads || []).length
-          ? `<div class="overview-section"><h3>Recent uploads</h3><div class="recent-uploads">${
-              (s.recent_uploads || []).slice(0, 8).map((f) =>
-                `<div class="recent-upload-row">
-                  <span class="recent-upload-name">${T.escapeHtml(f.name || f.id)}</span>
-                  <span class="recent-upload-meta">${T.escapeHtml(T.formatBytes(f.size_bytes))} · ${T.escapeHtml(T.formatDate(f.uploaded_at))}</span>
-                </div>`
-              ).join("")
-            }</div></div>`
-          : "";
-        details.innerHTML = recentHtml;
+      if (details && recentUploads.length) {
+        details.innerHTML = `<div class="overview-section"><h3>Recent uploads</h3><div class="recent-uploads">${
+          recentUploads.slice(0, 8).map((f) =>
+            `<div class="recent-upload-row">
+              <span class="recent-upload-name">${T.escapeHtml(f.name || f.id)}</span>
+              <span class="recent-upload-meta">${T.escapeHtml(T.formatBytes(f.size_bytes))} · ${T.escapeHtml(T.formatDate(f.uploaded_at))}</span>
+            </div>`
+          ).join("")
+        }</div></div>`;
       }
     } catch (error) {
       grid.innerHTML = `<div class="metric-card"><span class="label">Error</span><div class="value">${T.escapeHtml(error.message)}</div></div>`;
@@ -128,27 +128,32 @@ window.Tssp = window.Tssp || {};
       }
       body.innerHTML = results
         .map((result) => {
-          const type = T.escapeHtml(result.type || "item");
+          const type = result.type || "item";
           const name = T.escapeHtml(result.title || result.name || result.id);
           const id = T.escapeHtml(result.id);
           const vis = result.visibility != null ? T.stateBadge(result.visibility) : "";
           const tags = T.tagsHtml(result.tags);
           let actions = "";
           let detail = "";
-          if (result.type === "file") {
-            detail = `${T.formatBytes(result.size_bytes)} · ${T.escapeHtml(result.folder_path || "Bucket root")} ${vis} ${tags}`;
+          let extra = "";
+          if (type === "file") {
+            detail = T.escapeHtml((result.folder_path || "Bucket root") + " · " + T.formatBytes(result.size_bytes));
+            extra = `${vis}${tags}`;
             actions = `<button type="button" class="btn btn-text btn-sm" data-preview-file="${id}">Preview</button><a class="btn btn-text btn-sm" href="${T.fileDownloadUrl(result.id)}" download>Download</a>`;
-          } else if (result.type === "note") {
-            detail = (result.body || "").slice(0, 100);
+          } else if (type === "note") {
+            detail = T.escapeHtml((result.body || "").trim().replace(/^#+\s+/gm, "").slice(0, 120));
+            extra = tags;
             actions = `<button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Open</button>`;
-          } else if (result.type === "workspace") {
-            detail = `${result.language || "text"} · ${(result.body || "").slice(0, 100)}`;
+          } else if (type === "workspace") {
+            detail = T.escapeHtml((result.body || "").slice(0, 120));
+            extra = `<span class="type-pill">${T.escapeHtml(result.language || "text")}</span>`;
             actions = `<button type="button" class="btn btn-text btn-sm" data-ws-edit="${id}">Open</button>`;
           }
+          const typeLabel = { file: "File", note: "Note", workspace: "Workspace" }[type] || type;
           return `<tr>
-            <td><span class="tag">${type}</span></td>
-            <td><strong>${name}</strong></td>
-            <td>${T.escapeHtml(detail || "—")}</td>
+            <td><span class="search-result-type search-type-${T.escapeHtml(type)}">${T.escapeHtml(typeLabel)}</span></td>
+            <td><div class="search-result-name"><strong>${name}</strong></div>${detail ? `<div class="row-meta">${detail}</div>` : ""}</td>
+            <td>${extra}</td>
             <td class="col-actions">${actions}</td>
           </tr>`;
         })

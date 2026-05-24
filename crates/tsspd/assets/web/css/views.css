@@ -1229,3 +1229,25 @@
   gap: 8px;
   flex-shrink: 0;
 }
+
+/* ── Search result type badges ───────────────────────────────────────── */
+.search-result-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.search-type-file   { background: rgba(99,102,241,0.15); color: #818cf8; }
+.search-type-note   { background: rgba(168,85,247,0.15); color: #c084fc; }
+.search-type-workspace { background: rgba(52,211,153,0.12); color: #34d399; }
+
+.search-result-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
