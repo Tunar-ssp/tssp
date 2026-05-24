@@ -450,6 +450,19 @@ window.Tssp = window.Tssp || {};
     }
   };
 
+  function highlightJson(json) {
+    return T.escapeHtml(json).replace(
+      /("(?:[^"\\]|\\.)*")(\s*:)|("(?:[^"\\]|\\.)*")|(true|false|null)|(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g,
+      (_, key, colon, str, kw, num) => {
+        if (key && colon) return `<span class="json-key">${key}</span>${colon}`;
+        if (str) return `<span class="json-str">${str}</span>`;
+        if (kw) return `<span class="json-kw">${kw}</span>`;
+        if (num) return `<span class="json-num">${num}</span>`;
+        return _;
+      }
+    );
+  }
+
   T.runConsoleCommand = async function runConsoleCommand(command) {
     const outputEl = T.$("#console-output");
     if (!outputEl) return;
@@ -467,7 +480,7 @@ window.Tssp = window.Tssp || {};
         <span>${ts}</span>
         <span class="${statusClass}">${result.success ? "✓ ok" : "✗ failed"}</span>
       </div>
-      <pre class="console-json">${T.escapeHtml(json)}</pre>`;
+      <pre class="console-json">${highlightJson(json)}</pre>`;
       consoleHistory.unshift({ command, ts, success: result.success });
       renderConsoleHistory();
     } catch (error) {

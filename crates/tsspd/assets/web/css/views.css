@@ -423,6 +423,11 @@
   line-height: 1.6;
 }
 
+.json-key { color: #93C5FD; }
+.json-str { color: #86EFAC; }
+.json-num { color: #FCD34D; }
+.json-kw  { color: #F87171; }
+
 .console-history-row {
   display: flex;
   align-items: center;
