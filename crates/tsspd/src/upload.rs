@@ -373,7 +373,13 @@ pub(crate) async fn stage_multipart_upload(
             "tag" | "tags" => tags.push(field_text(field).await?),
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
             "folder" | "folder_path" => {
-                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?);
+                let text = field_text(field).await?;
+                folder_path = crate::folders::normalize_folder_path(&text);
+                crate::folders::validate_folder_path(&folder_path).map_err(|message| {
+                    HttpUploadError::InvalidRequest {
+                        message: format!("invalid folder path: {message}"),
+                    }
+                })?;
             }
             "destination" | "destination_hint" => {
                 let _ignored = field_text(field).await?;
@@ -410,7 +416,13 @@ async fn stage_batch_multipart_upload(
             "tag" | "tags" => tags.push(field_text(field).await?),
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
             "folder" | "folder_path" => {
-                folder_path = crate::folders::normalize_folder_path(&field_text(field).await?);
+                let text = field_text(field).await?;
+                folder_path = crate::folders::normalize_folder_path(&text);
+                crate::folders::validate_folder_path(&folder_path).map_err(|message| {
+                    HttpUploadError::InvalidRequest {
+                        message: format!("invalid folder path: {message}"),
+                    }
+                })?;
             }
             "destination" | "destination_hint" => {
                 let _ignored = field_text(field).await?;

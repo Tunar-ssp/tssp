@@ -56,10 +56,37 @@ pub async fn move_folder(
     if !auth.is_admin() {
         return forbidden();
     }
-    match state
-        .stats_provider
-        .update_folder_path_prefix(&body.from, &body.to)
-    {
+
+    let from = normalize_folder_path(&body.from);
+    let to = normalize_folder_path(&body.to);
+
+    if let Err(message) = validate_folder_path(&from) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "invalid_request",
+                    message: format!("invalid 'from' path: {message}"),
+                },
+            }),
+        )
+            .into_response();
+    }
+
+    if let Err(message) = validate_folder_path(&to) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "invalid_request",
+                    message: format!("invalid 'to' path: {message}"),
+                },
+            }),
+        )
+            .into_response();
+    }
+
+    match state.stats_provider.update_folder_path_prefix(&from, &to) {
         Ok(count) => (
             StatusCode::OK,
             Json(serde_json::json!({
