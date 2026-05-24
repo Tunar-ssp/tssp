@@ -326,6 +326,18 @@
         return;
       }
 
+      // Ctrl+N — new note (when on notes view and no dialog open)
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "n") {
+        const dialog = document.querySelector("dialog[open]");
+        if (dialog) return;
+        const notesVisible = !T.$("#view-notes")?.classList.contains("hidden");
+        if (notesVisible && typeof T.openNoteDialog === "function") {
+          ev.preventDefault();
+          T.openNoteDialog(null);
+        }
+        return;
+      }
+
       // Escape — close open dialogs or go back from editor views
       if (ev.key === "Escape") {
         const openDialog = document.querySelector("dialog[open]");
