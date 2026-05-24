@@ -119,7 +119,9 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/notes/{id}/tags",
-            post(crate::notes::add_note_tags).options(options_response),
+            post(crate::notes::add_note_tags)
+                .put(crate::notes::replace_note_tags)
+                .options(options_response),
         )
         .route(
             "/api/v1/notes/{id}/tags/{tag}",

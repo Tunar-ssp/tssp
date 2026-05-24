@@ -176,6 +176,23 @@ pub(crate) async fn add_note_tags(
     }
 }
 
+pub(crate) async fn replace_note_tags(
+    State(state): State<HttpState>,
+    Path(id): Path<String>,
+    Json(tags): Json<Vec<String>>,
+) -> Response {
+    let note_id = match parse_note_id(id) {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+    let provider = state.note_provider.clone();
+
+    match run_blocking(provider, move |provider| provider.replace_tags(note_id, tags)).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(response) => response,
+    }
+}
+
 pub(crate) async fn remove_note_tag(
     State(state): State<HttpState>,
     Path((id, tag)): Path<(String, String)>,

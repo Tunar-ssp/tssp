@@ -183,11 +183,9 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
         return Ok(CliExitCode::Usage);
     }
 
-    let tags = if args.tags.is_empty() { None } else { Some(args.tags.clone()) };
     let payload = UpdateNoteRequest {
         title: args.title.clone(),
         body,
-        tags,
     };
     let response = api_put(
         &client,
@@ -198,7 +196,22 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
     .send()
     .map_err(|error| format!("could not reach daemon: {error}"))?;
 
-    handle_note_response(response, cli, "updated")
+    let result = handle_note_response(response, cli, "updated");
+
+    // Replace tags atomically via a separate request if --tag was given.
+    if result.as_ref() == Ok(&CliExitCode::Success) && !args.tags.is_empty() {
+        let tags_url = address.url(&format!("{NOTES_ENDPOINT}/{}/tags", args.id));
+        let res = api_put(&client, &tags_url)
+            .header(ACCEPT, "application/vnd.tssp.v1+json")
+            .json(&args.tags)
+            .send()
+            .map_err(|error| format!("could not reach daemon: {error}"))?;
+        if !res.status().is_success() && res.status() != StatusCode::NO_CONTENT {
+            eprintln!("warning: body updated but tag replace failed: {}", res.status());
+        }
+    }
+
+    result
 }
 
 fn run_export(cli: &Cli, args: &NoteExportArgs) -> Result<CliExitCode, String> {
@@ -320,8 +333,6 @@ struct CreateNoteRequest {
 struct UpdateNoteRequest {
     title: Option<String>,
     body: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]

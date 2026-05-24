@@ -264,6 +264,43 @@ impl NoteRepository for SqliteFileRepository {
         })
     }
 
+    fn replace_tags_on_note(
+        &self,
+        id: &NoteId,
+        tags: &[Tag],
+    ) -> Result<(), RepositoryError> {
+        let mut connection = self.connect()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_note_exists(&transaction, id)?;
+        transaction
+            .execute(
+                "DELETE FROM note_tags WHERE note_id = ?1",
+                params![id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        for tag in tags {
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO tags (key, display) VALUES (?1, ?2)",
+                    params![tag.key().as_str(), tag.display()],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO note_tags (note_id, tag_key) VALUES (?1, ?2)",
+                    params![id.as_str(), tag.key().as_str()],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+        }
+        cleanup_orphaned_tags(&transaction)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(())
+    }
+
     fn pin_note(&self, id: &NoteId, position: Option<u32>) -> Result<PinOutcome, RepositoryError> {
         let mut connection = self.connect()?;
         let transaction = connection

@@ -683,6 +683,13 @@ mod tests {
         ) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
             unimplemented!()
         }
+        fn replace_tags_on_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _tags: &[tssp_domain::Tag],
+        ) -> Result<(), tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
         fn pin_note(
             &self,
             _id: &tssp_domain::NoteId,
@@ -912,6 +919,13 @@ mod tests {
             _id: &tssp_domain::NoteId,
             _tag: &tssp_domain::TagKey,
         ) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+            unimplemented!()
+        }
+        fn replace_tags_on_note(
+            &self,
+            _id: &tssp_domain::NoteId,
+            _tags: &[tssp_domain::Tag],
+        ) -> Result<(), tssp_ports::RepositoryError> {
             unimplemented!()
         }
         fn pin_note(

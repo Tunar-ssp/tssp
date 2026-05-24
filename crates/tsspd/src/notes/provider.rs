@@ -61,6 +61,13 @@ pub trait NoteProvider: Send + Sync {
     /// Returns [`HttpNoteError`] when validation or persistence fails.
     fn remove_tag(&self, id: NoteId, tag: String) -> Result<u64, HttpNoteError>;
 
+    /// Replaces all tags on a note atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when validation or persistence fails.
+    fn replace_tags(&self, id: NoteId, tags: Vec<String>) -> Result<(), HttpNoteError>;
+
     /// Pins a note.
     ///
     /// # Errors
@@ -110,6 +117,10 @@ impl NoteProvider for StaticNoteProvider {
     }
 
     fn remove_tag(&self, _id: NoteId, _tag: String) -> Result<u64, HttpNoteError> {
+        Err(unavailable())
+    }
+
+    fn replace_tags(&self, _id: NoteId, _tags: Vec<String>) -> Result<(), HttpNoteError> {
         Err(unavailable())
     }
 
@@ -193,6 +204,13 @@ where
         self.service
             .remove_tag(&id, &tag)
             .map(|outcome| outcome.changed_count)
+            .map_err(map_note_error)
+    }
+
+    fn replace_tags(&self, id: NoteId, tags: Vec<String>) -> Result<(), HttpNoteError> {
+        let tag_refs = tags.iter().map(String::as_str).collect::<Vec<_>>();
+        self.service
+            .replace_tags(&id, &tag_refs)
             .map_err(map_note_error)
     }
 

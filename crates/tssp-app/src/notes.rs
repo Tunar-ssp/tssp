@@ -171,6 +171,18 @@ where
             .map_err(NoteError::Repository)
     }
 
+    /// Replaces all tags on a note atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NoteError`] when validation or mutation fails.
+    pub fn replace_tags(&self, id: &NoteId, tags: &[&str]) -> Result<(), NoteError> {
+        let tags = normalize_tag_refs(tags)?;
+        self.repository
+            .replace_tags_on_note(id, &tags)
+            .map_err(NoteError::Repository)
+    }
+
     /// Pins a note.
     ///
     /// # Errors

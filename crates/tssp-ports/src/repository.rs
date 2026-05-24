@@ -272,6 +272,19 @@ pub trait NoteRepository {
         tag: &TagKey,
     ) -> Result<TagMutationOutcome, RepositoryError>;
 
+    /// Replaces all tags on a note atomically.
+    ///
+    /// Deletes existing note tags and inserts the supplied set in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn replace_tags_on_note(
+        &self,
+        id: &NoteId,
+        tags: &[Tag],
+    ) -> Result<(), RepositoryError>;
+
     /// Pins a note, optionally at a specific position.
     ///
     /// # Errors
@@ -475,6 +488,14 @@ where
         tag: &TagKey,
     ) -> Result<TagMutationOutcome, RepositoryError> {
         self.as_ref().remove_tag_from_note(id, tag)
+    }
+
+    fn replace_tags_on_note(
+        &self,
+        id: &NoteId,
+        tags: &[Tag],
+    ) -> Result<(), RepositoryError> {
+        self.as_ref().replace_tags_on_note(id, tags)
     }
 
     fn pin_note(&self, id: &NoteId, position: Option<u32>) -> Result<PinOutcome, RepositoryError> {
