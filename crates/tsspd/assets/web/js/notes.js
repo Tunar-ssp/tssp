@@ -279,8 +279,15 @@ window.Tssp = window.Tssp || {};
     el.textContent = `${words} words · ${chars} chars`;
   };
 
-  T.closeNoteEditor = function closeNoteEditor() {
+  T.closeNoteEditor = function closeNoteEditor(force) {
     clearTimeout(T.noteAutosaveTimer);
+    clearTimeout(tagSyncTimer);
+    // For new unsaved notes, prompt before discarding
+    if (!force && !T.editingNoteId) {
+      const body = T.$("#note-body-input")?.value || "";
+      const title = T.$("#note-title-input")?.value || "";
+      if ((body.trim() || title.trim()) && !confirm("Discard this new note?")) return;
+    }
     T.setView("notes");
   };
 
