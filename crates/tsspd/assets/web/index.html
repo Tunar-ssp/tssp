@@ -256,6 +256,25 @@
               <button type="button" class="btn btn-primary" id="new-workspace-btn">New workspace</button>
             </div>
           </div>
+          <div class="notes-filter-bar">
+            <input id="workspaces-search" type="search" placeholder="Filter workspaces…" autocomplete="off" class="notes-search-input">
+            <select id="workspaces-lang-filter" class="filter-select" aria-label="Language filter">
+              <option value="">All languages</option>
+              <option value="markdown">Markdown</option>
+              <option value="javascript">JavaScript</option>
+              <option value="typescript">TypeScript</option>
+              <option value="python">Python</option>
+              <option value="rust">Rust</option>
+              <option value="shell">Shell</option>
+              <option value="sql">SQL</option>
+              <option value="json">JSON</option>
+              <option value="yaml">YAML</option>
+              <option value="toml">TOML</option>
+              <option value="html">HTML</option>
+              <option value="css">CSS</option>
+              <option value="text">Text</option>
+            </select>
+          </div>
           <div id="workspaces-grid"></div>
         </section>
 
@@ -426,7 +445,10 @@
             <div class="admin-card admin-card-wide">
               <div class="admin-card-head">
                 <h3>Files</h3>
-                <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh-files">Refresh files</button>
+                <div class="admin-card-head-actions">
+                  <input id="admin-files-search" type="search" placeholder="Filter files…" autocomplete="off" class="admin-files-search-input">
+                  <button type="button" class="btn btn-secondary btn-sm" id="admin-refresh-files">Refresh</button>
+                </div>
               </div>
               <div id="admin-files">Loading…</div>
             </div>

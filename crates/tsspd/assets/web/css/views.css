@@ -1476,3 +1476,31 @@
   opacity: 0.6;
   font-size: 0.68rem;
 }
+
+/* ── Admin files search ──────────────────────────────────────────────── */
+.admin-card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-files-search-input {
+  width: 180px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* ── Workspace filter select ─────────────────────────────────────────── */
+.filter-select {
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}

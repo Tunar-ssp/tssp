@@ -104,12 +104,32 @@ window.Tssp = window.Tssp || {};
     </table>`;
   }
 
+  let adminAllFiles = [];
+
+  function renderFilteredAdminFiles() {
+    const filesEl = T.$("#admin-files");
+    if (!filesEl) return;
+    const q = (T.$("#admin-files-search")?.value || "").toLowerCase().trim();
+    const visible = q ? adminAllFiles.filter((f) =>
+      (f.name || "").toLowerCase().includes(q) ||
+      (f.id || "").toLowerCase().includes(q) ||
+      (f.folder_path || "").toLowerCase().includes(q)
+    ) : adminAllFiles;
+    filesEl.innerHTML = renderAdminFiles(visible);
+  }
+
   T.loadAdminFiles = async function loadAdminFiles() {
     const filesEl = T.$("#admin-files");
     filesEl.innerHTML = "Loading files…";
     try {
-      const data = await T.api("/admin/files?limit=50");
-      filesEl.innerHTML = renderAdminFiles(data.files || []);
+      const data = await T.api("/admin/files?limit=200");
+      adminAllFiles = data.files || [];
+      renderFilteredAdminFiles();
+      const searchEl = T.$("#admin-files-search");
+      if (searchEl && !searchEl.dataset.bound) {
+        searchEl.dataset.bound = "1";
+        searchEl.addEventListener("input", renderFilteredAdminFiles);
+      }
     } catch (error) {
       filesEl.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;
     }

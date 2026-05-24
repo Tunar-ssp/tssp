@@ -320,38 +320,65 @@ window.Tssp = window.Tssp || {};
 
   // Workspaces
 
+  T.allWorkspaces = [];
+
+  function renderWorkspaceCards() {
+    const container = T.$("#workspaces-grid");
+    if (!container) return;
+    const query = (T.$("#workspaces-search")?.value || "").toLowerCase().trim();
+    const lang = (T.$("#workspaces-lang-filter")?.value || "").toLowerCase();
+    let items = T.allWorkspaces.slice();
+    if (lang) items = items.filter((w) => (w.language || "").toLowerCase() === lang);
+    if (query) items = items.filter((w) =>
+      (w.name || "").toLowerCase().includes(query) || (w.body || "").toLowerCase().includes(query)
+    );
+    if (!items.length) {
+      container.innerHTML = T.allWorkspaces.length === 0
+        ? '<div class="notes-empty-state">No workspaces yet. Create one to store scripts and text files.</div>'
+        : '<div class="notes-empty-state">No workspaces match your filters.</div>';
+      return;
+    }
+    container.innerHTML = `<div class="workspace-cards">${items
+      .map((workspace) => {
+        const id = T.escapeHtml(workspace.id);
+        const lineCount = (workspace.body || "").split("\n").length;
+        const preview = (workspace.body || "").trim().slice(0, 160);
+        return `<article class="workspace-card">
+          <div class="workspace-card-head">
+            <div class="workspace-card-title-row">
+              <strong class="workspace-card-name">${T.escapeHtml(workspace.name)}</strong>
+              <span class="type-pill">${T.escapeHtml(workspace.language)}</span>
+            </div>
+            <div class="workspace-card-meta">${lineCount} lines · Updated ${T.escapeHtml(T.formatDate(workspace.updated_at))}</div>
+          </div>
+          ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : ""}
+          <div class="workspace-card-actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-ws-edit="${id}">Edit</button>
+            <button type="button" class="btn btn-text btn-sm btn-danger" data-ws-del="${id}">Delete</button>
+          </div>
+        </article>`;
+      })
+      .join("")}</div>`;
+  }
+
   T.loadWorkspaces = async function loadWorkspaces() {
     const container = T.$("#workspaces-grid");
     if (!container) return;
     container.innerHTML = '<div class="notes-loading">Loading workspaces…</div>';
     try {
       const data = await T.api("/workspaces");
-      const items = data.workspaces || [];
-      if (!items.length) {
-        container.innerHTML = '<div class="notes-empty-state">No workspaces yet. Create one to store scripts and text files.</div>';
-        return;
+      T.allWorkspaces = data.workspaces || [];
+      renderWorkspaceCards();
+      const searchEl = T.$("#workspaces-search");
+      const langEl = T.$("#workspaces-lang-filter");
+      if (searchEl && !searchEl.dataset.bound) {
+        searchEl.dataset.bound = "1";
+        searchEl.addEventListener("input", renderWorkspaceCards);
       }
-      container.innerHTML = `<div class="workspace-cards">${items
-        .map((workspace) => {
-          const id = T.escapeHtml(workspace.id);
-          const lineCount = (workspace.body || "").split("\n").length;
-          const preview = (workspace.body || "").trim().slice(0, 160);
-          return `<article class="workspace-card">
-            <div class="workspace-card-head">
-              <div class="workspace-card-title-row">
-                <strong class="workspace-card-name">${T.escapeHtml(workspace.name)}</strong>
-                <span class="type-pill">${T.escapeHtml(workspace.language)}</span>
-              </div>
-              <div class="workspace-card-meta">${lineCount} lines · Updated ${T.escapeHtml(T.formatDate(workspace.updated_at))}</div>
-            </div>
-            ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : ""}
-            <div class="workspace-card-actions">
-              <button type="button" class="btn btn-secondary btn-sm" data-ws-edit="${id}">Edit</button>
-              <button type="button" class="btn btn-text btn-sm btn-danger" data-ws-del="${id}">Delete</button>
-            </div>
-          </article>`;
-        })
-        .join("")}</div>`;
+      if (langEl && !langEl.dataset.bound) {
+        langEl.dataset.bound = "1";
+        langEl.addEventListener("change", renderWorkspaceCards);
+      }
     } catch (error) {
       container.innerHTML = `<div class="notes-empty-state">${T.escapeHtml(error.message)}</div>`;
     }
