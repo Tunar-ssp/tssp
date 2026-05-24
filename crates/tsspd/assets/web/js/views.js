@@ -183,13 +183,20 @@ window.Tssp = window.Tssp || {};
           return `<article class="image-card">
             <button type="button" class="media-open" data-preview-file="${id}" aria-label="Preview ${T.escapeHtml(file.name)}">
               <img src="${T.fileThumbnailUrl(file.id)}" alt="${T.escapeHtml(file.name)}" loading="lazy" onerror="this.src='${T.fileInlineUrl(file.id)}'">
+              <div class="image-card-overlay">
+                <span class="image-card-overlay-icon">⤢</span>
+              </div>
             </button>
             <div class="media-card-footer">
-              <strong>${T.escapeHtml(file.name)}</strong>
-              <span>${T.escapeHtml(T.formatBytes(file.size_bytes))} · ${T.stateBadge(file.visibility)}</span>
-              <div>
-                <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="${nextVis}">${nextVis === "public" ? "Public" : "Private"}</button>
+              <strong class="media-card-name" title="${T.escapeHtml(file.name)}">${T.escapeHtml(file.name)}</strong>
+              <div class="media-card-meta">
+                <span>${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>
+                ${T.stateBadge(file.visibility)}
+              </div>
+              <div class="media-card-actions">
+                <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="${nextVis}">${nextVis === "public" ? "Make public" : "Make private"}</button>
                 <a class="btn btn-text btn-sm" href="${T.fileDownloadUrl(file.id)}" download>Download</a>
+                <button type="button" class="btn btn-text btn-sm btn-danger" data-delete-file="${id}">Delete</button>
               </div>
             </div>
           </article>`;
@@ -309,30 +316,39 @@ window.Tssp = window.Tssp || {};
   // Workspaces
 
   T.loadWorkspaces = async function loadWorkspaces() {
-    const body = T.$("#workspaces-body");
-    body.innerHTML = T.tableMessage(4, "Loading workspaces…");
+    const container = T.$("#workspaces-grid");
+    if (!container) return;
+    container.innerHTML = '<div class="notes-loading">Loading workspaces…</div>';
     try {
       const data = await T.api("/workspaces");
       const items = data.workspaces || [];
       if (!items.length) {
-        body.innerHTML = T.tableMessage(4, "No workspaces yet.");
+        container.innerHTML = '<div class="notes-empty-state">No workspaces yet. Create one to store scripts and text files.</div>';
         return;
       }
-      body.innerHTML = items
-        .map(
-          (workspace) => `<tr>
-            <td><strong>${T.escapeHtml(workspace.name)}</strong><div class="row-meta mono">${T.escapeHtml(workspace.id)}</div></td>
-            <td><span class="type-pill">${T.escapeHtml(workspace.language)}</span></td>
-            <td>${T.escapeHtml(T.formatDate(workspace.updated_at))}</td>
-            <td class="col-actions">
-              <button type="button" class="btn btn-text btn-sm" data-ws-edit="${T.escapeHtml(workspace.id)}">Edit</button>
-              <button type="button" class="btn btn-text btn-sm btn-danger" data-ws-del="${T.escapeHtml(workspace.id)}">Delete</button>
-            </td>
-          </tr>`
-        )
-        .join("");
+      container.innerHTML = `<div class="workspace-cards">${items
+        .map((workspace) => {
+          const id = T.escapeHtml(workspace.id);
+          const lineCount = (workspace.body || "").split("\n").length;
+          const preview = (workspace.body || "").trim().slice(0, 160);
+          return `<article class="workspace-card">
+            <div class="workspace-card-head">
+              <div class="workspace-card-title-row">
+                <strong class="workspace-card-name">${T.escapeHtml(workspace.name)}</strong>
+                <span class="type-pill">${T.escapeHtml(workspace.language)}</span>
+              </div>
+              <div class="workspace-card-meta">${lineCount} lines · Updated ${T.escapeHtml(T.formatDate(workspace.updated_at))}</div>
+            </div>
+            ${preview ? `<pre class="workspace-card-preview">${T.escapeHtml(preview)}</pre>` : ""}
+            <div class="workspace-card-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-ws-edit="${id}">Edit</button>
+              <button type="button" class="btn btn-text btn-sm btn-danger" data-ws-del="${id}">Delete</button>
+            </div>
+          </article>`;
+        })
+        .join("")}</div>`;
     } catch (error) {
-      body.innerHTML = T.tableMessage(4, error.message);
+      container.innerHTML = `<div class="notes-empty-state">${T.escapeHtml(error.message)}</div>`;
     }
   };
 

@@ -248,19 +248,15 @@
 
         <section id="view-workspaces" class="view hidden">
           <div class="page-header">
-            <div><h2>Workspaces</h2><p class="page-subtitle">Saved scripts and text workspaces (not executed)</p></div>
+            <div>
+              <h2>Workspaces</h2>
+              <p class="page-subtitle">Scripts and text files — stored, not executed</p>
+            </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-secondary" id="new-workspace-btn">New workspace</button>
+              <button type="button" class="btn btn-primary" id="new-workspace-btn">New workspace</button>
             </div>
           </div>
-          <div class="table-card">
-            <table class="data-table">
-              <thead>
-                <tr><th>Name</th><th>Language</th><th>Updated</th><th class="col-actions">Actions</th></tr>
-              </thead>
-              <tbody id="workspaces-body"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody>
-            </table>
-          </div>
+          <div id="workspaces-grid"></div>
         </section>
 
         <section id="view-images" class="view hidden">

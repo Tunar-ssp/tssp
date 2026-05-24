@@ -134,15 +134,16 @@ window.Tssp = window.Tssp || {};
         T.api("/admin/devices"),
         T.api("/admin/sessions?limit=100"),
       ]);
-      overview.innerHTML = `<dl class="admin-dl">
-        <dt>Files</dt><dd>${ov.file_count}</dd>
-        <dt>Notes</dt><dd>${ov.note_count}</dd>
-        <dt>Tags</dt><dd>${ov.tag_count}</dd>
-        <dt>Pinned</dt><dd>${ov.pinned_count}</dd>
-        <dt>Corrupt</dt><dd>${ov.corrupt_file_count}</dd>
-        <dt>Storage</dt><dd>${T.escapeHtml(T.formatBytes(ov.storage_bytes_used))}</dd>
-        <dt>Version</dt><dd>${T.escapeHtml(ov.version || "—")}</dd>
-      </dl>`;
+      const corruptClass = ov.corrupt_file_count > 0 ? "style=\"color:var(--danger)\"" : "";
+      overview.innerHTML = `<div class="admin-overview-grid">
+        <div class="admin-stat"><div class="admin-stat-label">Files</div><div class="admin-stat-value">${ov.file_count}</div></div>
+        <div class="admin-stat"><div class="admin-stat-label">Notes</div><div class="admin-stat-value">${ov.note_count}</div></div>
+        <div class="admin-stat"><div class="admin-stat-label">Pinned</div><div class="admin-stat-value">${ov.pinned_count}</div></div>
+        <div class="admin-stat"><div class="admin-stat-label">Tags</div><div class="admin-stat-value">${ov.tag_count}</div></div>
+        <div class="admin-stat"><div class="admin-stat-label">Storage</div><div class="admin-stat-value">${T.escapeHtml(T.formatBytes(ov.storage_bytes_used))}</div></div>
+        <div class="admin-stat"><div class="admin-stat-label">Corrupt</div><div class="admin-stat-value" ${corruptClass}>${ov.corrupt_file_count}</div></div>
+      </div>
+      <div class="admin-stat-version">v${T.escapeHtml(ov.version || "—")}</div>`;
       const memUsed = (sys.total_memory_bytes || 0) - (sys.available_memory_bytes || 0);
       const memPct = sys.total_memory_bytes > 0 ? Math.round(memUsed / sys.total_memory_bytes * 100) : 0;
       const diskUsed = (sys.data_dir_total_bytes || 0) - (sys.data_dir_free_bytes || 0);
