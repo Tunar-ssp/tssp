@@ -12,8 +12,11 @@
   --text-dim: #65656f;
   --accent: #a855f7;
   --accent-hover: #c084fc;
+  --accent-light: #d8b4fe;
   --accent-dim: rgba(168, 85, 247, 0.12);
   --accent-muted: rgba(168, 85, 247, 0.18);
+  --text-primary: #eeeef3;
+  --text-secondary: #c4c4ce;
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
