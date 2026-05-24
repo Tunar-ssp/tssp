@@ -114,19 +114,41 @@ window.Tssp = window.Tssp || {};
     const html = [];
     let inList = false;
     let inOrderedList = false;
+    let inCheckList = false;
     let inCodeBlock = false;
+    let codeLang = "";
     let codeLines = [];
+    let inTable = false;
+    let tableRows = [];
 
     function closeList() {
+      if (inCheckList) { html.push("</ul>"); inCheckList = false; }
       if (inList) { html.push("</ul>"); inList = false; }
       if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
+    }
+
+    function flushTable() {
+      if (!inTable) return;
+      inTable = false;
+      if (!tableRows.length) return;
+      const [headerRow, ...bodyRows] = tableRows;
+      tableRows = [];
+      const thCells = headerRow.map((cell) => `<th>${inlineFormat(cell.trim())}</th>`).join("");
+      const tbodyHtml = bodyRows
+        .filter((row) => !row.every((cell) => /^[-: ]+$/.test(cell)))
+        .map((row) => `<tr>${row.map((cell) => `<td>${inlineFormat(cell.trim())}</td>`).join("")}</tr>`)
+        .join("");
+      html.push(`<div class="md-table-wrap"><table class="md-table"><thead><tr>${thCells}</tr></thead><tbody>${tbodyHtml}</tbody></table></div>`);
     }
 
     function inlineFormat(text) {
       return T.escapeHtml(text)
         .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
         .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+        .replace(/___([^_]+)___/g, "<strong><em>$1</em></strong>")
+        .replace(/__([^_]+)__/g, "<strong>$1</strong>")
         .replace(/_([^_]+)_/g, "<em>$1</em>")
         .replace(/~~([^~]+)~~/g, "<del>$1</del>")
         .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer" target="_blank">$1</a>');
@@ -135,36 +157,51 @@ window.Tssp = window.Tssp || {};
     for (const line of lines) {
       if (line.startsWith("```")) {
         if (inCodeBlock) {
-          html.push(`<pre><code>${T.escapeHtml(codeLines.join("\n"))}</code></pre>`);
+          const lang = T.escapeHtml(codeLang);
+          html.push(`<pre><code${lang ? ` class="lang-${lang}"` : ""}>${T.escapeHtml(codeLines.join("\n"))}</code></pre>`);
           codeLines = [];
+          codeLang = "";
           inCodeBlock = false;
         } else {
           closeList();
+          flushTable();
+          codeLang = line.slice(3).trim();
           inCodeBlock = true;
         }
         continue;
       }
       if (inCodeBlock) { codeLines.push(line); continue; }
 
-      if (line.startsWith("> ")) {
+      // Table rows
+      if (line.startsWith("|") && line.includes("|", 1)) {
+        closeList();
+        if (!inTable) inTable = true;
+        const cells = line.split("|").slice(1, -1);
+        tableRows.push(cells);
+        continue;
+      } else {
+        flushTable();
+      }
+
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+      if (headingMatch) {
+        closeList();
+        const level = Math.min(headingMatch[1].length + 1, 6);
+        html.push(`<h${level}>${inlineFormat(headingMatch[2])}</h${level}>`);
+      } else if (line.startsWith("> ")) {
         closeList();
         html.push(`<blockquote>${inlineFormat(line.slice(2))}</blockquote>`);
+      } else if (/^\s*-\s+\[[ xX]\]\s+/.test(line)) {
+        if (!inCheckList) { closeList(); html.push('<ul class="md-checklist">'); inCheckList = true; }
+        const checked = /^\s*-\s+\[[xX]\]/.test(line) ? "checked" : "";
+        const text = line.replace(/^\s*-\s+\[[ xX]\]\s+/, "");
+        html.push(`<li><input type="checkbox" disabled ${checked}> ${inlineFormat(text)}</li>`);
       } else if (/^\s*[-*]\s+/.test(line)) {
         if (!inList) { closeList(); html.push("<ul>"); inList = true; }
         html.push(`<li>${inlineFormat(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
       } else if (/^\s*\d+\.\s+/.test(line)) {
         if (!inOrderedList) { closeList(); html.push("<ol>"); inOrderedList = true; }
         html.push(`<li>${inlineFormat(line.replace(/^\s*\d+\.\s+/, ""))}</li>`);
-      } else if (/^#{4,6}\s/.test(line)) {
-        closeList();
-        const level = line.match(/^(#+)\s/)[1].length;
-        html.push(`<h${level}>${inlineFormat(line.replace(/^#+\s/, ""))}</h${level}>`);
-      } else if (line.startsWith("### ")) {
-        closeList(); html.push(`<h4>${inlineFormat(line.slice(4))}</h4>`);
-      } else if (line.startsWith("## ")) {
-        closeList(); html.push(`<h3>${inlineFormat(line.slice(3))}</h3>`);
-      } else if (line.startsWith("# ")) {
-        closeList(); html.push(`<h2>${inlineFormat(line.slice(2))}</h2>`);
       } else if (/^---+$/.test(line.trim())) {
         closeList(); html.push("<hr>");
       } else if (line.trim()) {
@@ -175,6 +212,7 @@ window.Tssp = window.Tssp || {};
       }
     }
     if (inCodeBlock) html.push(`<pre><code>${T.escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    flushTable();
     closeList();
     return html.join("");
   };
