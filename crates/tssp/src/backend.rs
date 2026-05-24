@@ -124,6 +124,11 @@ pub(crate) fn api_put(client: &Client, url: &str) -> RequestBuilder {
     authorize(client.put(url))
 }
 
+/// Starts an authorized PATCH request.
+pub(crate) fn api_patch(client: &Client, url: &str) -> RequestBuilder {
+    authorize(client.patch(url))
+}
+
 /// Starts an authorized DELETE request.
 pub(crate) fn api_delete(client: &Client, url: &str) -> RequestBuilder {
     authorize(client.delete(url))

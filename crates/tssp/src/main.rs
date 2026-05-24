@@ -20,6 +20,7 @@ mod remove;
 mod search;
 mod send;
 mod sessions_helper;
+mod share;
 mod status;
 mod tags;
 mod upload;
@@ -71,6 +72,9 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::Copy(args)) = cli.command.as_ref() {
         return copy::run(cli, args);
+    }
+    if let Some(Command::Share(args)) = cli.command.as_ref() {
+        return share::run(cli, args);
     }
     if let Some(Command::List(args)) = cli.command.as_ref() {
         return list::run_list(cli, args);

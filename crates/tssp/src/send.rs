@@ -75,7 +75,7 @@ pub fn run(cli: &Cli, args: &SendArgs) -> Result<CliExitCode, String> {
 }
 
 /// Upload a file via multipart to the daemon and return the assigned file ID.
-fn upload_file_get_id(
+pub(crate) fn upload_file_get_id(
     address: &BackendAddress,
     path: &Path,
     tags: &[String],

@@ -7,9 +7,10 @@ use std::io::Read;
 use std::sync::Arc;
 
 use axum::body::{to_bytes, Body};
-use axum::http::header::CONTENT_TYPE;
+use axum::http::header::{CONTENT_RANGE, CONTENT_TYPE};
 use axum::http::{Request, StatusCode};
 use tempfile::tempdir;
+use tower::ServiceExt;
 use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::SqliteFileRepository;
 use tssp_adapter_system::{SystemClock, UuidV7FileIdGenerator};
@@ -58,6 +59,7 @@ pub const SECOND_UPLOAD_BODY: &str = "--tssp\r\n\
 // ── App builders ─────────────────────────────────────────────────────────────
 
 /// Builds a fully-wired test app with real `SQLite` + filesystem storage.
+#[allow(dead_code)]
 pub fn real_storage_app() -> (tempfile::TempDir, Router) {
     let temp = tempdir().unwrap_or_else(|e| panic!("tempdir failed: {e}"));
     let repository = Arc::new(
@@ -223,6 +225,65 @@ pub fn reorder_pins_request(body: &str) -> Request<Body> {
 
 // ── Response helpers ─────────────────────────────────────────────────────────
 
+/// Asserts inline content download, byte ranges, and invalid range handling.
+pub async fn assert_content_downloads(app: Router, first_id: &str) {
+    let content = app
+        .clone()
+        .oneshot(content_request(first_id, None))
+        .await
+        .unwrap_or_else(|error| panic!("content request failed: {error}"));
+    assert_eq!(content.status(), StatusCode::OK);
+    assert_eq!(
+        content
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("text/plain")
+    );
+    assert_eq!(
+        content
+            .headers()
+            .get("accept-ranges")
+            .and_then(|value| value.to_str().ok()),
+        Some("bytes")
+    );
+    let content_body = to_bytes(content.into_body(), 1024)
+        .await
+        .unwrap_or_else(|error| panic!("body read failed: {error}"));
+    assert_eq!(content_body.as_ref(), b"hello upload");
+
+    let range = app
+        .clone()
+        .oneshot(content_request(first_id, Some("bytes=6-11")))
+        .await
+        .unwrap_or_else(|error| panic!("range request failed: {error}"));
+    assert_eq!(range.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        range
+            .headers()
+            .get(CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok()),
+        Some("bytes 6-11/12")
+    );
+    let range_body = to_bytes(range.into_body(), 1024)
+        .await
+        .unwrap_or_else(|error| panic!("range body read failed: {error}"));
+    assert_eq!(range_body.as_ref(), b"upload");
+
+    let invalid_range = app
+        .oneshot(content_request(first_id, Some("bytes=50-60")))
+        .await
+        .unwrap_or_else(|error| panic!("invalid range request failed: {error}"));
+    assert_eq!(invalid_range.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(
+        invalid_range
+            .headers()
+            .get(CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok()),
+        Some("bytes */12")
+    );
+}
+
 pub async fn response_json(response: axum::response::Response) -> serde_json::Value {
     let body = to_bytes(response.into_body(), 4096)
         .await
@@ -230,6 +291,7 @@ pub async fn response_json(response: axum::response::Response) -> serde_json::Va
     serde_json::from_slice(&body).unwrap_or_else(|e| panic!("json parse failed: {e}"))
 }
 
+#[allow(dead_code)]
 pub async fn response_status_ok(app: Router, request: Request<Body>) -> StatusCode {
     tower::ServiceExt::oneshot(app, request)
         .await

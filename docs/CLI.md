@@ -40,6 +40,7 @@ send
 receive
 paste
 copy
+share
 pull
 list
 last
@@ -242,6 +243,21 @@ tssp copy <id> --share
 
 Copies a file download URL to the clipboard. The `--share` flag generates a
 time-limited share URL instead of a direct content URL.
+
+## `tssp share`
+
+```sh
+tssp share ./photo.jpg
+tssp share ./photo.jpg --qr
+tssp share file-abc123
+tssp share file-abc123 --qr --json
+```
+
+Uploads a local file when the target path exists, otherwise treats the argument
+as an existing file id. By default the file is made **public** and a durable
+`/p/{token}` link is printed (requires `public_url` in daemon config for a useful
+hostname). Use `--qr` for a terminal QR code. Session-based send links remain
+available via `tssp send` and `tssp copy --share`.
 
 ## `tssp init`
 

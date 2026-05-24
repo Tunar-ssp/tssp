@@ -112,6 +112,8 @@ pub enum Command {
     Paste(PasteArgs),
     /// Copy a file download URL to the clipboard.
     Copy(CopyArgs),
+    /// Upload (if needed) and share a public link to a file.
+    Share(ShareArgs),
     /// Download a file from the daemon.
     Pull(PullArgs),
     /// List files.
@@ -319,6 +321,25 @@ pub struct CopyArgs {
     /// Copy a short-lived share URL instead of direct content URL.
     #[arg(long)]
     pub share: bool,
+}
+
+/// Arguments for `tssp share`.
+#[derive(Debug, Clone, Args)]
+pub struct ShareArgs {
+    /// Local file path or existing file id.
+    pub target: String,
+    /// Print a terminal QR code for the link.
+    #[arg(long)]
+    pub qr: bool,
+    /// Make the file public (default: true).
+    #[arg(long, default_value_t = true)]
+    pub public: bool,
+    /// Attach tags when uploading a local file.
+    #[arg(long = "tag", value_name = "NAME")]
+    pub tags: Vec<String>,
+    /// Future WhatsApp delivery (not implemented).
+    #[arg(long, hide = true)]
+    pub wp: bool,
 }
 
 /// Arguments for `tssp pull`.
