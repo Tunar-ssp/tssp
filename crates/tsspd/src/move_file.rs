@@ -129,8 +129,8 @@ mod tests {
 
     use tssp_ports::{ListQuery, PagedFiles, RepositoryStats};
 
-    use crate::MetadataStatsProvider;
     use super::*;
+    use crate::MetadataStatsProvider;
 
     #[derive(Clone)]
     struct FolderMoveStatsProvider {

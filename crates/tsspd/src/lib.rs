@@ -6,6 +6,8 @@
 
 mod admin;
 pub mod auth;
+#[cfg(test)]
+mod concurrency_tests;
 mod config;
 mod content;
 mod delete;
@@ -22,8 +24,12 @@ mod mdns;
 mod metrics;
 mod move_file;
 mod notes;
+#[cfg(test)]
+mod performance_tests;
 mod pins;
 mod public_api;
+#[cfg(test)]
+mod public_link_tests;
 mod public_sessions;
 mod qr;
 mod rename;

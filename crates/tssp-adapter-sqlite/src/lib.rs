@@ -876,4 +876,6 @@ pub enum SqliteRepositoryError {
 }
 
 #[cfg(test)]
+mod folder_tests;
+#[cfg(test)]
 mod repository_tests;

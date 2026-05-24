@@ -1,7 +1,7 @@
 //! File content download delivery.
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Seek, SeekFrom};
 
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -13,6 +13,8 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
+use tokio::io::AsyncReadExt;
+use tokio_util::io::ReaderStream;
 use tssp_domain::{FileId, FileRecord, StorageHandle};
 use tssp_ports::{BlobReadError, BlobReader};
 
@@ -140,10 +142,12 @@ pub(crate) fn stream_blob_response(
         );
     }
 
-    let body = match download_body(blob, selected_len) {
-        Ok(value) => value,
-        Err(error) => return download_error_response(error),
-    };
+    let tokio_file = tokio::fs::File::from_std(blob);
+    let body = Body::from_stream(ReaderStream::with_capacity(
+        tokio_file.take(selected_len),
+        64 * 1024,
+    ));
+
     let mut response = Response::new(body);
     *response.status_mut() = if is_partial {
         StatusCode::PARTIAL_CONTENT
@@ -160,37 +164,6 @@ pub(crate) fn stream_blob_response(
         disposition,
     );
     response
-}
-
-fn download_body(blob: File, len: u64) -> Result<Body, DownloadBodyError> {
-    let capacity = usize::try_from(len).map_err(|_error| DownloadBodyError::TooLarge)?;
-    let mut limited = blob.take(len);
-    let mut bytes = Vec::with_capacity(capacity);
-    limited
-        .read_to_end(&mut bytes)
-        .map_err(|error| DownloadBodyError::ReadFailed(error.to_string()))?;
-    Ok(Body::from(bytes))
-}
-
-fn download_error_response(error: DownloadBodyError) -> Response {
-    match error {
-        DownloadBodyError::TooLarge => error_response(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "response_too_large",
-            "file is too large for the current download path".to_owned(),
-        ),
-        DownloadBodyError::ReadFailed(message) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "blob_unavailable",
-            format!("could not read blob: {message}"),
-        ),
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum DownloadBodyError {
-    TooLarge,
-    ReadFailed(String),
 }
 
 fn set_download_headers(

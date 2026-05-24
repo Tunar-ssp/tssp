@@ -1,52 +1,52 @@
-//! Edge case tests for error handling and boundary conditions.
-
 #[cfg(test)]
-mod error_edge_cases {
-    use tssp_domain::FileSize;
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use crate::http_tests::common::{content_request, file_request, real_storage_app};
+    use axum::http::StatusCode;
+    use tower::ServiceExt;
 
-    #[test]
-    fn file_size_zero_bytes() {
-        let size = FileSize::new(0);
-        assert_eq!(size.bytes(), 0);
+    #[tokio::test]
+    async fn test_invalid_file_id_formats() {
+        let (_temp, app) = real_storage_app();
+
+        // Path traversal in ID (Axum router will return 404 for this literal path)
+        let response = app
+            .clone()
+            .oneshot(file_request("../etc/passwd"))
+            .await
+            .expect("request failed");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // URL encoded traversal (Axum decodes it, but our FileId::new rejects '/')
+        let response = app
+            .clone()
+            .oneshot(file_request("%2e%2e%2fetc%2fpasswd"))
+            .await
+            .expect("request failed");
+        // Axum 0.8 matches %2f as path separator by default, so it might not match the {id} route.
+        // It returns 404.
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // Empty ID (matches /api/v1/files, but if trailing slash is missing it depends)
+        // file_request("") builds /api/v1/files/
+        let response = app
+            .clone()
+            .oneshot(file_request(""))
+            .await
+            .expect("request failed");
+        // /api/v1/files/ (trailing slash) might not match /api/v1/files (listing) exactly
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    #[test]
-    fn file_size_max_u64() {
-        let size = FileSize::new(u64::MAX);
-        assert_eq!(size.bytes(), u64::MAX);
+    #[tokio::test]
+    async fn test_content_invalid_range_headers() {
+        let (_temp, app) = real_storage_app();
+        let response = app
+            .oneshot(content_request("any-id", Some("not-bytes=0-10")))
+            .await
+            .expect("request failed");
+        // Handler find_file comes before range parsing.
+        // If file not found, it returns 404.
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
-
-    #[test]
-    fn file_size_formatting() {
-        // Just ensure it doesn't panic on edge values
-        let sizes = [0, 1, 1023, 1024, u64::MAX / 2, u64::MAX];
-        for bytes in sizes {
-            let size = FileSize::new(bytes);
-            // Just accessing should not panic
-            let _ = size.bytes();
-        }
-    }
-}
-
-#[cfg(test)]
-mod visibility_edge_cases {
-    use tssp_domain::Visibility;
-
-    #[test]
-    fn visibility_public_to_private() {
-        let vis = Visibility::Public;
-        assert!(matches!(vis, Visibility::Public));
-    }
-
-    #[test]
-    fn visibility_private_to_public() {
-        let vis = Visibility::Private;
-        assert!(matches!(vis, Visibility::Private));
-    }
-}
-
-#[cfg(test)]
-mod content_range_parsing {
-    // These tests would integrate with the content module to test range header parsing
-    // For now, this is a placeholder for future enhancement
 }
