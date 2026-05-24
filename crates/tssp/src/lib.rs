@@ -172,6 +172,8 @@ pub enum NoteSubcommand {
     Edit(NoteEditArgs),
     /// Delete a note.
     Delete(NoteDeleteArgs),
+    /// Export all notes as NDJSON.
+    Export(NoteExportArgs),
 }
 
 /// Wrapper for `tssp note`.
@@ -234,6 +236,23 @@ pub struct NoteEditArgs {
     /// New title.
     #[arg(long)]
     pub title: Option<String>,
+    /// Replace all tags (repeatable; omit to leave tags unchanged).
+    #[arg(long = "tag", short = 't', value_name = "NAME")]
+    pub tags: Vec<String>,
+    /// Pin the note.
+    #[arg(long, conflicts_with = "unpin")]
+    pub pin: bool,
+    /// Unpin the note.
+    #[arg(long, conflicts_with = "pin")]
+    pub unpin: bool,
+}
+
+/// Arguments for `tssp note export`.
+#[derive(Debug, Clone, Args)]
+pub struct NoteExportArgs {
+    /// Write to file instead of stdout.
+    #[arg(long, short = 'o', value_name = "FILE")]
+    pub output: Option<std::path::PathBuf>,
 }
 
 /// Arguments for `tssp note delete`.

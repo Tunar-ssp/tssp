@@ -3,7 +3,8 @@
 use reqwest::{header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
 use tssp::{
-    Cli, NoteCreateArgs, NoteDeleteArgs, NoteEditArgs, NoteListArgs, NoteShowArgs, NoteSubcommand,
+    Cli, NoteCreateArgs, NoteDeleteArgs, NoteEditArgs, NoteExportArgs, NoteListArgs, NoteShowArgs,
+    NoteSubcommand,
 };
 use tssp_cli_core::CliExitCode;
 
@@ -19,6 +20,7 @@ pub fn run(cli: &Cli, command: &NoteSubcommand) -> Result<CliExitCode, String> {
         NoteSubcommand::Show(args) => run_show(cli, args),
         NoteSubcommand::Edit(args) => run_edit(cli, args),
         NoteSubcommand::Delete(args) => run_delete(cli, args),
+        NoteSubcommand::Export(args) => run_export(cli, args),
     }
 }
 
@@ -53,7 +55,7 @@ fn run_list(cli: &Cli, args: &NoteListArgs) -> Result<CliExitCode, String> {
         .map_err(|message| format!("invalid backend address: {message}"))?;
     let client = build_client()?;
     let mut query = vec![("limit", args.limit.unwrap_or(50).to_string())];
-    if let Some(tag) = args.tags.first() {
+    for tag in &args.tags {
         query.push(("tag", tag.clone()));
     }
     if args.pinned {
@@ -92,7 +94,13 @@ fn run_list(cli: &Cli, args: &NoteListArgs) -> Result<CliExitCode, String> {
     }
 
     for note in &page.notes {
-        println!("{}  {}  updated={}", note.id, note.title, note.updated_at);
+        let pin = if note.pinned { "📌 " } else { "   " };
+        let tags = if note.tags.is_empty() {
+            String::new()
+        } else {
+            format!("  [{}]", note.tags.join(", "))
+        };
+        println!("{pin}{:<36}  {}{}", note.id, note.title, tags);
     }
     Ok(CliExitCode::Success)
 }
@@ -126,12 +134,45 @@ fn run_show(cli: &Cli, args: &NoteShowArgs) -> Result<CliExitCode, String> {
         return Ok(CliExitCode::Success);
     }
 
-    println!("# {}\n", note.title);
+    println!("# {}{}", note.title, if note.pinned { "  📌" } else { "" });
+    if !note.tags.is_empty() {
+        println!("tags: {}", note.tags.join(", "));
+    }
+    println!();
     println!("{}", note.body);
     Ok(CliExitCode::Success)
 }
 
 fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
+    let address = BackendAddress::from_connection_args(&cli.connection)
+        .map_err(|message| format!("invalid backend address: {message}"))?;
+    let client = build_client()?;
+
+    // Handle pin/unpin as separate requests first.
+    if args.pin || args.unpin {
+        let pin_url = address.url(&format!("{NOTES_ENDPOINT}/{}/pin", args.id));
+        let res = if args.pin {
+            api_put(&client, &pin_url)
+                .header(ACCEPT, "application/vnd.tssp.v1+json")
+                .send()
+        } else {
+            api_delete(&client, &pin_url)
+                .header(ACCEPT, "application/vnd.tssp.v1+json")
+                .send()
+        }
+        .map_err(|error| format!("could not reach daemon: {error}"))?;
+        if !res.status().is_success() && res.status() != StatusCode::NO_CONTENT {
+            eprintln!("error: pin update failed: {}", res.status());
+            return Ok(classify_status(res.status()));
+        }
+        if !cli.output.quiet && args.body.is_none() && args.title.is_none() && args.tags.is_empty() {
+            println!("{} note {}", if args.pin { "pinned" } else { "unpinned" }, args.id);
+        }
+        if args.body.is_none() && args.title.is_none() && args.tags.is_empty() {
+            return Ok(CliExitCode::Success);
+        }
+    }
+
     let body = if let Some(body) = &args.body {
         body.clone()
     } else {
@@ -142,13 +183,12 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
         return Ok(CliExitCode::Usage);
     }
 
-    let address = BackendAddress::from_connection_args(&cli.connection)
-        .map_err(|message| format!("invalid backend address: {message}"))?;
+    let tags = if args.tags.is_empty() { None } else { Some(args.tags.clone()) };
     let payload = UpdateNoteRequest {
         title: args.title.clone(),
         body,
+        tags,
     };
-    let client = build_client()?;
     let response = api_put(
         &client,
         &address.url(&format!("{NOTES_ENDPOINT}/{}", args.id)),
@@ -159,6 +199,35 @@ fn run_edit(cli: &Cli, args: &NoteEditArgs) -> Result<CliExitCode, String> {
     .map_err(|error| format!("could not reach daemon: {error}"))?;
 
     handle_note_response(response, cli, "updated")
+}
+
+fn run_export(cli: &Cli, args: &NoteExportArgs) -> Result<CliExitCode, String> {
+    let address = BackendAddress::from_connection_args(&cli.connection)
+        .map_err(|message| format!("invalid backend address: {message}"))?;
+    let client = build_client()?;
+    let response = api_get(&client, &address.url("/api/v1/notes/export"))
+        .send()
+        .map_err(|error| format!("could not reach daemon: {error}"))?;
+
+    if !response.status().is_success() {
+        eprintln!("error: daemon returned {}", response.status());
+        return Ok(classify_status(response.status()));
+    }
+
+    let body = response
+        .text()
+        .map_err(|error| format!("could not read export: {error}"))?;
+
+    if let Some(path) = &args.output {
+        std::fs::write(path, &body)
+            .map_err(|error| format!("could not write {}: {error}", path.display()))?;
+        if !cli.output.quiet {
+            println!("exported to {}", path.display());
+        }
+    } else {
+        print!("{body}");
+    }
+    Ok(CliExitCode::Success)
 }
 
 fn run_delete(cli: &Cli, args: &NoteDeleteArgs) -> Result<CliExitCode, String> {
@@ -251,6 +320,8 @@ struct CreateNoteRequest {
 struct UpdateNoteRequest {
     title: Option<String>,
     body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,5 +334,9 @@ struct NoteRecordResponse {
     id: String,
     title: String,
     body: String,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    pinned: bool,
     updated_at: i64,
 }
