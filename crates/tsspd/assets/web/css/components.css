@@ -3,8 +3,8 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%);
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.35);
+  background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #3B82F6 100%);
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.4);
 }
 
 .brand-mark.sm {
@@ -174,7 +174,7 @@
   text-align: center;
   color: var(--text-muted);
   padding: 42px !important;
-  background: linear-gradient(180deg, rgba(168, 85, 247, 0.03), transparent);
+  background: transparent;
 }
 
 .col-actions {
@@ -318,8 +318,8 @@
   justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(ellipse at 30% 0%, rgba(124, 58, 237, 0.18), transparent 55%),
-    radial-gradient(ellipse at 70% 100%, rgba(168, 85, 247, 0.08), transparent 50%),
+    radial-gradient(ellipse at 30% 0%, rgba(37, 99, 235, 0.15), transparent 55%),
+    radial-gradient(ellipse at 80% 100%, rgba(34, 211, 238, 0.06), transparent 50%),
     var(--bg-root);
 }
 
@@ -598,7 +598,7 @@
 
 .md-checklist input[type="checkbox"] {
   cursor: default;
-  accent-color: var(--accent);
+  accent-color: var(--brand);
 }
 
 .inline-form {
@@ -628,10 +628,10 @@
 .upload-progress {
   margin-bottom: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  border: 1px solid rgba(37, 99, 235, 0.35);
   border-radius: var(--radius-sm);
-  background: var(--accent-dim);
-  color: var(--accent-hover);
+  background: var(--brand-dim);
+  color: var(--blue);
 }
 
 .metric-sub {
@@ -789,10 +789,10 @@ select:focus {
   align-items: center;
   gap: 3px;
   padding: 2px 8px 2px 9px;
-  background: var(--accent-muted);
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  background: var(--brand-dim);
+  border: 1px solid rgba(37, 99, 235, 0.35);
   border-radius: 999px;
-  color: var(--accent-light, #d8b4fe);
+  color: #93C5FD;
   font-size: 0.72rem;
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -822,7 +822,7 @@ select:focus {
   color: var(--text-primary);
   background: transparent;
   padding: 2px 2px;
-  caret-color: var(--accent);
+  caret-color: var(--brand);
 }
 
 .tag-chips-text-input::placeholder {
@@ -874,7 +874,7 @@ select:focus {
 }
 
 .upload-queue-status.pending { color: var(--text-muted); }
-.upload-queue-status.uploading { color: var(--accent); }
+.upload-queue-status.uploading { color: var(--blue); }
 .upload-queue-status.done { color: var(--success, #4ade80); }
 .upload-queue-status.failed { color: var(--danger); }
 

@@ -7,10 +7,15 @@ window.Tssp = window.Tssp || {};
     const body = T.$("#public-grid") || T.$("#public-body");
     if (!body) return;
     body.innerHTML = '<div id="public-body" class="empty-state compact">Loading public links...</div>';
-    try {
-      const data = await T.api("/public/files");
-      const files = data.files || [];
-      if (!files.length) {
+	    try {
+	      const data = await T.api("/public/files");
+	      const files = data.files || [];
+	      const total = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
+	      const countEl = T.$("#sharing-count");
+	      const sizeEl = T.$("#sharing-size");
+	      if (countEl) countEl.textContent = String(files.length);
+	      if (sizeEl) sizeEl.textContent = T.formatBytes(total);
+	      if (!files.length) {
         body.innerHTML =
           '<div id="public-body" class="empty-state"><strong>No public links</strong><span>Make a file public from Cloud Drive to share it here.</span><div class="empty-actions"><button type="button" class="btn btn-secondary" data-view-jump="objects">Open Cloud Drive</button></div></div>';
         return;
@@ -37,9 +42,13 @@ window.Tssp = window.Tssp || {};
           </article>`;
         })
         .join("");
-    } catch (error) {
-      body.innerHTML = `<div id="public-body" class="empty-state error">${T.escapeHtml(error.message)}</div>`;
-    }
+	    } catch (error) {
+	      const countEl = T.$("#sharing-count");
+	      const sizeEl = T.$("#sharing-size");
+	      if (countEl) countEl.textContent = "—";
+	      if (sizeEl) sizeEl.textContent = "—";
+	      body.innerHTML = `<div id="public-body" class="empty-state error">${T.escapeHtml(error.message)}</div>`;
+	    }
   };
 
 })(window.Tssp);

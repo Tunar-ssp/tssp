@@ -214,11 +214,12 @@ window.Tssp = window.Tssp || {};
           <span>${dateStr}</span>
         </div>
       </div>
-      <div class="note-card-actions">
-        <button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Edit</button>
-        <button type="button" class="btn btn-text btn-sm" data-pin-note="${id}" data-pinned="${pinned ? "1" : "0"}">${pinned ? "Unpin" : "Pin"}</button>
-        <button type="button" class="btn btn-text btn-sm btn-danger" data-delete-note="${id}">Delete</button>
-      </div>
+	      <div class="note-card-actions">
+	        <button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Edit</button>
+	        <button type="button" class="btn btn-text btn-sm" data-duplicate-note="${id}">Duplicate</button>
+	        <button type="button" class="btn btn-text btn-sm" data-pin-note="${id}" data-pinned="${pinned ? "1" : "0"}">${pinned ? "Unpin" : "Pin"}</button>
+	        <button type="button" class="btn btn-text btn-sm btn-danger" data-delete-note="${id}">Delete</button>
+	      </div>
     </article>`;
   }
 
@@ -231,10 +232,81 @@ window.Tssp = window.Tssp || {};
 
   // ── Note editor ──────────────────────────────────────────────────────────
 
-  T.refreshNotePreview = function refreshNotePreview() {
-    const preview = T.$("#note-preview");
-    if (preview) preview.innerHTML = T.simpleMarkdown(T.$("#note-body-input")?.value || "");
-  };
+	  T.refreshNotePreview = function refreshNotePreview() {
+	    const preview = T.$("#note-preview");
+	    if (preview) preview.innerHTML = T.simpleMarkdown(T.$("#note-body-input")?.value || "");
+	    renderNoteOutline();
+	  };
+
+	  function renderNoteOutline() {
+	    const outline = T.$("#note-outline-list");
+	    const body = T.$("#note-body-input")?.value || "";
+	    if (!outline) return;
+	    const headings = body
+	      .split(/\r?\n/)
+	      .map((line, index) => ({ line, index }))
+	      .filter((item) => /^#{1,3}\s+/.test(item.line))
+	      .map((item) => ({
+	        level: item.line.match(/^#+/)[0].length,
+	        title: item.line.replace(/^#{1,3}\s+/, "").trim(),
+	        line: item.index + 1,
+	      }));
+	    if (!headings.length) {
+	      const blockCount = body.split(/\n{2,}/).filter((block) => block.trim()).length;
+	      outline.innerHTML = `<div class="note-outline-empty">
+	        <strong>${blockCount}</strong>
+	        <span>blocks detected</span>
+	        <small>Add headings to build a page outline.</small>
+	      </div>`;
+	      return;
+	    }
+	    outline.innerHTML = headings
+	      .map((heading) => `<button type="button" class="note-outline-item level-${heading.level}" data-note-goto-line="${heading.line}">
+	        <span>${T.escapeHtml(heading.title || "Untitled section")}</span>
+	        <small>L${heading.line}</small>
+	      </button>`)
+	      .join("");
+	  }
+
+	  function insertAtCursor(text) {
+	    const area = T.$("#note-body-input");
+	    if (!area || !text) return;
+	    const start = area.selectionStart;
+	    const end = area.selectionEnd;
+	    const before = area.value.slice(0, start);
+	    const after = area.value.slice(end);
+	    const prefix = before && !before.endsWith("\n") ? "\n" : "";
+	    const suffix = after && !text.endsWith("\n") ? "\n" : "";
+	    area.value = before + prefix + text + suffix + after;
+	    const cursor = before.length + prefix.length + text.length;
+	    area.focus();
+	    area.selectionStart = area.selectionEnd = cursor;
+	    T.refreshNotePreview();
+	    T.updateNoteWordCount();
+	    scheduleAutosave();
+	  }
+
+	  T.insertNoteBlock = function insertNoteBlock(kind) {
+	    const blocks = {
+	      heading: "## Section title\n\nWrite the idea here.",
+	      todo: "- [ ] First task\n- [ ] Follow-up task\n",
+	      bullet: "- Key point\n- Supporting detail\n",
+	      numbered: "1. First step\n2. Next step\n",
+	      callout: "> [!NOTE]\n> Important context or decision.\n",
+	      code: "```text\npaste code or command output here\n```\n",
+	      table: "| Item | Status | Notes |\n| --- | --- | --- |\n| Example | Open | Add details |\n",
+	    };
+	    insertAtCursor(blocks[kind] || "");
+	  };
+
+	  T.openNoteTemplate = function openNoteTemplate() {
+	    T.openNoteDialog(null);
+	    T.$("#note-title-input").value = "Untitled project note";
+	    T.$("#note-body-input").value =
+	      "# Project note\n\n> [!NOTE]\n> Context, goal, or decision.\n\n## Tasks\n\n- [ ] First task\n- [ ] Follow-up task\n\n## Notes\n\nWrite details here.\n";
+	    T.refreshNotePreview();
+	    T.updateNoteWordCount();
+	  };
 
   function scheduleAutosave() {
     clearTimeout(T.noteAutosaveTimer);
@@ -359,12 +431,18 @@ window.Tssp = window.Tssp || {};
         }
       });
     }
-    const noteSearch = T.$("#notes-local-search");
-    const notePinnedFilter = T.$("#notes-pinned-filter");
-    if (noteSearch) noteSearch.addEventListener("input", () => T.renderNoteCards());
-    if (notePinnedFilter) notePinnedFilter.addEventListener("change", () => T.renderNoteCards());
+	    const noteSearch = T.$("#notes-local-search");
+	    const notePinnedFilter = T.$("#notes-pinned-filter");
+	    if (noteSearch) noteSearch.addEventListener("input", () => T.renderNoteCards());
+	    if (notePinnedFilter) notePinnedFilter.addEventListener("change", () => T.renderNoteCards());
+	    T.$("#notes-template-btn")?.addEventListener("click", () => T.openNoteTemplate());
+	    T.$$(".note-block-toolbar [data-note-insert]").forEach((button) => {
+	      if (button.dataset.bound) return;
+	      button.dataset.bound = "1";
+	      button.addEventListener("click", () => T.insertNoteBlock(button.dataset.noteInsert));
+	    });
 
-    const noteTagBar = T.$("#notes-tag-bar");
+	    const noteTagBar = T.$("#notes-tag-bar");
     if (noteTagBar) {
       noteTagBar.addEventListener("click", (e) => {
         const btn = e.target.closest("[data-tag-filter]");
@@ -375,8 +453,21 @@ window.Tssp = window.Tssp || {};
       });
     }
 
-    bindTagChipsInput();
-  };
+	    bindTagChipsInput();
+	    T.$("#note-outline-list")?.addEventListener("click", (e) => {
+	      const button = e.target.closest("[data-note-goto-line]");
+	      if (!button) return;
+	      const area = T.$("#note-body-input");
+	      if (!area) return;
+	      const targetLine = Number(button.dataset.noteGotoLine);
+	      const offset = area.value
+	        .split("\n")
+	        .slice(0, Math.max(0, targetLine - 1))
+	        .join("\n").length;
+	      area.focus();
+	      area.selectionStart = area.selectionEnd = targetLine > 1 ? offset + 1 : 0;
+	    });
+	  };
 
   // ── Tag sync helpers ─────────────────────────────────────────────────────
 
@@ -458,18 +549,37 @@ window.Tssp = window.Tssp || {};
     }
   };
 
-  T.toggleNotePin = async function toggleNotePin(id, pinned) {
-    try {
-      await T.api("/notes/" + encodeURIComponent(id) + "/pin", {
-        method: pinned ? "DELETE" : "PUT",
-      });
-      T.loadNotes();
-    } catch (error) {
-      T.showBanner(error.message, "error");
-    }
-  };
+	  T.toggleNotePin = async function toggleNotePin(id, pinned) {
+	    try {
+	      await T.api("/notes/" + encodeURIComponent(id) + "/pin", {
+	        method: pinned ? "DELETE" : "PUT",
+	      });
+	      T.loadNotes();
+	    } catch (error) {
+	      T.showBanner(error.message, "error");
+	    }
+	  };
 
-  T.deleteNote = async function deleteNote(id) {
+	  T.duplicateNote = async function duplicateNote(id) {
+	    try {
+	      const note = await T.api("/notes/" + encodeURIComponent(id));
+	      await T.api("/notes", {
+	        method: "POST",
+	        body: JSON.stringify({
+	          title: `${note.title || "Untitled"} copy`,
+	          body: note.body || "",
+	          tags: note.tags || [],
+	          pin: false,
+	        }),
+	      });
+	      T.showBanner("Note duplicated", "success");
+	      T.loadNotes();
+	    } catch (error) {
+	      T.showBanner(error.message, "error");
+	    }
+	  };
+
+	  T.deleteNote = async function deleteNote(id) {
     if (!confirm("Delete this note?")) return;
     try {
       await T.api("/notes/" + encodeURIComponent(id), { method: "DELETE" });

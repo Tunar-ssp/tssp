@@ -20,12 +20,39 @@ window.Tssp = window.Tssp || {};
     "css",
   ];
 
-  function languageOptions(selected) {
-    return LANGUAGE_OPTIONS.map(
-      (language) =>
-        `<option value="${language}"${selected === language ? " selected" : ""}>${language}</option>`
-    ).join("");
-  }
+	  function languageOptions(selected) {
+	    return LANGUAGE_OPTIONS.map(
+	      (language) =>
+	        `<option value="${language}"${selected === language ? " selected" : ""}>${language}</option>`
+	    ).join("");
+	  }
+
+	  function inferLanguageFromPath(path) {
+	    const lower = String(path || "").toLowerCase();
+	    const ext = lower.split(".").pop();
+	    const byExt = {
+	      md: "markdown",
+	      markdown: "markdown",
+	      js: "javascript",
+	      jsx: "javascript",
+	      ts: "typescript",
+	      tsx: "typescript",
+	      py: "python",
+	      rs: "rust",
+	      go: "go",
+	      sh: "bash",
+	      bash: "bash",
+	      sql: "sql",
+	      json: "json",
+	      yaml: "yaml",
+	      yml: "yaml",
+	      toml: "toml",
+	      html: "html",
+	      css: "css",
+	      txt: "text",
+	    };
+	    return byExt[ext] || "text";
+	  }
 
   function setSaveStatus(status) {
     const el = T.$("#editor-save-status");
@@ -151,29 +178,65 @@ window.Tssp = window.Tssp || {};
       .join("");
   }
 
-  function renderDocumentList() {
-    const list = T.$("#editor-doc-list");
-    if (!list) return;
+	  function renderDocumentList() {
+	    const list = T.$("#editor-doc-list");
+	    if (!list) return;
     if (!T.editorCurrentWorkspaceId) {
       list.innerHTML = '<div class="editor-empty-state">Open a workspace to load documents.</div>';
       return;
     }
-    if (!T.editorDocuments.length) {
-      list.innerHTML = '<div class="editor-empty-state">No files yet in this workspace.</div>';
-      return;
-    }
-    list.innerHTML = T.editorDocuments
-      .map(
-        (document) => `<button
-            type="button"
-            class="editor-doc-item${T.editorCurrentDocumentId === document.id ? " active" : ""}"
-            data-editor-document="${T.escapeHtml(document.id)}">
-            <span class="editor-doc-path">${T.escapeHtml(document.path)}</span>
-            <span class="editor-doc-meta">${T.escapeHtml(document.language)} · ${T.escapeHtml(T.formatBytes(document.size_bytes || 0))}${document.is_primary ? " · entry" : ""}</span>
-          </button>`
-      )
-      .join("");
-  }
+	    if (!T.editorDocuments.length) {
+	      list.innerHTML = '<div class="editor-empty-state">No files yet in this workspace.</div>';
+	      return;
+	    }
+	    const q = (T.$("#editor-doc-search")?.value || "").toLowerCase().trim();
+	    const documents = q
+	      ? T.editorDocuments.filter((document) => document.path.toLowerCase().includes(q))
+	      : T.editorDocuments;
+	    if (!documents.length) {
+	      list.innerHTML = '<div class="editor-empty-state">No files match this search.</div>';
+	      return;
+	    }
+	    const groups = new Map();
+	    for (const document of documents) {
+	      const parts = document.path.split("/");
+	      const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "root";
+	      if (!groups.has(folder)) groups.set(folder, []);
+	      groups.get(folder).push(document);
+	    }
+	    list.innerHTML = [...groups.entries()]
+	      .map(([folder, docs]) => `<div class="editor-tree-group">
+	        <div class="editor-tree-folder">${T.escapeHtml(folder)}</div>
+	        ${docs
+	          .map(
+	            (document) => `<button
+	                type="button"
+	                class="editor-doc-item${T.editorCurrentDocumentId === document.id ? " active" : ""}"
+	                data-editor-document="${T.escapeHtml(document.id)}">
+	                <span class="editor-doc-path">${T.escapeHtml(document.path.split("/").pop())}</span>
+	                <span class="editor-doc-meta">${T.escapeHtml(document.language)} · ${T.escapeHtml(T.formatBytes(document.size_bytes || 0))}${document.is_primary ? " · entry" : ""}</span>
+	              </button>`
+	          )
+	          .join("")}
+	      </div>`)
+	      .join("");
+	  }
+
+	  function renderEditorTabs() {
+	    const tabs = T.$("#editor-tabs");
+	    if (!tabs) return;
+	    if (!T.editorOpenTabs.length) {
+	      tabs.innerHTML = '<span class="editor-tabs-empty">No open files</span>';
+	      return;
+	    }
+	    tabs.innerHTML = T.editorOpenTabs
+	      .map((tab) => `<button type="button" class="editor-tab${tab.id === T.editorCurrentDocumentId ? " active" : ""}" data-editor-document="${T.escapeHtml(tab.id)}">
+	        <span>${T.escapeHtml(tab.path)}</span>
+	        <small>${T.escapeHtml(tab.language || "text")}</small>
+	        <span class="editor-tab-close" data-editor-close-tab="${T.escapeHtml(tab.id)}" aria-label="Close tab">x</span>
+	      </button>`)
+	      .join("");
+	  }
 
   function setTopBar() {
     const workspaceName = T.$("#editor-workspace-name");
@@ -185,23 +248,29 @@ window.Tssp = window.Tssp || {};
     if (fileName) {
       fileName.textContent = T.editorCurrentDocument ? T.editorCurrentDocument.path : "No file open";
     }
-    if (langBadge) {
-      langBadge.textContent = T.editorCurrentDocument ? T.editorCurrentDocument.language : "";
-    }
-    updateDeleteButton();
-  }
+	    if (langBadge) {
+	      langBadge.textContent = T.editorCurrentDocument ? T.editorCurrentDocument.language : "";
+	    }
+	    updateDeleteButton();
+	    renderEditorTabs();
+	  }
 
   function bindInfoPanelInputs() {
     const pathInput = T.$("#editor-doc-path-input");
     const langSelect = T.$("#editor-doc-language-select");
     const makePrimary = T.$("#editor-make-primary-btn");
-    if (pathInput) {
-      pathInput.addEventListener("input", () => {
-        markDirty();
-        const fileName = T.$("#editor-filename");
-        if (fileName) fileName.textContent = pathInput.value.trim() || "Untitled file";
-      });
-    }
+	    if (pathInput) {
+	      pathInput.addEventListener("input", () => {
+	        markDirty();
+	        const fileName = T.$("#editor-filename");
+	        if (fileName) fileName.textContent = pathInput.value.trim() || "Untitled file";
+	        if (langSelect && (!langSelect.value || langSelect.value === "text")) {
+	          langSelect.value = inferLanguageFromPath(pathInput.value);
+	          const langBadge = T.$("#editor-lang-badge");
+	          if (langBadge) langBadge.textContent = langSelect.value;
+	        }
+	      });
+	    }
     if (langSelect) {
       langSelect.addEventListener("change", () => {
         markDirty();
@@ -258,12 +327,13 @@ window.Tssp = window.Tssp || {};
     bindInfoPanelInputs();
   }
 
-  function resetEditor() {
+	  function resetEditor() {
     T.editorCurrentWorkspaceId = null;
     T.editorCurrentWorkspace = null;
     T.editorCurrentDocumentId = null;
     T.editorCurrentDocument = null;
-    T.editorDocuments = [];
+	    T.editorDocuments = [];
+	    T.editorOpenTabs = [];
     T.editorDirty = false;
     const area = T.$("#editor-area");
     if (area) area.value = "";
@@ -297,13 +367,15 @@ window.Tssp = window.Tssp || {};
     }
   };
 
-  async function loadWorkspaceIntoEditor(id, preferredDocumentId) {
-    const detail = await fetchWorkspaceDetail(id);
-    T.editorCurrentWorkspaceId = detail.workspace.id;
-    T.editorCurrentWorkspace = detail.workspace;
-    T.editorDocuments = detail.documents || [];
-    renderWorkspaceList();
-    renderDocumentList();
+	  async function loadWorkspaceIntoEditor(id, preferredDocumentId) {
+	    const workspaceChanged = T.editorCurrentWorkspaceId && T.editorCurrentWorkspaceId !== id;
+	    const detail = await fetchWorkspaceDetail(id);
+	    T.editorCurrentWorkspaceId = detail.workspace.id;
+	    T.editorCurrentWorkspace = detail.workspace;
+	    T.editorDocuments = detail.documents || [];
+	    if (workspaceChanged) T.editorOpenTabs = [];
+	    renderWorkspaceList();
+	    renderDocumentList();
     const nextDocument =
       T.editorDocuments.find((item) => item.id === preferredDocumentId) ||
       T.editorDocuments.find((item) => item.is_primary) ||
@@ -316,12 +388,13 @@ window.Tssp = window.Tssp || {};
       const area = T.$("#editor-area");
       if (area) area.value = "";
       T.editorDirty = false;
-      setTopBar();
-      setInfoPanel();
-      setSaveStatus("saved");
-      updateStatusBar();
-      return;
-    }
+	      setTopBar();
+	      setInfoPanel();
+	      setSaveStatus("saved");
+	      updateStatusBar();
+	      renderEditorTabs();
+	      return;
+	    }
     await T.openEditorDocument(nextDocument.id, true);
   }
 
@@ -346,19 +419,24 @@ window.Tssp = window.Tssp || {};
       const document = await T.api(
         `/admin/editor/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}`
       );
-      T.editorCurrentDocumentId = document.id;
-      T.editorCurrentDocument = document;
-      T.editorDirty = false;
+	      T.editorCurrentDocumentId = document.id;
+	      T.editorCurrentDocument = document;
+	      T.editorOpenTabs = [
+	        ...T.editorOpenTabs.filter((tab) => tab.id !== document.id),
+	        { id: document.id, path: document.path, language: document.language },
+	      ].slice(-8);
+	      T.editorDirty = false;
       const area = T.$("#editor-area");
       if (area) area.value = document.body || "";
       renderDocumentList();
       setTopBar();
       setInfoPanel();
       setSaveStatus("saved");
-      updateStatusBar();
-      updatePreviewButton();
-      hidePreviewPane();
-    } catch (error) {
+	      updateStatusBar();
+	      updatePreviewButton();
+	      hidePreviewPane();
+	      renderEditorTabs();
+	    } catch (error) {
       T.showBanner(error.message, "error");
     }
   };
@@ -431,26 +509,26 @@ window.Tssp = window.Tssp || {};
     }
   };
 
-  T.openEditorDocumentDialog = function openEditorDocumentDialog() {
+	  T.openEditorDocumentDialog = function openEditorDocumentDialog() {
     if (!T.editorCurrentWorkspaceId) {
       T.showBanner("Open a workspace first", "error");
       return;
     }
     T.$("#editor-document-dialog-title").textContent = "New file";
-    T.$("#editor-document-path-input").value = "";
-    T.$("#editor-document-language-input").value = "text";
+	    T.$("#editor-document-path-input").value = "";
+	    T.$("#editor-document-language-input").value = "text";
     T.$("#editor-document-primary-input").checked = false;
     T.$("#editor-document-dialog").showModal();
   };
 
-  T.createEditorDocument = async function createEditorDocument() {
+	  T.createEditorDocument = async function createEditorDocument() {
     if (!T.editorCurrentWorkspaceId) return;
-    const payload = {
-      path: T.$("#editor-document-path-input").value.trim(),
-      language: T.$("#editor-document-language-input").value.trim() || "text",
-      body: "",
-      make_primary: T.$("#editor-document-primary-input").checked,
-    };
+	    const payload = {
+	      path: T.$("#editor-document-path-input").value.trim(),
+	      language: T.$("#editor-document-language-input").value.trim() || inferLanguageFromPath(T.$("#editor-document-path-input").value),
+	      body: "",
+	      make_primary: T.$("#editor-document-primary-input").checked,
+	    };
     if (!payload.path) {
       T.showBanner("File path is required", "error");
       return;
@@ -599,15 +677,47 @@ window.Tssp = window.Tssp || {};
     T.$("#editor-edit-workspace-btn")?.addEventListener("click", () => T.editCurrentWorkspace());
     T.$("#editor-new-document-btn")?.addEventListener("click", () => T.openEditorDocumentDialog());
     T.$("#editor-delete-btn")?.addEventListener("click", () => T.deleteEditorTarget());
-    T.$("#editor-document-form")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      T.createEditorDocument();
-    });
-    T.$("#editor-document-cancel")?.addEventListener("click", () => T.$("#editor-document-dialog")?.close());
-    T.$("#editor-document-close")?.addEventListener("click", () => T.$("#editor-document-dialog")?.close());
+	    T.$("#editor-document-form")?.addEventListener("submit", (event) => {
+	      event.preventDefault();
+	      T.createEditorDocument();
+	    });
+	    T.$("#editor-document-path-input")?.addEventListener("input", (event) => {
+	      const inferred = inferLanguageFromPath(event.target.value);
+	      const select = T.$("#editor-document-language-input");
+	      if (select && (!select.value || select.value === "text")) {
+	        select.value = inferred;
+	      }
+	    });
+	    T.$("#editor-doc-search")?.addEventListener("input", renderDocumentList);
+	    T.$("#editor-document-cancel")?.addEventListener("click", () => T.$("#editor-document-dialog")?.close());
+	    T.$("#editor-document-close")?.addEventListener("click", () => T.$("#editor-document-dialog")?.close());
 
-    document.addEventListener("click", (event) => {
-      const workspaceButton = event.target.closest("[data-editor-workspace]");
+	    document.addEventListener("click", (event) => {
+	      const closeTab = event.target.closest("[data-editor-close-tab]");
+	      if (closeTab && !T.$("#view-editor")?.classList.contains("hidden")) {
+	        event.stopPropagation();
+	        const id = closeTab.dataset.editorCloseTab;
+	        T.editorOpenTabs = T.editorOpenTabs.filter((tab) => tab.id !== id);
+	        if (id === T.editorCurrentDocumentId) {
+	          const next = T.editorOpenTabs[T.editorOpenTabs.length - 1];
+	          if (next) T.openEditorDocument(next.id);
+	          else {
+	            T.editorCurrentDocumentId = null;
+	            T.editorCurrentDocument = null;
+	            const area = T.$("#editor-area");
+	            if (area) area.value = "";
+	            T.editorDirty = false;
+	            setTopBar();
+	            setInfoPanel();
+	            setSaveStatus("");
+	            updateStatusBar();
+	          }
+	        } else {
+	          renderEditorTabs();
+	        }
+	        return;
+	      }
+	      const workspaceButton = event.target.closest("[data-editor-workspace]");
       if (workspaceButton && !T.$("#view-editor")?.classList.contains("hidden")) {
         T.openEditorWorkspace(workspaceButton.dataset.editorWorkspace);
         return;

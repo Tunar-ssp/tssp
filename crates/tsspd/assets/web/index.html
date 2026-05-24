@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0d0d0f">
   <title>TSSP Storage</title>
-  <link rel="stylesheet" href="/assets/css/tokens.css?v=2026-05-24-4">
-  <link rel="stylesheet" href="/assets/css/base.css?v=2026-05-24-4">
-  <link rel="stylesheet" href="/assets/css/layout.css?v=2026-05-24-4">
-  <link rel="stylesheet" href="/assets/css/components.css?v=2026-05-24-4">
-  <link rel="stylesheet" href="/assets/css/views.css?v=2026-05-24-4">
-  <link rel="stylesheet" href="/assets/css/mobile.css?v=2026-05-24-4">
-  <link rel="stylesheet" href="/assets/css/product.css?v=2026-05-24-4">
-  <link rel="manifest" href="/assets/manifest.webmanifest?v=2026-05-24-4">
+  <link rel="stylesheet" href="/assets/css/tokens.css?v=2026-05-24-6">
+  <link rel="stylesheet" href="/assets/css/base.css?v=2026-05-24-6">
+  <link rel="stylesheet" href="/assets/css/layout.css?v=2026-05-24-6">
+  <link rel="stylesheet" href="/assets/css/components.css?v=2026-05-24-6">
+  <link rel="stylesheet" href="/assets/css/views.css?v=2026-05-24-6">
+  <link rel="stylesheet" href="/assets/css/mobile.css?v=2026-05-24-6">
+  <link rel="stylesheet" href="/assets/css/product.css?v=2026-05-24-6">
+  <link rel="manifest" href="/assets/manifest.webmanifest?v=2026-05-24-6">
 </head>
 <body>
   <div id="boot-screen" class="boot-screen" aria-live="polite">
@@ -65,15 +65,11 @@
         <button type="button" class="icon-btn" id="nav-toggle" aria-label="Toggle navigation">
           <span class="icon-menu"></span>
         </button>
-        <div class="product-lockup">
-          <span class="brand-mark sm" aria-hidden="true"></span>
-          <span class="product-name">TSSP</span>
-          <span class="product-context">Local Cloud</span>
-        </div>
       </div>
       <div class="top-bar-search">
         <span class="search-icon" aria-hidden="true"></span>
-        <input id="global-search" type="search" placeholder="Search files, notes, workspaces" autocomplete="off" title="Search files, notes and workspaces (Ctrl+K)">
+        <input id="global-search" type="search" placeholder="Search or run a command" autocomplete="off" title="Search files, notes and workspaces (Ctrl+K)">
+        <kbd class="top-search-kbd">Ctrl K</kbd>
       </div>
       <div class="top-bar-actions">
         <span class="status-pill"><span class="status-dot"></span><span id="auth-status">Checking</span></span>
@@ -87,61 +83,51 @@
     <div class="shell">
       <nav class="side-nav" id="side-nav" aria-label="Primary">
         <div class="side-nav-head">
-          <div class="side-nav-title">Storage Console</div>
-          <div class="side-nav-subtitle">Private LAN dashboard</div>
+          <div class="product-lockup">
+            <span class="brand-mark sm" aria-hidden="true"></span>
+            <span class="product-name">TSSP</span>
+          </div>
         </div>
+        
         <div class="nav-section">Cloud Drive</div>
         <a href="#objects" class="nav-item active" data-view="objects">
           <span class="nav-icon nav-icon-drive"></span>
           <span>Files</span>
         </a>
-        <a href="#images" class="nav-item" data-view="images">
-          <span class="nav-icon nav-icon-image"></span>
-          <span>Images</span>
-        </a>
-        <a href="#videos" class="nav-item" data-view="videos">
-          <span class="nav-icon nav-icon-video"></span>
-          <span>Videos</span>
-        </a>
-        <a href="#documents" class="nav-item" data-view="documents">
-          <span class="nav-icon nav-icon-doc"></span>
-          <span>Documents</span>
-        </a>
         <a href="#public" class="nav-item" data-view="public">
           <span class="nav-icon nav-icon-public"></span>
-          <span>Public links</span>
+          <span>Shared Links</span>
         </a>
-        <a href="#search" class="nav-item" data-view="search">
-          <span class="nav-icon nav-icon-search"></span>
-          <span>Search</span>
-        </a>
+        
         <div class="nav-section">Knowledge</div>
         <a href="#notes" class="nav-item" data-view="notes">
           <span class="nav-icon nav-icon-note"></span>
           <span>Notes</span>
         </a>
+        
         <div class="nav-section">Workspace</div>
         <a href="#workspaces" class="nav-item" data-view="workspaces">
           <span class="nav-icon nav-icon-workspace"></span>
-          <span>Workspaces</span>
+          <span>Projects</span>
         </a>
-        <a href="#editor" class="nav-item admin-only hidden" data-view="editor">
-          <span class="nav-icon nav-icon-editor"></span>
-          <span>Editor</span>
-          <span class="nav-badge">admin</span>
-        </a>
+        
         <div class="nav-section">Operations</div>
         <a href="#overview" class="nav-item" data-view="overview">
           <span class="nav-icon nav-icon-overview"></span>
-          <span>Overview</span>
+          <span>Dashboard</span>
         </a>
         <a href="#admin" class="nav-item" data-view="admin">
           <span class="nav-icon nav-icon-admin"></span>
-          <span>Admin</span>
+          <span>Admin Console</span>
         </a>
+        <a href="#editor" class="nav-item admin-only hidden" data-view="editor">
+          <span class="nav-icon nav-icon-editor"></span>
+          <span>Code Editor</span>
+        </a>
+        
         <div class="side-nav-foot">
           <span class="status-dot"></span>
-          <span>Local-first storage</span>
+          <span>Local Node Active</span>
         </div>
       </nav>
 
@@ -169,6 +155,10 @@
               <p class="page-subtitle">Browse, upload, preview, and share stored objects.</p>
             </div>
             <div class="page-actions">
+              <div class="segmented-control" aria-label="Drive view mode">
+                <button type="button" class="segmented-btn active" data-files-view="grid">Cards</button>
+                <button type="button" class="segmented-btn" data-files-view="table">Table</button>
+              </div>
               <select id="files-sort" class="filter-select" aria-label="Sort files by">
                 <option value="-uploaded">Newest first</option>
                 <option value="uploaded">Oldest first</option>
@@ -182,6 +172,13 @@
                 Pinned only
               </label>
             </div>
+          </div>
+          <div class="drive-lens-bar" aria-label="Cloud Drive lenses">
+            <button type="button" class="drive-lens active" data-view-jump="objects">All objects</button>
+            <button type="button" class="drive-lens" data-view-jump="images">Images</button>
+            <button type="button" class="drive-lens" data-view-jump="videos">Videos</button>
+            <button type="button" class="drive-lens" data-view-jump="documents">Documents</button>
+            <button type="button" class="drive-lens" data-view-jump="public">Shared links</button>
           </div>
 
           <div class="object-summary" id="object-summary">
@@ -221,7 +218,8 @@
                 <button type="button" class="btn btn-secondary btn-sm" data-bulk-action="tag">Add tags</button>
                 <button type="button" class="btn btn-secondary btn-sm btn-danger" data-bulk-action="delete">Delete</button>
               </div>
-              <div class="table-card">
+              <div id="files-card-grid" class="file-card-grid"></div>
+              <div class="table-card hidden" id="files-table-card">
                 <table class="data-table" id="files-table">
                   <thead>
                     <tr>
@@ -255,6 +253,11 @@
             <div class="page-actions">
               <button type="button" class="btn btn-secondary" data-view-jump="objects">Manage files</button>
             </div>
+          </div>
+          <div class="sharing-summary" id="sharing-summary">
+            <div><span class="summary-label">Shared objects</span><strong id="sharing-count">—</strong></div>
+            <div><span class="summary-label">Total size</span><strong id="sharing-size">—</strong></div>
+            <div><span class="summary-label">Access</span><strong>Public LAN</strong></div>
           </div>
           <div id="public-grid" class="public-grid">
             <div id="public-body" class="empty-state compact">Loading public links...</div>
@@ -359,6 +362,7 @@
               <input type="checkbox" id="notes-pinned-filter">
               Pinned only
             </label>
+            <button type="button" class="btn btn-secondary btn-sm" id="notes-template-btn">Start from template</button>
           </div>
           <div class="notes-tag-bar" id="notes-tag-bar"></div>
           <div id="notes-grid" class="notes-grid">
@@ -378,6 +382,15 @@
               <button type="button" class="btn btn-text" id="note-cancel">Close</button>
               <button type="submit" form="note-form" class="btn btn-primary" id="note-save">Save</button>
             </div>
+          </div>
+          <div class="note-block-toolbar" aria-label="Note block tools">
+            <button type="button" data-note-insert="heading">Heading</button>
+            <button type="button" data-note-insert="todo">Checklist</button>
+            <button type="button" data-note-insert="bullet">Bullets</button>
+            <button type="button" data-note-insert="numbered">Numbers</button>
+            <button type="button" data-note-insert="callout">Callout</button>
+            <button type="button" data-note-insert="code">Code</button>
+            <button type="button" data-note-insert="table">Table</button>
           </div>
           <form id="note-form" class="note-full-form">
             <div class="note-full-meta">
@@ -405,8 +418,12 @@
               </div>
             </div>
             <div class="note-full-editor-grid">
+              <aside class="note-outline">
+                <div class="note-outline-head">Page outline</div>
+                <div id="note-outline-list" class="note-outline-list"></div>
+              </aside>
               <div class="note-editor-pane">
-                <textarea id="note-body-input" class="note-body-textarea" spellcheck="true" autocomplete="off" placeholder="Write in Markdown…" required></textarea>
+                <textarea id="note-body-input" class="note-body-textarea" spellcheck="true" autocomplete="off" placeholder="Type / for blocks, use Markdown shortcuts, or insert blocks above." required></textarea>
               </div>
               <div class="note-preview-pane">
                 <div class="preview-header">
@@ -618,6 +635,7 @@
                   <button type="button" class="btn btn-secondary btn-sm" id="editor-new-document-btn">New file</button>
                 </div>
               </div>
+              <input id="editor-doc-search" class="editor-doc-search" type="search" placeholder="Search files in workspace" autocomplete="off">
               <div id="editor-doc-list" class="editor-doc-list">
                 <div class="editor-empty-state">Open a workspace to load documents.</div>
               </div>
@@ -636,6 +654,7 @@
                   <button type="button" class="btn btn-primary btn-sm" id="editor-save-btn" title="Save (Ctrl+S)">Save</button>
                 </div>
               </div>
+              <div id="editor-tabs" class="editor-tabs"></div>
               <div id="editor-find-bar" class="editor-find-bar hidden" role="search" aria-label="Find in file">
                 <input id="editor-find-input" type="search" placeholder="Find…" autocomplete="off" class="editor-find-input">
                 <span id="editor-find-count" class="editor-find-count"></span>
@@ -759,26 +778,42 @@
     <div id="preview-content" class="preview-content"></div>
   </dialog>
 
-  <script src="/assets/js/api.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/ui/format.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/ui/render.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/ui/toast.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/ui/dialogs.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/state.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/upload.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/features/overview.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/features/search.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/features/media.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/features/public.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/features/workspaces.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/files.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/notes.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/admin.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/editor.js?v=2026-05-24-4" defer></script>
-  <script src="/assets/js/app.js?v=2026-05-24-4" defer></script>
+  <div id="command-palette" class="command-palette hidden" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+    <div class="command-card">
+      <div class="command-input-row">
+        <span class="search-icon" aria-hidden="true"></span>
+        <input id="command-input" type="search" autocomplete="off" placeholder="Search files, notes, workspaces, or run an action">
+        <button type="button" class="icon-btn" id="command-close" aria-label="Close command palette">×</button>
+      </div>
+      <div class="command-meta-row">
+        <strong id="command-palette-title">Command palette</strong>
+        <span>Enter to open · Esc to close · ↑↓ to navigate</span>
+      </div>
+      <div id="command-results" class="command-results"></div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/ui/format.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/ui/render.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/ui/toast.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/ui/dialogs.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/state.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/upload.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/features/overview.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/features/search.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/features/command_palette.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/features/media.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/features/public.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/features/workspaces.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/files.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/notes.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/admin.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/editor.js?v=2026-05-24-6" defer></script>
+  <script src="/assets/js/app.js?v=2026-05-24-6" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/assets/sw.js?v=2026-05-24-4", {
+      navigator.serviceWorker.register("/assets/sw.js?v=2026-05-24-6", {
         scope: "/",
         updateViaCache: "none",
       }).catch(() => {});

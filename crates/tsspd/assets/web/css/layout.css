@@ -13,9 +13,8 @@
   gap: 12px;
   height: var(--top-height);
   padding: 0 16px;
-  background: rgba(16, 16, 20, 0.94);
+  background: var(--bg-base);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(16px);
 }
 
 .top-bar-start {
@@ -103,7 +102,7 @@
   width: var(--nav-width);
   flex-shrink: 0;
   padding: 12px 8px;
-  background: #0f0f14;
+  background: var(--bg-base);
   border-right: 1px solid var(--border);
   overflow-y: auto;
 }

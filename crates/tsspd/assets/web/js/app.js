@@ -87,13 +87,8 @@
     });
 
     T.$("#global-search")?.addEventListener("input", (ev) => {
-      const q = ev.target.value.trim();
-      clearTimeout(T.searchTimer);
-      if (q && T.$(".nav-item.active")?.dataset.view !== "search") {
-        T.setView("search");
-      }
-      if (typeof T.runSearch === "function") {
-        T.searchTimer = setTimeout(() => T.runSearch(q), T.SEARCH_DEBOUNCE_MS);
+      if (typeof T.openCommandPalette === "function") {
+        T.openCommandPalette(ev.target.value.trim());
       }
     });
 
@@ -240,6 +235,16 @@
         T.bulkFileAction(bulkAction.dataset.bulkAction);
         return;
       }
+      const filesView = ev.target.closest("[data-files-view]");
+      if (filesView && typeof T.setFilesViewMode === "function") {
+        T.setFilesViewMode(filesView.dataset.filesView);
+        return;
+      }
+      const uploadTrigger = ev.target.closest("[data-upload-trigger]");
+      if (uploadTrigger) {
+        T.$("#upload-input")?.click();
+        return;
+      }
       const viewJump = ev.target.closest("[data-view-jump]");
       if (viewJump && typeof T.setView === "function") {
         T.setView(viewJump.dataset.viewJump);
@@ -325,6 +330,11 @@
         T.deleteNote(delNote.dataset.deleteNote);
         return;
       }
+      const duplicateNote = ev.target.closest("[data-duplicate-note]");
+      if (duplicateNote && typeof T.duplicateNote === "function") {
+        T.duplicateNote(duplicateNote.dataset.duplicateNote);
+        return;
+      }
       const editNote = ev.target.closest("[data-edit-note]");
       if (editNote && typeof T.openNote === "function") {
         T.openNote(editNote.dataset.editNote);
@@ -364,13 +374,8 @@
 
       // Ctrl+K / Cmd+K — focus global search
       if ((ev.ctrlKey || ev.metaKey) && ev.key === "k") {
-        const search = T.$("#global-search");
-        if (search) {
-          ev.preventDefault();
-          T.setView("search");
-          search.focus();
-          search.select();
-        }
+        ev.preventDefault();
+        T.openCommandPalette?.(T.$("#global-search")?.value || "");
         return;
       }
 
@@ -410,6 +415,7 @@
 
     if (typeof T.bindUpload === "function") T.bindUpload();
     if (typeof T.bindEditorEvents === "function") T.bindEditorEvents();
+    if (typeof T.bindCommandPalette === "function") T.bindCommandPalette();
     T.setAdminTab("overview");
   }
 

@@ -49,6 +49,81 @@ window.Tssp = window.Tssp || {};
     </tr>`;
   }
 
+  function fileCard(file) {
+    const id = T.escapeHtml(file.id);
+    const checked = T.selectedFileIds.has(file.id) ? "checked" : "";
+    const link = T.publicLink(file);
+    const nextVisibility = file.visibility === "public" ? "private" : "public";
+    const tags = T.tagsHtml(file.tags);
+    const folder = file.folder_path || "Bucket root";
+    const pinned = file.pinned ? '<span class="pin" title="Pinned">★</span>' : "";
+    return `<article class="drive-file-card" data-file-card="${id}">
+      <div class="drive-file-card-top">
+        <input type="checkbox" data-file-select="${id}" ${checked} aria-label="Select ${T.escapeHtml(file.name || file.id)}">
+        <span class="file-kind-icon ${T.escapeHtml(T.fileKindClass(file))}" aria-hidden="true">${T.escapeHtml(T.fileKindIcon(file))}</span>
+        <span class="drive-file-card-state">${T.stateBadge(file.visibility)}</span>
+      </div>
+      <button type="button" class="drive-file-card-open" data-preview-file="${id}">
+        <strong>${T.escapeHtml(file.name || file.id)}${pinned}</strong>
+        <span>${T.escapeHtml(folder)} · ${T.escapeHtml(T.formatBytes(file.size_bytes))}</span>
+      </button>
+      <div class="drive-file-card-meta">
+        <span class="type-pill">${T.escapeHtml(T.fileKind(file))}</span>
+        <span>${T.escapeHtml(T.formatDate(file.uploaded_at))}</span>
+      </div>
+      ${tags ? `<div class="drive-file-card-tags">${tags}</div>` : ""}
+      <div class="drive-file-card-actions">
+        <button type="button" class="btn btn-text btn-sm" data-preview-file="${id}">Preview</button>
+        <button type="button" class="btn btn-text btn-sm" data-vis="${id}" data-v="${nextVisibility}">${nextVisibility === "public" ? "Share" : "Private"}</button>
+        ${link ? `<button type="button" class="btn btn-text btn-sm" data-share-file="${id}">QR</button>` : ""}
+        <button type="button" class="btn btn-text btn-sm" data-rename-file="${id}">Rename</button>
+      </div>
+    </article>`;
+  }
+
+  function renderFiles() {
+    const body = T.$("#files-body");
+    const grid = T.$("#files-card-grid");
+    if (!body || !grid) return;
+    if (!T.currentFiles.length) {
+      const empty = `<div class="drive-empty-state">
+        <div class="drive-empty-icon">OBJ</div>
+        <strong>No objects in this folder</strong>
+        <span>Drop files into the Drive surface, click Upload, or choose another folder.</span>
+        <div class="empty-actions">
+          <button type="button" class="btn btn-primary" data-upload-trigger>Upload files</button>
+        </div>
+      </div>`;
+      grid.innerHTML = empty;
+      body.innerHTML = T.tableMessage(6, "No objects in this folder. Drop files above or click Upload.");
+    } else {
+      grid.innerHTML = T.currentFiles.map(fileCard).join("");
+      body.innerHTML = T.currentFiles.map(fileRow).join("");
+    }
+    T.updateFileSelection();
+    T.applyFilesViewMode();
+  }
+
+  T.applyFilesViewMode = function applyFilesViewMode() {
+    const mode = T.filesViewMode || localStorage.getItem("tssp.files.view") || "grid";
+    T.filesViewMode = mode === "table" ? "table" : "grid";
+    T.$$("#view-objects [data-files-view]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.filesView === T.filesViewMode);
+    });
+    T.$("#files-card-grid")?.classList.toggle("hidden", T.filesViewMode !== "grid");
+    T.$("#files-table-card")?.classList.toggle("hidden", T.filesViewMode !== "table");
+  };
+
+  T.setFilesViewMode = function setFilesViewMode(mode) {
+    T.filesViewMode = mode === "table" ? "table" : "grid";
+    try {
+      localStorage.setItem("tssp.files.view", T.filesViewMode);
+    } catch {
+      /* view preference is optional */
+    }
+    T.applyFilesViewMode();
+  };
+
   T.updateFileSelection = function updateFileSelection() {
     const selected = T.currentFiles.filter((file) => T.selectedFileIds.has(file.id));
     const toolbar = T.$("#bulk-toolbar");
@@ -66,6 +141,12 @@ window.Tssp = window.Tssp || {};
       selectAll.indeterminate =
         selected.length > 0 && selected.length < T.currentFiles.length;
     }
+    T.$$("[data-file-select]").forEach((input) => {
+      input.checked = T.selectedFileIds.has(input.dataset.fileSelect);
+    });
+    T.$$("[data-file-card]").forEach((card) => {
+      card.classList.toggle("selected", T.selectedFileIds.has(card.dataset.fileCard));
+    });
 
     const details = T.$("#details-panel");
     if (!details) return;
@@ -270,18 +351,11 @@ window.Tssp = window.Tssp || {};
       T.currentFiles = data.files || [];
       T.selectedFileIds.clear();
       updateObjectSummary(T.currentFiles);
-      if (!T.currentFiles.length) {
-        body.innerHTML = T.tableMessage(
-          6,
-          "No objects in this folder. Drop files above or click Upload."
-        );
-        T.updateFileSelection();
-        return;
-      }
-      body.innerHTML = T.currentFiles.map(fileRow).join("");
-      T.updateFileSelection();
+      renderFiles();
     } catch (error) {
       body.innerHTML = T.tableMessage(6, error.message);
+      const grid = T.$("#files-card-grid");
+      if (grid) grid.innerHTML = `<div class="empty-state error">${T.escapeHtml(error.message)}</div>`;
       T.currentFiles = [];
       updateObjectSummary([]);
       T.updateFileSelection();
