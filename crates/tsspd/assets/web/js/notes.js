@@ -146,7 +146,7 @@ window.Tssp = window.Tssp || {};
           <div class="notes-empty-sub">Write down ideas, docs, and quick thoughts. Use <kbd>/</kbd> for formatting commands.</div>
           <button type="button" class="btn btn-primary" id="notes-empty-cta">New note</button>
         </div>`;
-        grid.querySelector("#notes-empty-cta")?.addEventListener("click", () => T.openNoteEditor(null));
+        grid.querySelector("#notes-empty-cta")?.addEventListener("click", () => T.openNoteDialog(null));
       } else {
         grid.innerHTML = `<div class="notes-empty-state">No notes match your filters.</div>`;
       }

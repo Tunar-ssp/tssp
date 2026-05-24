@@ -39,7 +39,7 @@ window.Tssp = window.Tssp || {};
       title: "Create note",
       detail: "Start a new page in the Notes workspace.",
       keywords: "new note page",
-      run: () => T.openNoteDialog?.(null),
+      run: () => { T.setView?.("notes"); T.openNoteDialog?.(null); },
     },
     {
       type: "action",

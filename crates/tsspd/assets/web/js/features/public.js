@@ -16,8 +16,12 @@ window.Tssp = window.Tssp || {};
 	      if (countEl) countEl.textContent = String(files.length);
 	      if (sizeEl) sizeEl.textContent = T.formatBytes(total);
 	      if (!files.length) {
-        body.innerHTML =
-          '<div id="public-body" class="empty-state"><strong>No public links</strong><span>Make a file public from Cloud Drive to share it here.</span><div class="empty-actions"><button type="button" class="btn btn-secondary" data-view-jump="objects">Open Cloud Drive</button></div></div>';
+        body.innerHTML = `<div class="notes-empty-hero">
+          <div class="notes-empty-icon">🔗</div>
+          <div class="notes-empty-title">No public links yet</div>
+          <div class="notes-empty-sub">Open a file in Cloud Drive and set visibility to Public to create a shareable link.</div>
+          <button type="button" class="btn btn-primary" data-view-jump="objects">Open Cloud Drive</button>
+        </div>`;
         return;
       }
       body.innerHTML = files
