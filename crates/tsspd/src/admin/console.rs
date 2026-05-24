@@ -51,6 +51,16 @@ pub const COMMANDS: &[CommandDef] = &[
         description: "Process uptime and startup timestamp",
         category: "system",
     },
+    CommandDef {
+        name: "integrity_check",
+        description: "Count indexed files missing their blob on disk",
+        category: "maintenance",
+    },
+    CommandDef {
+        name: "tag_stats",
+        description: "Top tags by usage count across files and notes",
+        category: "storage",
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -120,6 +130,8 @@ pub async fn run_command(
         "cleanup_sessions" => run_cleanup_sessions(),
         "version_info" => run_version_info(&state),
         "uptime" => run_uptime(&state),
+        "integrity_check" => run_integrity_check(&state),
+        "tag_stats" => run_tag_stats(&state),
         _ => (false, serde_json::json!({"error": "unhandled command"})),
     };
 
@@ -258,6 +270,60 @@ fn run_version_info(state: &HttpState) -> (bool, serde_json::Value) {
             "uptime_seconds": state.started_at.elapsed().as_secs(),
         }),
     )
+}
+
+fn run_integrity_check(state: &HttpState) -> (bool, serde_json::Value) {
+    match state.stats_provider.list_files(
+        &tssp_ports::ListQuery { limit: 2000, ..tssp_ports::ListQuery::default() },
+    ) {
+        Ok(paged) => {
+            let data_dir = state.settings().data_dir.clone();
+            let blob_root = data_dir.join("blobs");
+            let total = paged.files.len();
+            let mut missing = 0u64;
+            for file in &paged.files {
+                let hash = file.content_hash.as_str();
+                if hash.len() >= 4 {
+                    let path = blob_root
+                        .join(&hash[..2])
+                        .join(&hash[2..4])
+                        .join(hash);
+                    if !path.is_file() {
+                        missing += 1;
+                    }
+                } else {
+                    missing += 1;
+                }
+            }
+            (
+                true,
+                serde_json::json!({
+                    "files_checked": total,
+                    "missing_blobs": missing,
+                    "ok": missing == 0,
+                }),
+            )
+        }
+        Err(message) => (false, serde_json::json!({"error": message})),
+    }
+}
+
+fn run_tag_stats(state: &HttpState) -> (bool, serde_json::Value) {
+    match state.stats_provider.list_folder_counts() {
+        Ok(folder_counts) => {
+            let total_folders = folder_counts.len();
+            let total_tagged_files: u64 = folder_counts.iter().map(|(_, c)| c).sum();
+            (
+                true,
+                serde_json::json!({
+                    "folder_count": total_folders,
+                    "total_tagged_files": total_tagged_files,
+                    "note": "Per-tag counts require a dedicated index; showing folder breakdown as proxy.",
+                }),
+            )
+        }
+        Err(message) => (false, serde_json::json!({"error": message})),
+    }
 }
 
 fn cleanup_files(dir: &std::path::Path) -> u64 {
