@@ -307,7 +307,10 @@
             <div class="note-full-meta">
               <input id="note-title-input" type="text" placeholder="Note title…" class="note-title-input" autocomplete="off">
               <div class="note-meta-row">
-                <input id="note-tags-input" type="text" placeholder="Tags: ops, ideas, todo" class="note-tags-bare-input" autocomplete="off">
+                <div class="tag-chips-field" id="note-tag-chips-field">
+                  <div class="tag-chips-list" id="note-tag-chips-list"></div>
+                  <input id="note-tags-input" type="text" placeholder="Add tag…" class="tag-chips-text-input" autocomplete="off" autocapitalize="none">
+                </div>
                 <label class="chip-toggle editor-pin">
                   <input type="checkbox" id="note-pin-input">
                   Pin

@@ -123,9 +123,14 @@ window.Tssp = window.Tssp || {};
       const searchData = await T.api("/search?" + T.searchQueryString(q));
       const results = searchData.results || [];
       if (!results.length) {
+        sub.textContent = `No matches for "${q}"`;
         body.innerHTML = T.tableMessage(4, "No matches");
         return;
       }
+      const countLabel = `${searchData.result_count ?? results.length} result${results.length !== 1 ? "s" : ""}`;
+      sub.textContent = filterParts.length > 0
+        ? `${countLabel} for "${q}" (${filterParts.join(", ")})`
+        : `${countLabel} for "${q}"`;
       body.innerHTML = results
         .map((result) => {
           const type = result.type || "item";
@@ -145,7 +150,7 @@ window.Tssp = window.Tssp || {};
             extra = tags;
             actions = `<button type="button" class="btn btn-text btn-sm" data-edit-note="${id}">Open</button>`;
           } else if (type === "workspace") {
-            detail = T.escapeHtml((result.body || "").slice(0, 120));
+            detail = T.escapeHtml((result.snippet || "").slice(0, 120));
             extra = `<span class="type-pill">${T.escapeHtml(result.language || "text")}</span>`;
             actions = `<button type="button" class="btn btn-text btn-sm" data-ws-edit="${id}">Open</button>`;
           }

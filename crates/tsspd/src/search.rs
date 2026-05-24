@@ -168,6 +168,8 @@ pub(crate) struct SearchResponse {
     pub schema_version: u8,
     /// Applied result limit.
     pub limit: u64,
+    /// Total number of results returned.
+    pub result_count: usize,
     /// Ranked matches across files and notes.
     pub results: Vec<SearchResultItem>,
 }
@@ -239,9 +241,11 @@ pub(crate) async fn search_files(
                     Ok(results) => results,
                     Err(error) => return search_error("search_failed", error),
                 };
+            let result_count = results.len();
             let response = SearchResponse {
                 schema_version: 1,
                 limit: filters.limit,
+                result_count,
                 results,
             };
             (StatusCode::OK, Json(response)).into_response()

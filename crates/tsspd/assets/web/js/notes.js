@@ -7,6 +7,65 @@ window.Tssp = window.Tssp || {};
   T.noteAutosaveTimer = null;
   T.noteLastSavedBody = "";
 
+  // ── Tag chips ────────────────────────────────────────────────────────────
+
+  function renderTagChips(tags) {
+    const list = T.$("#note-tag-chips-list");
+    if (!list) return;
+    list.innerHTML = tags
+      .map(
+        (tag) =>
+          `<span class="tag-chip">${T.escapeHtml(tag)}<button type="button" class="tag-chip-remove" data-remove-tag="${T.escapeHtml(tag)}" aria-label="Remove tag ${T.escapeHtml(tag)}">×</button></span>`
+      )
+      .join("");
+  }
+
+  function addTag(raw) {
+    const tag = raw.trim().replace(/,/g, "").slice(0, 32);
+    if (!tag) return false;
+    const key = tag.toLowerCase();
+    if (T.editingNoteTags.some((t) => t.toLowerCase() === key)) return false;
+    T.editingNoteTags = [...T.editingNoteTags, tag];
+    renderTagChips(T.editingNoteTags);
+    return true;
+  }
+
+  function removeTag(tag) {
+    const key = tag.toLowerCase();
+    T.editingNoteTags = T.editingNoteTags.filter((t) => t.toLowerCase() !== key);
+    renderTagChips(T.editingNoteTags);
+  }
+
+  function bindTagChipsInput() {
+    const input = T.$("#note-tags-input");
+    const field = T.$("#note-tag-chips-field");
+    if (!input) return;
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "," || e.key === "Tab") {
+        if (e.key !== "Tab" || input.value.trim()) e.preventDefault();
+        if (addTag(input.value)) input.value = "";
+      } else if (e.key === "Backspace" && input.value === "" && T.editingNoteTags.length) {
+        removeTag(T.editingNoteTags[T.editingNoteTags.length - 1]);
+      }
+    });
+
+    input.addEventListener("blur", () => {
+      if (input.value.trim()) {
+        addTag(input.value);
+        input.value = "";
+      }
+    });
+
+    if (field) {
+      field.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-remove-tag]");
+        if (btn) { removeTag(btn.dataset.removeTag); return; }
+        input.focus();
+      });
+    }
+  }
+
   // ── Note list ────────────────────────────────────────────────────────────
 
   T.loadNotes = async function loadNotes() {
@@ -148,7 +207,8 @@ window.Tssp = window.Tssp || {};
     T.noteLastSavedBody = note ? note.body || "" : "";
     T.$("#note-dialog-title").textContent = note ? "Edit note" : "New note";
     T.$("#note-title-input").value = note ? note.title || "" : "";
-    T.$("#note-tags-input").value = T.editingNoteTags.join(", ");
+    T.$("#note-tags-input").value = "";
+    renderTagChips(T.editingNoteTags);
     T.$("#note-pin-input").checked = T.editingNotePinned;
     T.$("#note-body-input").value = note ? note.body || "" : "";
     T.$("#note-save-status").textContent = "";
@@ -192,6 +252,7 @@ window.Tssp = window.Tssp || {};
     if (noteSearch) noteSearch.addEventListener("input", () => T.renderNoteCards());
     if (noteTagFilter) noteTagFilter.addEventListener("input", () => T.renderNoteCards());
     if (notePinnedFilter) notePinnedFilter.addEventListener("change", () => T.renderNoteCards());
+    bindTagChipsInput();
   };
 
   // ── Tag sync helpers ─────────────────────────────────────────────────────
@@ -228,7 +289,10 @@ window.Tssp = window.Tssp || {};
     clearTimeout(T.noteAutosaveTimer);
     const title = T.$("#note-title-input").value.trim();
     const body = T.$("#note-body-input").value;
-    const tags = T.tagsFromInput(T.$("#note-tags-input").value);
+    // flush any pending text in the chips input
+    const rawInput = T.$("#note-tags-input");
+    if (rawInput && rawInput.value.trim()) { addTag(rawInput.value); rawInput.value = ""; }
+    const tags = [...T.editingNoteTags];
     const pin = T.$("#note-pin-input").checked;
     const payload = { body };
     if (title) payload.title = title;

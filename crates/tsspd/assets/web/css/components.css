@@ -708,3 +708,73 @@ select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-dim);
 }
+
+/* ── Tag chips field ─────────────────────────────────────────────────── */
+.tag-chips-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 34px;
+  padding: 4px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: text;
+  flex: 1;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.tag-chips-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.tag-chips-list {
+  display: contents;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px 2px 9px;
+  background: var(--accent-muted);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 999px;
+  color: var(--accent-light, #d8b4fe);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tag-chip-remove {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.55;
+  padding: 0 1px;
+  transition: opacity 0.1s;
+}
+
+.tag-chip-remove:hover {
+  opacity: 1;
+}
+
+.tag-chips-text-input {
+  all: unset;
+  flex: 1;
+  min-width: 90px;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  background: transparent;
+  padding: 2px 2px;
+  caret-color: var(--accent);
+}
+
+.tag-chips-text-input::placeholder {
+  color: var(--text-muted);
+}
