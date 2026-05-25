@@ -255,6 +255,14 @@ export const api = {
       ...response,
       file: normalizeFileRecord(response.file),
     })),
+  bulkSetFileVisibility: (ids: string[], isPublic: boolean) =>
+    request<{ schema_version: number; updated: FileRecord[]; count: number }>(`/files/visibility/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ ids, visibility: isPublic ? 'public' : 'private' }),
+    }).then((response) => ({
+      ...response,
+      updated: (response.updated || []).map(normalizeFileRecord),
+    })),
   getFileShare: (id: string) =>
     request<FileShareResponse>(`/files/${encodeURIComponent(id)}/share`),
   listPublicFiles: async () => {
