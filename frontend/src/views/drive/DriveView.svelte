@@ -130,7 +130,7 @@
                 <div class="file-info">
                   <div class="file-name">{file.name}</div>
                   <div class="file-meta">
-                    {(file.size_bytes / 1024 / 1024).toFixed(1)} MB • {new Date(file.updated_at).toLocaleDateString()}
+                    {(file.size_bytes / 1024 / 1024).toFixed(1)} MB • {new Date((file.updated_at || file.uploaded_at) * 1000).toLocaleDateString()}
                   </div>
                 </div>
               </div>

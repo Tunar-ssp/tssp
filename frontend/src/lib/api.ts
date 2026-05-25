@@ -14,11 +14,11 @@ export interface FileRecord {
   name: string;
   size_bytes: number;
   mime_type: string;
-  uploaded_at: string;
-  updated_at: string;
+  uploaded_at: number;
+  updated_at?: number;
   folder_path?: string;
   tags?: string[];
-  pinned_at?: string;
+  pinned_at?: number;
   public: boolean;
 }
 
@@ -27,9 +27,9 @@ export interface Note {
   title: string;
   body: string;
   tags: string[];
-  pinned_at?: string;
-  created_at: string;
-  updated_at: string;
+  pinned_at?: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface Workspace {
@@ -37,8 +37,8 @@ export interface Workspace {
   name: string;
   language: string;
   body: string;
-  created_at: string;
-  updated_at: string;
+  created_at: number;
+  updated_at: number;
 }
 
 const BASE = '/api/v1';
