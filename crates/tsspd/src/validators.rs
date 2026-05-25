@@ -4,6 +4,9 @@ use crate::error_handler::ApiError;
 use axum::http::StatusCode;
 
 /// Validate file name
+///
+/// # Errors
+/// Returns an error if the name is empty, too long, or contains invalid characters.
 pub fn validate_filename(name: &str) -> Result<(), ApiError> {
     if name.is_empty() {
         return Err(ApiError::validation("File name cannot be empty"));
@@ -25,6 +28,9 @@ pub fn validate_filename(name: &str) -> Result<(), ApiError> {
 }
 
 /// Validate folder path
+///
+/// # Errors
+/// Returns an error if the path contains invalid characters or path traversal.
 pub fn validate_folder_path(path: &str) -> Result<(), ApiError> {
     if path.is_empty() {
         return Ok(());
@@ -42,6 +48,9 @@ pub fn validate_folder_path(path: &str) -> Result<(), ApiError> {
 }
 
 /// Validate email address
+///
+/// # Errors
+/// Returns an error if the email address is invalid.
 pub fn validate_email(email: &str) -> Result<(), ApiError> {
     if email.is_empty() || !email.contains('@') || email.len() > 254 {
         return Err(ApiError::validation("Invalid email address"));
@@ -50,6 +59,9 @@ pub fn validate_email(email: &str) -> Result<(), ApiError> {
 }
 
 /// Validate note title
+///
+/// # Errors
+/// Returns an error if the title is too long.
 pub fn validate_note_title(title: &str) -> Result<(), ApiError> {
     if title.len() > 256 {
         return Err(ApiError::validation("Note title too long (max 256 characters)"));
@@ -58,6 +70,9 @@ pub fn validate_note_title(title: &str) -> Result<(), ApiError> {
 }
 
 /// Validate tag
+///
+/// # Errors
+/// Returns an error if the tag is empty, too long, or contains invalid characters.
 pub fn validate_tag(tag: &str) -> Result<(), ApiError> {
     if tag.is_empty() {
         return Err(ApiError::validation("Tag cannot be empty"));
@@ -75,6 +90,9 @@ pub fn validate_tag(tag: &str) -> Result<(), ApiError> {
 }
 
 /// Validate pagination offset and limit
+///
+/// # Errors
+/// Returns an error if the offset is too large or the limit is invalid.
 pub fn validate_pagination(offset: Option<u32>, limit: Option<u32>) -> Result<(u32, u32), ApiError> {
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(50).min(500); // Max 500 items per page
@@ -91,6 +109,9 @@ pub fn validate_pagination(offset: Option<u32>, limit: Option<u32>) -> Result<(u
 }
 
 /// Validate file content length
+///
+/// # Errors
+/// Returns an error if the size exceeds the maximum limit.
 pub fn validate_file_size(size: u64, max_bytes: u64) -> Result<(), ApiError> {
     if max_bytes > 0 && size > max_bytes {
         return Err(ApiError::new(

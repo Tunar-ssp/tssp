@@ -434,6 +434,10 @@ impl AuthService {
     }
 
     /// List all devices for a user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the device store is not configured or list fails.
     pub fn list_user_devices(&self, user_id: &UserId) -> Result<Vec<TrustedDevice>, AuthError> {
         self.devices
             .as_ref()
