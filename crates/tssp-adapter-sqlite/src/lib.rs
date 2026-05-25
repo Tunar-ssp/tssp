@@ -877,6 +877,28 @@ impl FileRepository for SqliteFileRepository {
         }
         self.find_file(id)
     }
+
+    fn insert_audit_event(
+        &self,
+        id: &str,
+        timestamp: i64,
+        user_id: Option<&str>,
+        action: &str,
+        resource: Option<&str>,
+        resource_id: Option<&str>,
+        status: &str,
+        details: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        let connection = self.connect()?;
+        connection
+            .execute(
+                "INSERT INTO audit_events (id, timestamp, user_id, action, resource, resource_id, status, details)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![id, timestamp, user_id, action, resource, resource_id, status, details],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(())
+    }
 }
 
 /// Error type returned by low-level `SQLite` operations.

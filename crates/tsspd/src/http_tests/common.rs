@@ -82,6 +82,7 @@ pub fn real_storage_app() -> (tempfile::TempDir, Router) {
     let tag_service = TagService::new(repository.clone());
     let app = build_router(
         HttpState::test_http_state(temp.path().join("http-upload-tmp"))
+            .with_repository(repository.clone())
             .with_stats_provider(Arc::new(stats_provider))
             .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
             .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))

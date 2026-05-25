@@ -277,6 +277,7 @@ fn build_http_state(
         PublicUrlBuilder::from_settings(settings),
         corrupt_file_count,
     )
+    .with_repository(repository.clone())
     .with_workspaces(workspace_store)
     .with_stats_provider(Arc::new(stats_provider))
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
@@ -288,7 +289,7 @@ fn build_http_state(
         SystemClock,
     )))
     .with_note_provider(Arc::new(ApplicationNoteProvider::new(note_service)))
-    .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(repository)))
+    .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(repository.clone())))
     .with_blob_reader(storage)
     .with_auth(auth_service)
 }

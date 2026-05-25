@@ -3027,10 +3027,12 @@ name = "tssp-app"
 version = "0.1.0"
 dependencies = [
  "thiserror",
+ "tracing",
  "tssp-adapter-sqlite",
  "tssp-adapter-system",
  "tssp-domain",
  "tssp-ports",
+ "uuid",
 ]
 
 [[package]]

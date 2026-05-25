@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 
 use tssp_adapter_system::SystemClock;
 use tssp_ports::Clock;
+use tssp_app::AuditAction;
 
 use crate::auth::service::{AuthError, AuthService};
 use crate::{ErrorBody, ErrorResponse, HttpState};
@@ -337,6 +338,15 @@ async fn perform_login(
     let session = match session {
         Ok(value) => {
             state.rate_limiter.record_success(ip).await;
+            tssp_app::log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::Login,
+                Some(&value.user_id),
+                None,
+                None,
+                "success",
+                None,
+            );
             value
         }
         Err(error) => {
@@ -419,9 +429,21 @@ pub async fn auth_token(
 
 /// Logout: revokes cookie/bearer token when present.
 pub async fn auth_logout(State(state): State<HttpState>, headers: HeaderMap) -> impl IntoResponse {
+    let now = now_seconds();
     if let Some(token) =
         extract_bearer(&headers).or_else(|| extract_cookie_token(&headers, SESSION_COOKIE))
     {
+        if let Ok(Some(session_info)) = state.auth.resolve_token(&token, now) {
+            tssp_app::log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::Logout,
+                Some(&session_info.user_id),
+                None,
+                None,
+                "success",
+                None,
+            );
+        }
         let _ = state.auth.revoke_token(&token);
     }
     if let Some(device) = extract_cookie_token(&headers, DEVICE_COOKIE) {
@@ -498,7 +520,18 @@ pub async fn revoke_user_device(
 
             // Revoke the device
             match state.auth.revoke_device(&device_token) {
-                Ok(_) => StatusCode::NO_CONTENT.into_response(),
+                Ok(_) => {
+                    tssp_app::log_audit_event(
+                        state.repository.as_ref(),
+                        AuditAction::DeviceRevoke,
+                        Some(&auth.user_id),
+                        Some("device"),
+                        Some(&device_token),
+                        "success",
+                        None,
+                    );
+                    StatusCode::NO_CONTENT.into_response()
+                }
                 Err(error) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({

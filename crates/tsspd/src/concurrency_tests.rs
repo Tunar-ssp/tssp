@@ -157,6 +157,19 @@ mod tests {
         ) -> Result<Option<FileRecord>, RepositoryError> {
             unimplemented!()
         }
+        fn insert_audit_event(
+            &self,
+            _: &str,
+            _: i64,
+            _: Option<&str>,
+            _: &str,
+            _: Option<&str>,
+            _: Option<&str>,
+            _: &str,
+            _: Option<&str>,
+        ) -> Result<(), RepositoryError> {
+            unimplemented!()
+        }
     }
 
     #[tokio::test]

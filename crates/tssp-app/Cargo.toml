@@ -12,6 +12,8 @@ description = "Application services for TSSP use cases"
 thiserror.workspace = true
 tssp-domain = { path = "../tssp-domain" }
 tssp-ports = { path = "../tssp-ports" }
+uuid.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tssp-adapter-sqlite = { path = "../tssp-adapter-sqlite" }

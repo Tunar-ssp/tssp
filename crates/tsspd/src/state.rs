@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use tssp_ports::BlobReader;
+use tssp_ports::{BlobReader, FileRepository};
 
 use crate::auth::AuthService;
 use crate::chunked_upload::UploadSessionManager;
@@ -24,7 +24,6 @@ use crate::urls::PublicUrlBuilder;
 use crate::workspaces;
 
 /// Shared HTTP state.
-#[derive(Clone)]
 pub struct HttpState {
     pub(crate) started_at: Instant,
     pub(crate) upload_temp_dir: PathBuf,
@@ -38,6 +37,7 @@ pub struct HttpState {
     /// Number of files whose content blob is missing on disk.
     pub corrupt_file_count: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) upload_session_manager: Arc<UploadSessionManager>,
+    pub(crate) repository: Arc<dyn FileRepository + Send + Sync>,
     pub(crate) stats_provider: Arc<dyn MetadataStatsProvider>,
     pub(crate) upload_provider: Arc<dyn FileUploadProvider>,
     pub(crate) delete_provider: Arc<dyn FileDeleteProvider>,
@@ -71,6 +71,7 @@ impl HttpState {
             public_urls,
             corrupt_file_count: Arc::new(std::sync::atomic::AtomicU64::new(corrupt_file_count)),
             upload_session_manager: Arc::new(UploadSessionManager::new()),
+            repository: Arc::new(StaticFileRepository),
             stats_provider: Arc::new(StaticMetadataStatsProvider),
             upload_provider: Arc::new(StaticFileUploadProvider),
             delete_provider: Arc::new(StaticFileDeleteProvider),
@@ -153,6 +154,13 @@ impl HttpState {
         self
     }
 
+    /// Attaches the file repository.
+    #[must_use]
+    pub fn with_repository<R: FileRepository + Send + Sync + 'static>(mut self, repository: Arc<R>) -> Self {
+        self.repository = repository as Arc<dyn FileRepository + Send + Sync>;
+        self
+    }
+
     /// Effective daemon settings.
     #[must_use]
     pub fn settings(&self) -> &DaemonSettings {
@@ -203,5 +211,177 @@ impl HttpState {
             PublicUrlBuilder::from_settings(&settings),
             0,
         )
+    }
+}
+
+impl Clone for HttpState {
+    fn clone(&self) -> Self {
+        Self {
+            started_at: self.started_at,
+            upload_temp_dir: self.upload_temp_dir.clone(),
+            storage_mutation_lock: self.storage_mutation_lock.clone(),
+            auth: self.auth.clone(),
+            rate_limiter: self.rate_limiter.clone(),
+            stats_cache: self.stats_cache.clone(),
+            workspaces: self.workspaces.clone(),
+            settings: self.settings.clone(),
+            public_urls: self.public_urls.clone(),
+            corrupt_file_count: self.corrupt_file_count.clone(),
+            upload_session_manager: self.upload_session_manager.clone(),
+            repository: self.repository.clone(),
+            stats_provider: self.stats_provider.clone(),
+            upload_provider: self.upload_provider.clone(),
+            delete_provider: self.delete_provider.clone(),
+            tag_provider: self.tag_provider.clone(),
+            pin_provider: self.pin_provider.clone(),
+            session_provider: self.session_provider.clone(),
+            note_provider: self.note_provider.clone(),
+            search_provider: self.search_provider.clone(),
+            blob_reader: self.blob_reader.clone(),
+        }
+    }
+}
+
+/// No-op file repository for testing.
+#[derive(Clone, Copy)]
+struct StaticFileRepository;
+
+impl FileRepository for StaticFileRepository {
+    fn insert_file(&self, _new_file: tssp_ports::NewFileRecord) -> Result<tssp_domain::FileRecord, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn find_file(&self, _id: &tssp_domain::FileId) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn find_file_by_content_hash(&self, _content_hash: &tssp_domain::ContentHash) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn delete_file(&self, _id: &tssp_domain::FileId) -> Result<Option<tssp_ports::DeletedFileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_files(&self, _query: &tssp_ports::ListQuery) -> Result<tssp_ports::PagedFiles, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_files_recent(&self, _limit: u64) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_files_by_tag(&self, _tag: &tssp_domain::TagKey, _limit: u64) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_tags(&self) -> Result<Vec<tssp_ports::TagSummary>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn add_tags_to_file(&self, _id: &tssp_domain::FileId, _tags: &[tssp_domain::Tag]) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn remove_tag_from_file(&self, _id: &tssp_domain::FileId, _tag: &tssp_domain::TagKey) -> Result<tssp_ports::TagMutationOutcome, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn stats_since(&self, _recent_since: tssp_domain::UnixTimestamp) -> Result<tssp_ports::RepositoryStats, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn pin_file(&self, _id: &tssp_domain::FileId, _position: Option<u32>) -> Result<tssp_ports::PinOutcome, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn unpin_file(&self, _id: &tssp_domain::FileId) -> Result<tssp_ports::PinOutcome, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_pinned_files(&self) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn reorder_pins(&self, _ordered_ids: &[tssp_domain::FileId]) -> Result<(), tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn search_files(&self, _query: &str) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn rename_file(&self, _id: &tssp_domain::FileId, _new_name: &tssp_domain::FileName) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_folder_counts(&self, _owner_id: Option<&tssp_domain::UserId>) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn set_file_visibility(&self, _id: &tssp_domain::FileId, _visibility: tssp_domain::Visibility, _public_token: Option<&str>) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn find_file_by_public_token(&self, _token: &str) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn update_folder_path_prefix(&self, _from_prefix: &str, _to_prefix: &str) -> Result<u64, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn set_file_folder_path(&self, _id: &tssp_domain::FileId, _folder_path: &str) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn insert_audit_event(&self, _id: &str, _timestamp: i64, _user_id: Option<&str>, _action: &str, _resource: Option<&str>, _resource_id: Option<&str>, _status: &str, _details: Option<&str>) -> Result<(), tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
     }
 }

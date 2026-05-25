@@ -239,6 +239,19 @@ impl FileRepository for MockRepo {
     ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
         unimplemented!()
     }
+    fn insert_audit_event(
+        &self,
+        _: &str,
+        _: i64,
+        _: Option<&str>,
+        _: &str,
+        _: Option<&str>,
+        _: Option<&str>,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<(), tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
 }
 
 impl NoteRepository for MockRepo {
@@ -475,6 +488,19 @@ impl FileRepository for FailingMockRepo {
         _id: &tssp_domain::FileId,
         _folder_path: &str,
     ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn insert_audit_event(
+        &self,
+        _: &str,
+        _: i64,
+        _: Option<&str>,
+        _: &str,
+        _: Option<&str>,
+        _: Option<&str>,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<(), tssp_ports::RepositoryError> {
         unimplemented!()
     }
 }

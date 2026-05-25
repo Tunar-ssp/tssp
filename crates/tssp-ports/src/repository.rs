@@ -208,6 +208,23 @@ pub trait FileRepository {
         id: &FileId,
         folder_path: &str,
     ) -> Result<Option<FileRecord>, RepositoryError>;
+
+    /// Records an audit event for compliance and forensics.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the event cannot be persisted.
+    fn insert_audit_event(
+        &self,
+        id: &str,
+        timestamp: i64,
+        user_id: Option<&str>,
+        action: &str,
+        resource: Option<&str>,
+        resource_id: Option<&str>,
+        status: &str,
+        details: Option<&str>,
+    ) -> Result<(), RepositoryError>;
 }
 
 /// Persists and queries Markdown notes.
@@ -443,6 +460,21 @@ where
         folder_path: &str,
     ) -> Result<Option<FileRecord>, RepositoryError> {
         self.as_ref().set_file_folder_path(id, folder_path)
+    }
+
+    fn insert_audit_event(
+        &self,
+        id: &str,
+        timestamp: i64,
+        user_id: Option<&str>,
+        action: &str,
+        resource: Option<&str>,
+        resource_id: Option<&str>,
+        status: &str,
+        details: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        self.as_ref()
+            .insert_audit_event(id, timestamp, user_id, action, resource, resource_id, status, details)
     }
 }
 
