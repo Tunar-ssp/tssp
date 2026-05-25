@@ -7,7 +7,7 @@ export async function deleteFile(id: string, name: string) {
   try {
     await api.deleteFile(id);
     await loadFiles();
-    success('Deleted', `"${name}" moved to trash`);
+    success('Permanently Deleted', `"${name}" has been permanently deleted and cannot be recovered`);
     return true;
   } catch (err: any) {
     error('Delete Failed', err.message || 'Could not delete file');

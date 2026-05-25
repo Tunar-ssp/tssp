@@ -3,15 +3,19 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-/// Summary for upload temp cleanup runs.
+/// Summary of removed temporary upload entries.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TempCleanupReport {
+    /// Number of files removed.
     pub files_removed: u64,
+    /// Number of directories removed.
     pub directories_removed: u64,
+    /// Number of removal errors encountered.
     pub errors: u64,
 }
 
 impl TempCleanupReport {
+    /// Total count of removed files and directories.
     pub fn total_removed(self) -> u64 {
         self.files_removed + self.directories_removed
     }

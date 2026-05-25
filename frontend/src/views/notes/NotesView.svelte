@@ -14,7 +14,7 @@
     isSaving,
   } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
-  import RichEditor from '$lib/components/RichEditor.svelte';
+  import TiptapEditor from '$lib/components/TiptapEditor.svelte';
   import Outline from '$lib/components/Outline.svelte';
   import SlashMenu from '$lib/components/SlashMenu.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
@@ -294,7 +294,7 @@
 
       <div class="editor-main">
         <div class="editor-column">
-          <RichEditor
+          <TiptapEditor
             content={bodyDraft}
             onChange={(html) => {
               bodyDraft = html;

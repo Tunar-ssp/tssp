@@ -6,7 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufReader, BufWriter, Write};
+use std::io::BufReader;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -18,14 +18,57 @@ use crate::HttpState;
 const CHUNK_SIZE: u64 = 262_144;
 
 /// Session ID identifying an in-progress upload.
+///
+/// Format: "ses_" followed by a UUID v4. Strictly validated to prevent path traversal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UploadSessionId(String);
 
 impl UploadSessionId {
-    pub fn new(id: String) -> Self {
-        Self(id)
+    /// Creates a new session ID with strict validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ID doesn't match the expected format (ses_UUID) or contains
+    /// path traversal characters (/, \, ..).
+    pub fn new(id: String) -> Result<Self, String> {
+        // Strict validation: must be "ses_" followed by UUID characters only
+        // UUID v4 format: 8-4-4-4-12 hex digits with hyphens
+        if !id.starts_with("ses_") {
+            return Err("session ID must start with 'ses_'".to_string());
+        }
+
+        let uuid_part = &id[4..];
+
+        // Check length: UUID is 36 chars (8-4-4-4-12 + 4 hyphens)
+        if uuid_part.len() != 36 {
+            return Err("session ID must be 40 characters (ses_ + UUID)".to_string());
+        }
+
+        // Strict character validation: only hex digits and hyphens allowed
+        for (i, ch) in uuid_part.chars().enumerate() {
+            match i {
+                8 | 13 | 18 | 23 => {
+                    if ch != '-' {
+                        return Err(format!("invalid UUID format at position {}", i + 4));
+                    }
+                }
+                _ => {
+                    if !ch.is_ascii_hexdigit() {
+                        return Err(format!("invalid character '{}' in session ID", ch));
+                    }
+                }
+            }
+        }
+
+        // Explicitly reject path traversal patterns
+        if id.contains('/') || id.contains('\\') || id.contains("..") {
+            return Err("session ID contains invalid path characters".to_string());
+        }
+
+        Ok(Self(id))
     }
 
+    /// Returns the session ID as a string slice.
     #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         &self.0
@@ -180,7 +223,16 @@ pub async fn start_upload(
         );
     }
 
-    let session_id = UploadSessionId::new(format!("ses_{}", uuid::Uuid::new_v4()));
+    let session_id = match UploadSessionId::new(format!("ses_{}", uuid::Uuid::new_v4())) {
+        Ok(id) => id,
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "session_error",
+                &format!("could not generate session ID: {e}"),
+            )
+        }
+    };
     let session = UploadSession::new(
         session_id.clone(),
         req.filename,
@@ -213,7 +265,16 @@ pub async fn upload_chunk(
     Path((session_id_str, chunk_index)): Path<(String, u32)>,
     body: axum::body::Bytes,
 ) -> Response {
-    let session_id = UploadSessionId::new(session_id_str);
+    let session_id = match UploadSessionId::new(session_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_session_id",
+                "session ID format is invalid",
+            )
+        }
+    };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {
         Some(s) => s,
@@ -301,7 +362,16 @@ pub async fn complete_upload(
     auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
-    let session_id = UploadSessionId::new(session_id_str);
+    let session_id = match UploadSessionId::new(session_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_session_id",
+                "session ID format is invalid",
+            )
+        }
+    };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {
         Some(s) => s,
@@ -349,26 +419,20 @@ pub async fn complete_upload(
     }
 
     let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
-    let assembly_path = state.upload_temp_dir.join(format!("{}.assembly", session_id.0));
+    let total_chunks = session.uploaded_chunks.len();
 
-    let assembly_result = tokio::task::spawn_blocking({
-        let chunk_dir = chunk_dir.clone();
-        let assembly_path = assembly_path.clone();
-        let session = session.clone();
-        move || assemble_chunks(&chunk_dir, &assembly_path, &session)
-    })
-    .await
-    .map_err(|e| format!("spawn error: {e}"))
-    .and_then(|result| result);
-
-    if let Err(e) = assembly_result {
-        let _ = std::fs::remove_dir_all(&chunk_dir);
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "assembly_error",
-            &format!("failed to assemble chunks: {e}"),
-        );
-    }
+    // Create ChunkReader that streams chunks directly without intermediate file
+    let chunk_reader = match ChunkReader::new(chunk_dir.clone(), total_chunks) {
+        Ok(reader) => reader,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&chunk_dir);
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "reader_error",
+                &format!("failed to create chunk reader: {e}"),
+            );
+        }
+    };
 
     let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
     let upload_request = HttpUploadRequest {
@@ -378,18 +442,7 @@ pub async fn complete_upload(
         pinned: false,
         folder_path: session.folder_path.clone(),
         owner_id,
-        source: Box::new(match std::fs::File::open(&assembly_path) {
-            Ok(f) => f,
-            Err(e) => {
-                let _ = std::fs::remove_dir_all(&chunk_dir);
-                let _ = std::fs::remove_file(&assembly_path);
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "file_error",
-                    &format!("failed to open assembled file: {e}"),
-                );
-            }
-        }),
+        source: Box::new(chunk_reader),
         staged_path: None,
         content_hash: None,
         size: None,
@@ -397,13 +450,14 @@ pub async fn complete_upload(
 
     let _mutation_guard = state.storage_mutation_lock.lock().await;
     let upload_provider = state.upload_provider.clone();
+    let chunk_dir_cleanup = chunk_dir.clone();
     let result = tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
         .await
         .map_err(|e| format!("spawn error: {e}"))
         .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
 
-    let _ = std::fs::remove_dir_all(&chunk_dir);
-    let _ = std::fs::remove_file(&assembly_path);
+    // Cleanup chunk directory after upload attempt (success or failure)
+    let _ = std::fs::remove_dir_all(&chunk_dir_cleanup);
     state.upload_session_manager.delete_session(&session_id).await;
 
     match result {
@@ -429,7 +483,16 @@ pub async fn cancel_upload(
     auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
-    let session_id = UploadSessionId::new(session_id_str);
+    let session_id = match UploadSessionId::new(session_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_session_id",
+                "session ID format is invalid",
+            )
+        }
+    };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {
         Some(s) => s,
@@ -476,32 +539,71 @@ fn chunk_file_path(chunk_dir: &StdPath, chunk_index: u32) -> PathBuf {
     chunk_dir.join(format!("chunk_{}.part", chunk_index))
 }
 
-fn assemble_chunks(
-    chunk_dir: &StdPath,
-    output_path: &StdPath,
-    session: &UploadSession,
-) -> Result<(), String> {
-    let output = std::fs::File::create(output_path)
-        .map_err(|e| format!("failed to create output file: {e}"))?;
-    let mut output = BufWriter::new(output);
+/// Streams chunks directly without writing an intermediate .assembly file.
+/// This eliminates write amplification on Orange Pi's SD card.
+struct ChunkReader {
+    chunk_dir: PathBuf,
+    current_chunk_index: usize,
+    current_file: Option<BufReader<std::fs::File>>,
+    total_chunks: usize,
+    exhausted: bool,
+}
 
-    for chunk_index in 0..session.uploaded_chunks.len() {
-        let chunk_path = chunk_file_path(chunk_dir, chunk_index as u32);
-        let input = std::fs::File::open(&chunk_path)
-            .map_err(|e| format!("failed to read chunk {}: {e}", chunk_index))?;
-        let mut input = BufReader::new(input);
-        std::io::copy(&mut input, &mut output)
-            .map_err(|e| format!("failed to write chunk {}: {e}", chunk_index))?;
+impl ChunkReader {
+    fn new(chunk_dir: PathBuf, total_chunks: usize) -> Result<Self, String> {
+        Ok(Self {
+            chunk_dir,
+            current_chunk_index: 0,
+            current_file: None,
+            total_chunks,
+            exhausted: false,
+        })
     }
 
-    output
-        .flush()
-        .map_err(|e| format!("failed to flush output file: {e}"))?;
-    output
-        .get_ref()
-        .sync_all()
-        .map_err(|e| format!("failed to sync output file: {e}"))?;
-    Ok(())
+    fn open_next_chunk(&mut self) -> Result<(), String> {
+        if self.current_chunk_index >= self.total_chunks {
+            self.exhausted = true;
+            return Ok(());
+        }
+
+        let chunk_path = chunk_file_path(&self.chunk_dir, self.current_chunk_index as u32);
+        let file = std::fs::File::open(&chunk_path)
+            .map_err(|e| format!("failed to read chunk {}: {e}", self.current_chunk_index))?;
+        self.current_file = Some(BufReader::new(file));
+        self.current_chunk_index += 1;
+        Ok(())
+    }
+}
+
+impl std::io::Read for ChunkReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            // If we have an open file, try to read from it
+            if let Some(ref mut file) = self.current_file {
+                match file.read(buf) {
+                    Ok(0) => {
+                        // End of current chunk, move to next
+                        self.current_file = None;
+                        if self.current_chunk_index >= self.total_chunks {
+                            self.exhausted = true;
+                            return Ok(0);
+                        }
+                        // Open next chunk and loop to read from it
+                        self.open_next_chunk()
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    }
+                    other => return other,
+                }
+            } else {
+                // No open file, try to open the next chunk
+                if self.exhausted || self.current_chunk_index >= self.total_chunks {
+                    return Ok(0);
+                }
+                self.open_next_chunk()
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            }
+        }
+    }
 }
 
 fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
