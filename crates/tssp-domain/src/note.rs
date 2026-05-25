@@ -88,12 +88,9 @@ impl NoteBody {
     ///
     /// # Errors
     ///
-    /// Returns [`DomainError`] when the body is empty or exceeds the size limit.
+    /// Returns [`DomainError`] when the body exceeds the size limit.
     pub fn new(value: impl AsRef<str>) -> Result<Self, DomainError> {
         let value = value.as_ref().trim();
-        if value.is_empty() {
-            return Err(DomainError::Empty { field: "note body" });
-        }
         if value.len() > MAX_NOTE_BODY_BYTES {
             return Err(DomainError::TooLong {
                 field: "note body",
@@ -200,8 +197,9 @@ mod tests {
     }
 
     #[test]
-    fn note_body_rejects_empty_content() {
-        assert!(NoteBody::new("   \n").is_err());
+    fn note_body_allows_empty_content() {
+        assert!(NoteBody::new("   \n").is_ok());
+        assert!(NoteBody::new("").is_ok());
     }
 
     #[test]

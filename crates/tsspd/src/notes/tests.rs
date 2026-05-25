@@ -54,7 +54,7 @@ async fn create_note_returns_201_and_derives_title() {
 }
 
 #[tokio::test]
-async fn create_note_rejects_empty_body() {
+async fn create_note_allows_empty_body() {
     let repository = SqliteFileRepository::open_in_memory()
         .unwrap_or_else(|error| panic!("open failed: {error}"));
     let app = note_router(repository);
@@ -63,11 +63,11 @@ async fn create_note_rejects_empty_body() {
         .method("POST")
         .uri("/api/v1/notes")
         .header("content-type", "application/json")
-        .body(axum::body::Body::from(r#"{"body":"   "}"#))
+        .body(axum::body::Body::from(r#"{"title":"Untitled","body":""}"#))
         .unwrap_or_else(|error| panic!("request failed: {error}"));
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::CREATED);
 }
 
 #[tokio::test]

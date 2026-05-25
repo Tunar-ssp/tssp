@@ -11,13 +11,8 @@ pub(crate) fn parse_note_id(raw: String) -> Result<NoteId, HttpNoteError> {
     })
 }
 
-/// Rejects note bodies that exceed the domain size limit before persistence.
+/// Validates note bodies don't exceed the domain size limit.
 pub(crate) fn validate_note_body(body: &str) -> Result<(), HttpNoteError> {
-    if body.trim().is_empty() {
-        return Err(HttpNoteError::InvalidRequest {
-            message: "note body must not be empty".to_owned(),
-        });
-    }
     if body.len() > MAX_NOTE_BODY_BYTES {
         return Err(HttpNoteError::PayloadTooLarge {
             message: format!("note body exceeds maximum size of {MAX_NOTE_BODY_BYTES} bytes"),
@@ -53,8 +48,9 @@ mod tests {
     }
 
     #[test]
-    fn validate_note_body_rejects_empty_trimmed_content() {
-        assert!(validate_note_body("  \n").is_err());
+    fn validate_note_body_allows_empty_content() {
+        assert!(validate_note_body("").is_ok());
+        assert!(validate_note_body("  \n").is_ok());
     }
 
     #[test]
