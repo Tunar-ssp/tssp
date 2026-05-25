@@ -34,7 +34,7 @@ pub fn cleanup_temp_upload_dir(dir: &Path, min_age: Option<Duration>) -> TempCle
     }
 
     let now = SystemTime::now();
-    let entries = if let Ok(entries) = std::fs::read_dir(dir) { entries } else {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         report.errors += 1;
         return report;
     };

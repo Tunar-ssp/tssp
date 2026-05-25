@@ -58,9 +58,8 @@ where
     let retention_seconds = retention_days * 86_400;
     let older_than_secs = now.saturating_sub(retention_seconds);
 
-    let older_than = match UnixTimestamp::new(older_than_secs as i64) {
-        Ok(ts) => ts,
-        Err(_) => return TrashCleanupReport::failure(),
+    let Ok(older_than) = UnixTimestamp::new(older_than_secs.cast_signed()) else {
+        return TrashCleanupReport::failure();
     };
 
     match service.purge(older_than) {
