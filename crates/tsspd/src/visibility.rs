@@ -239,3 +239,78 @@ fn internal(message: String) -> Response {
     )
         .into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_public_token_generates_valid_base64() {
+        let token = new_public_token().expect("token generation failed");
+        assert!(!token.is_empty());
+        assert!(token.len() > 20);
+        // Valid base64 should only contain URL_SAFE characters
+        assert!(token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+    }
+
+    #[test]
+    fn new_public_token_generates_different_tokens() {
+        let token1 = new_public_token().expect("first token");
+        let token2 = new_public_token().expect("second token");
+        assert_ne!(token1, token2, "tokens should be different");
+    }
+
+    #[test]
+    fn visibility_body_deserializes_public() {
+        let json = r#"{"visibility": "public"}"#;
+        let body: VisibilityBody = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(body.visibility, "public");
+    }
+
+    #[test]
+    fn visibility_body_deserializes_private() {
+        let json = r#"{"visibility": "private"}"#;
+        let body: VisibilityBody = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(body.visibility, "private");
+    }
+
+    #[test]
+    fn bulk_visibility_body_validates_ids() {
+        let json = r#"{"ids": ["id1", "id2"], "visibility": "public"}"#;
+        let body: BulkVisibilityBody = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(body.ids.len(), 2);
+        assert_eq!(body.visibility, "public");
+    }
+
+    #[test]
+    fn visibility_string_case_insensitive_public() {
+        let visibility_str = "PUBLIC";
+        let result = visibility_str.to_ascii_lowercase();
+        assert_eq!(result, "public");
+    }
+
+    #[test]
+    fn visibility_string_case_insensitive_private() {
+        let visibility_str = "PRIVATE";
+        let result = visibility_str.to_ascii_lowercase();
+        assert_eq!(result, "private");
+    }
+
+    #[test]
+    fn forbidden_response_has_correct_status() {
+        let response = forbidden();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn not_found_response_has_correct_status() {
+        let response = not_found();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn internal_response_has_correct_status() {
+        let response = internal("test error".to_owned());
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}

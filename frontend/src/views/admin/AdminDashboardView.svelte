@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { api } from '$lib/api';
+  import { api, type AdminUser, type AdminSession, type AdminActivityItem } from '$lib/api';
   import { isAdmin } from '$lib/stores/auth';
   import { error as showError } from '$lib/stores/notifications';
   import Btn from '$lib/components/Btn.svelte';
@@ -26,6 +26,10 @@
     corruptFileCount: 0,
   });
 
+  let users = $state<AdminUser[]>([]);
+  let sessions = $state<AdminSession[]>([]);
+  let activities = $state<AdminActivityItem[]>([]);
+
   let isLoading = $state(false);
   let selectedTab = $state<'dashboard' | 'users' | 'sessions' | 'logs'>('dashboard');
 
@@ -49,6 +53,50 @@
     }
   }
 
+  async function loadUsers() {
+    if (!$isAdmin) return;
+    isLoading = true;
+    try {
+      const data = await api.listAdminUsers();
+      users = data.users || [];
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Failed to load users');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function loadSessions() {
+    if (!$isAdmin) return;
+    isLoading = true;
+    try {
+      const data = await api.listAdminSessions(100);
+      sessions = data.sessions || [];
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Failed to load sessions');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function loadActivity() {
+    if (!$isAdmin) return;
+    isLoading = true;
+    try {
+      const data = await api.listAdminActivity(100);
+      activities = data.items || [];
+    } catch (e) {
+      showError(e instanceof Error ? e.message : 'Failed to load activity');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function formatTimestamp(secs: number): string {
+    const date = new Date(secs * 1000);
+    return date.toLocaleString();
+  }
+
   function formatBytes(bytes: number) {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -66,7 +114,15 @@
 
   $effect(() => {
     if ($isAdmin) {
-      loadStats();
+      if (selectedTab === 'dashboard') {
+        loadStats();
+      } else if (selectedTab === 'users') {
+        loadUsers();
+      } else if (selectedTab === 'sessions') {
+        loadSessions();
+      } else if (selectedTab === 'logs') {
+        loadActivity();
+      }
     }
   });
 </script>
@@ -88,7 +144,7 @@
       <button
         class="tab-btn"
         class:active={selectedTab === 'dashboard'}
-        on:click={() => (selectedTab = 'dashboard')}
+        onclick={() => (selectedTab = 'dashboard')}
       >
         <Icons.BarChart3 size={16} />
         Dashboard
@@ -96,7 +152,7 @@
       <button
         class="tab-btn"
         class:active={selectedTab === 'users'}
-        on:click={() => (selectedTab = 'users')}
+        onclick={() => (selectedTab = 'users')}
       >
         <Icons.Users size={16} />
         Users
@@ -104,7 +160,7 @@
       <button
         class="tab-btn"
         class:active={selectedTab === 'sessions'}
-        on:click={() => (selectedTab = 'sessions')}
+        onclick={() => (selectedTab = 'sessions')}
       >
         <Icons.Smartphone size={16} />
         Sessions
@@ -112,7 +168,7 @@
       <button
         class="tab-btn"
         class:active={selectedTab === 'logs'}
-        on:click={() => (selectedTab = 'logs')}
+        onclick={() => (selectedTab = 'logs')}
       >
         <Icons.FileText size={16} />
         Activity Logs
@@ -210,23 +266,134 @@
           </Card>
         </div>
       {:else if selectedTab === 'users'}
-        <div class="empty-state">
-          <Icons.Users size={48} />
-          <h3>User Management</h3>
-          <p>Coming soon: Manage users and permissions</p>
-        </div>
+        <Card>
+          <div class="list-container">
+            <div class="list-header">
+              <h3>System Users</h3>
+            </div>
+            {#if isLoading}
+              <div class="loading">Loading users...</div>
+            {:else if users.length === 0}
+              <div class="empty">
+                <Icons.Users size={32} />
+                <p>No users found</p>
+              </div>
+            {:else}
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>ID</th>
+                    <th>Role</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each users as user}
+                    <tr>
+                      <td>{user.name}</td>
+                      <td><code>{user.id}</code></td>
+                      <td><span class={`role role-${user.role}`}>{user.role}</span></td>
+                      <td>{formatTimestamp(user.created_at)}</td>
+                      <td>
+                        {#if user.disabled}
+                          <span class="status status-disabled">Disabled</span>
+                        {:else}
+                          <span class="status status-active">Active</span>
+                        {/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        </Card>
       {:else if selectedTab === 'sessions'}
-        <div class="empty-state">
-          <Icons.Smartphone size={48} />
-          <h3>Session Management</h3>
-          <p>Coming soon: View and manage active sessions</p>
-        </div>
+        <Card>
+          <div class="list-container">
+            <div class="list-header">
+              <h3>Active Sessions</h3>
+            </div>
+            {#if isLoading}
+              <div class="loading">Loading sessions...</div>
+            {:else if sessions.length === 0}
+              <div class="empty">
+                <Icons.Smartphone size={32} />
+                <p>No active sessions</p>
+              </div>
+            {:else}
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Kind</th>
+                    <th>Token</th>
+                    <th>Created</th>
+                    <th>Expires</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each sessions as session}
+                    <tr>
+                      <td>{session.user_name || 'Unknown'}</td>
+                      <td><span class="kind">{session.kind}</span></td>
+                      <td><code>{session.token_preview}</code></td>
+                      <td>{formatTimestamp(session.created_at)}</td>
+                      <td>{formatTimestamp(session.expires_at)}</td>
+                      <td>
+                        {#if session.current}
+                          <span class="status status-current">Current</span>
+                        {:else}
+                          <span class="status status-active">Active</span>
+                        {/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        </Card>
       {:else if selectedTab === 'logs'}
-        <div class="empty-state">
-          <Icons.FileText size={48} />
-          <h3>Activity Logs</h3>
-          <p>Coming soon: View system activity logs</p>
-        </div>
+        <Card>
+          <div class="list-container">
+            <div class="list-header">
+              <h3>Activity Log</h3>
+            </div>
+            {#if isLoading}
+              <div class="loading">Loading activity...</div>
+            {:else if activities.length === 0}
+              <div class="empty">
+                <Icons.FileText size={32} />
+                <p>No activity recorded</p>
+              </div>
+            {:else}
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>Title</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each activities as item}
+                    <tr>
+                      <td><span class="kind">{item.kind}</span></td>
+                      <td><code>{item.id}</code></td>
+                      <td>{item.title}</td>
+                      <td>{formatTimestamp(item.occurred_at)}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        </Card>
       {/if}
     </div>
   </div>
@@ -453,5 +620,133 @@
 
   .empty-state p {
     margin: 0;
+  }
+
+  .list-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-4);
+  }
+
+  .list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--s-4);
+  }
+
+  .list-header h3 {
+    margin: 0;
+    font-size: var(--fs-16);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .loading {
+    padding: var(--s-6);
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-3);
+    padding: var(--s-8);
+    color: var(--muted);
+  }
+
+  .empty p {
+    margin: 0;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-13);
+  }
+
+  .data-table thead {
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table th {
+    padding: var(--s-3) var(--s-4);
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .data-table td {
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .data-table tbody tr:hover {
+    background-color: var(--surface);
+  }
+
+  .role {
+    display: inline-block;
+    padding: var(--s-1) var(--s-2);
+    border-radius: 4px;
+    font-size: var(--fs-12);
+    font-weight: 500;
+  }
+
+  .role-admin {
+    background-color: var(--red-surface);
+    color: var(--red);
+  }
+
+  .role-user {
+    background-color: var(--blue-surface);
+    color: var(--blue);
+  }
+
+  .status {
+    display: inline-block;
+    padding: var(--s-1) var(--s-2);
+    border-radius: 4px;
+    font-size: var(--fs-12);
+    font-weight: 500;
+  }
+
+  .status-active {
+    background-color: var(--green-surface);
+    color: var(--green);
+  }
+
+  .status-current {
+    background-color: var(--yellow-surface);
+    color: var(--yellow);
+  }
+
+  .status-disabled {
+    background-color: var(--gray-surface);
+    color: var(--gray);
+  }
+
+  .kind {
+    display: inline-block;
+    padding: var(--s-1) var(--s-2);
+    border-radius: 4px;
+    background-color: var(--surface-2);
+    font-size: var(--fs-12);
+    font-weight: 500;
+    color: var(--text-2);
+  }
+
+  code {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: var(--fs-12);
+    background-color: var(--surface);
+    padding: 2px 4px;
+    border-radius: 2px;
   }
 </style>

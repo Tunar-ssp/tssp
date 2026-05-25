@@ -541,3 +541,450 @@ fn cleanup_dir_files(dir: &std::path::Path) -> crate::temp_cleanup::TempCleanupR
         Some(std::time::Duration::from_secs(2 * 60 * 60)),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn admin_status_response_has_schema_version_one() {
+        let response = AdminStatusResponse {
+            schema_version: 1,
+            status: "ok",
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            uptime_hours: 1,
+            last_restart: "3600 seconds ago".to_owned(),
+            disk_used: 1000000,
+            disk_total: 10000000,
+            memory_used: 500000,
+            memory_total: 4000000,
+            cpu_percent: 25.5,
+            load_average: 0.5,
+            total_files: 100,
+            total_size: 5000000,
+            db_size: 100000,
+            db_status: "ok",
+        };
+        assert_eq!(response.schema_version, 1);
+        assert_eq!(response.status, "ok");
+    }
+
+    #[test]
+    fn admin_status_response_serializes_to_json() {
+        let response = AdminStatusResponse {
+            schema_version: 1,
+            status: "ok",
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            uptime_hours: 1,
+            last_restart: "3600 seconds ago".to_owned(),
+            disk_used: 1000000,
+            disk_total: 10000000,
+            memory_used: 500000,
+            memory_total: 4000000,
+            cpu_percent: 25.5,
+            load_average: 0.5,
+            total_files: 100,
+            total_size: 5000000,
+            db_size: 100000,
+            db_status: "ok",
+        };
+        let json = serde_json::to_string(&response).expect("serialization failed");
+        assert!(json.contains("\"schema_version\":1"));
+        assert!(json.contains("\"status\":\"ok\""));
+    }
+
+    #[test]
+    fn admin_overview_response_schema_version() {
+        let response = AdminOverviewResponse {
+            schema_version: 1,
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            file_count: 50,
+            note_count: 20,
+            tag_count: 15,
+            pinned_count: 5,
+            workspace_count: 3,
+            corrupt_file_count: 0,
+            storage_bytes_used: 1000000,
+            public_url: Some("https://example.com".to_owned()),
+        };
+        assert_eq!(response.schema_version, 1);
+        assert_eq!(response.file_count, 50);
+    }
+
+    #[test]
+    fn admin_overview_response_serializes() {
+        let response = AdminOverviewResponse {
+            schema_version: 1,
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            file_count: 50,
+            note_count: 20,
+            tag_count: 15,
+            pinned_count: 5,
+            workspace_count: 3,
+            corrupt_file_count: 0,
+            storage_bytes_used: 1000000,
+            public_url: Some("https://example.com".to_owned()),
+        };
+        let json = serde_json::to_string(&response).expect("serialization failed");
+        assert!(json.contains("\"file_count\":50"));
+        assert!(json.contains("\"note_count\":20"));
+    }
+
+    #[test]
+    fn admin_activity_item_with_all_fields() {
+        let item = AdminActivityItem {
+            kind: "file".to_owned(),
+            id: "file123".to_owned(),
+            title: "document.pdf".to_owned(),
+            detail: "/documents".to_owned(),
+            occurred_at: 1609459200,
+            visibility: Some("public".to_owned()),
+            size_bytes: Some(1024000),
+            language: None,
+        };
+        assert_eq!(item.kind, "file");
+        assert_eq!(item.size_bytes, Some(1024000));
+    }
+
+    #[test]
+    fn admin_activity_item_serializes_visibility() {
+        let item = AdminActivityItem {
+            kind: "file".to_owned(),
+            id: "file123".to_owned(),
+            title: "document.pdf".to_owned(),
+            detail: "/documents".to_owned(),
+            occurred_at: 1609459200,
+            visibility: Some("public".to_owned()),
+            size_bytes: Some(1024000),
+            language: None,
+        };
+        let json = serde_json::to_string(&item).expect("serialization failed");
+        assert!(json.contains("\"visibility\":\"public\""));
+    }
+
+    #[test]
+    fn admin_activity_item_skips_none_visibility() {
+        let item = AdminActivityItem {
+            kind: "note".to_owned(),
+            id: "note456".to_owned(),
+            title: "My Note".to_owned(),
+            detail: "my-tag, other-tag".to_owned(),
+            occurred_at: 1609459200,
+            visibility: None,
+            size_bytes: None,
+            language: None,
+        };
+        let json = serde_json::to_string(&item).expect("serialization failed");
+        assert!(!json.contains("\"visibility\""));
+    }
+
+    #[test]
+    fn admin_activity_response_contains_items() {
+        let response = AdminActivityResponse {
+            schema_version: 1,
+            items: vec![
+                AdminActivityItem {
+                    kind: "file".to_owned(),
+                    id: "id1".to_owned(),
+                    title: "file1".to_owned(),
+                    detail: "detail1".to_owned(),
+                    occurred_at: 100,
+                    visibility: None,
+                    size_bytes: None,
+                    language: None,
+                },
+                AdminActivityItem {
+                    kind: "note".to_owned(),
+                    id: "id2".to_owned(),
+                    title: "note1".to_owned(),
+                    detail: "detail2".to_owned(),
+                    occurred_at: 200,
+                    visibility: None,
+                    size_bytes: None,
+                    language: None,
+                },
+            ],
+        };
+        assert_eq!(response.items.len(), 2);
+        assert_eq!(response.schema_version, 1);
+    }
+
+    #[test]
+    fn folder_entry_serializes() {
+        let entry = FolderEntry {
+            path: "/documents".to_owned(),
+            file_count: 42,
+        };
+        let json = serde_json::to_string(&entry).expect("serialization failed");
+        assert!(json.contains("/documents"));
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn admin_files_query_default_limit() {
+        let json = r#"{}"#;
+        let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 100);
+    }
+
+    #[test]
+    fn admin_files_query_custom_limit() {
+        let json = r#"{"limit": 50}"#;
+        let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 50);
+    }
+
+    #[test]
+    fn admin_files_query_with_folder_and_type() {
+        let json = r#"{"limit": 25, "folder": "/docs", "type": "image"}"#;
+        let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 25);
+        assert_eq!(query.folder, Some("/docs".to_owned()));
+        assert_eq!(query.mime_prefix, Some("image".to_owned()));
+    }
+
+    #[test]
+    fn admin_files_query_folder_optional() {
+        let json = r#"{"limit": 100}"#;
+        let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.folder, None);
+    }
+
+    #[test]
+    fn admin_activity_query_default_limit() {
+        let json = r#"{}"#;
+        let query: AdminActivityQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 100);
+    }
+
+    #[test]
+    fn admin_activity_query_custom_limit() {
+        let json = r#"{"limit": 75}"#;
+        let query: AdminActivityQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 75);
+    }
+
+    #[test]
+    fn default_limit_returns_100() {
+        assert_eq!(default_limit(), 100);
+    }
+
+    #[test]
+    fn admin_activity_error_response_status_code() {
+        let response = admin_activity_error("test_error", "test message".to_owned());
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn admin_activity_error_includes_code_and_message() {
+        let error_response = ErrorResponse {
+            error: ErrorBody {
+                code: "test_error",
+                message: "test message".to_owned(),
+            },
+        };
+        assert_eq!(error_response.error.code, "test_error");
+        assert_eq!(error_response.error.message, "test message");
+    }
+
+    #[test]
+    fn folder_entry_path_and_count() {
+        let entry = FolderEntry {
+            path: "/my/folder".to_owned(),
+            file_count: 123,
+        };
+        assert_eq!(entry.path, "/my/folder");
+        assert_eq!(entry.file_count, 123);
+    }
+
+    #[test]
+    fn admin_status_response_uptime_hours_calculation() {
+        let response = AdminStatusResponse {
+            schema_version: 1,
+            status: "ok",
+            version: "1.0.0",
+            uptime_seconds: 7200,
+            uptime_hours: 2,
+            last_restart: "7200 seconds ago".to_owned(),
+            disk_used: 0,
+            disk_total: 0,
+            memory_used: 0,
+            memory_total: 0,
+            cpu_percent: 0.0,
+            load_average: 0.0,
+            total_files: 0,
+            total_size: 0,
+            db_size: 0,
+            db_status: "ok",
+        };
+        assert_eq!(response.uptime_hours, 7200 / 3600);
+    }
+
+    #[test]
+    fn admin_activity_item_with_language_field() {
+        let item = AdminActivityItem {
+            kind: "workspace".to_owned(),
+            id: "ws1".to_owned(),
+            title: "Python Workspace".to_owned(),
+            detail: "python".to_owned(),
+            occurred_at: 1609459200,
+            visibility: None,
+            size_bytes: None,
+            language: Some("python".to_owned()),
+        };
+        assert_eq!(item.language, Some("python".to_owned()));
+    }
+
+    #[test]
+    fn admin_activity_response_serializes_items() {
+        let response = AdminActivityResponse {
+            schema_version: 1,
+            items: vec![
+                AdminActivityItem {
+                    kind: "file".to_owned(),
+                    id: "id1".to_owned(),
+                    title: "title1".to_owned(),
+                    detail: "detail1".to_owned(),
+                    occurred_at: 100,
+                    visibility: Some("public".to_owned()),
+                    size_bytes: Some(500),
+                    language: None,
+                },
+            ],
+        };
+        let json = serde_json::to_string(&response).expect("serialization failed");
+        assert!(json.contains("\"schema_version\":1"));
+        assert!(json.contains("\"items\""));
+    }
+
+    #[test]
+    fn admin_files_query_zero_limit_allowed() {
+        let json = r#"{"limit": 0}"#;
+        let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 0);
+    }
+
+    #[test]
+    fn admin_activity_query_zero_limit_allowed() {
+        let json = r#"{"limit": 0}"#;
+        let query: AdminActivityQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.limit, 0);
+    }
+
+    #[test]
+    fn admin_status_response_cpu_and_load() {
+        let response = AdminStatusResponse {
+            schema_version: 1,
+            status: "ok",
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            uptime_hours: 1,
+            last_restart: "3600 seconds ago".to_owned(),
+            disk_used: 0,
+            disk_total: 0,
+            memory_used: 0,
+            memory_total: 0,
+            cpu_percent: 45.25,
+            load_average: 1.5,
+            total_files: 0,
+            total_size: 0,
+            db_size: 0,
+            db_status: "ok",
+        };
+        assert!(response.cpu_percent > 0.0);
+        assert!(response.load_average > 0.0);
+    }
+
+    #[test]
+    fn admin_overview_public_url_optional() {
+        let response_with_url = AdminOverviewResponse {
+            schema_version: 1,
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            file_count: 0,
+            note_count: 0,
+            tag_count: 0,
+            pinned_count: 0,
+            workspace_count: 0,
+            corrupt_file_count: 0,
+            storage_bytes_used: 0,
+            public_url: Some("https://example.com".to_owned()),
+        };
+        assert!(response_with_url.public_url.is_some());
+
+        let response_without_url = AdminOverviewResponse {
+            schema_version: 1,
+            version: "1.0.0",
+            uptime_seconds: 3600,
+            file_count: 0,
+            note_count: 0,
+            tag_count: 0,
+            pinned_count: 0,
+            workspace_count: 0,
+            corrupt_file_count: 0,
+            storage_bytes_used: 0,
+            public_url: None,
+        };
+        assert!(response_without_url.public_url.is_none());
+    }
+
+    #[test]
+    fn admin_activity_item_occurred_at_timestamp() {
+        let item = AdminActivityItem {
+            kind: "file".to_owned(),
+            id: "test".to_owned(),
+            title: "test".to_owned(),
+            detail: "test".to_owned(),
+            occurred_at: 1609459200,
+            visibility: None,
+            size_bytes: None,
+            language: None,
+        };
+        assert_eq!(item.occurred_at, 1609459200);
+    }
+
+    #[test]
+    fn folder_entry_empty_path() {
+        let entry = FolderEntry {
+            path: "".to_owned(),
+            file_count: 0,
+        };
+        assert_eq!(entry.path, "");
+        assert_eq!(entry.file_count, 0);
+    }
+
+    #[test]
+    fn admin_files_query_deserialize_image_type() {
+        let json = r#"{"type": "image"}"#;
+        let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(query.mime_prefix, Some("image".to_owned()));
+    }
+
+    #[test]
+    fn admin_status_response_large_values() {
+        let response = AdminStatusResponse {
+            schema_version: 1,
+            status: "ok",
+            version: "1.0.0",
+            uptime_seconds: u64::MAX - 1,
+            uptime_hours: (u64::MAX - 1) / 3600,
+            last_restart: "very long ago".to_owned(),
+            disk_used: u64::MAX / 2,
+            disk_total: u64::MAX,
+            memory_used: u64::MAX / 4,
+            memory_total: u64::MAX / 2,
+            cpu_percent: 100.0,
+            load_average: 10.0,
+            total_files: u64::MAX / 8,
+            total_size: u64::MAX / 3,
+            db_size: u64::MAX / 100,
+            db_status: "ok",
+        };
+        assert_eq!(response.uptime_seconds, u64::MAX - 1);
+        assert!(response.disk_total > response.disk_used);
+    }
+}

@@ -144,6 +144,37 @@ export interface SearchResult {
   updated_at?: number;
 }
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  role: 'admin' | 'user';
+  created_at: number;
+  disabled: boolean;
+}
+
+export interface AdminSession {
+  token: string;
+  token_preview: string;
+  kind: string;
+  user_id?: string;
+  user_name?: string;
+  role?: string;
+  created_at: number;
+  expires_at: number;
+  current: boolean;
+}
+
+export interface AdminActivityItem {
+  kind: string;
+  id: string;
+  title: string;
+  detail: string;
+  occurred_at: number;
+  visibility?: string;
+  size_bytes?: number;
+  language?: string;
+}
+
 function normalizeFileRecord(file: FileRecord): FileRecord {
   const isPublic = file.public ?? file.visibility === 'public';
   const isPinned = file.pinned ?? file.pinned_at !== undefined;
@@ -184,11 +215,19 @@ export const api = {
   getMe: () => request<User>('/auth/me'),
   
   // Files
-  listFiles: async (limit?: number) => {
-    const data = await request<{ files: FileRecord[] }>(
-      `/files${limit ? `?limit=${limit}` : ''}`,
+  listFiles: async (limit?: number, cursor?: string) => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    if (cursor) params.append('page', cursor);
+    const query = params.toString();
+    const data = await request<{ files: FileRecord[]; next_cursor?: string }>(
+      `/files${query ? `?${query}` : ''}`,
     );
-    return { ...data, files: (data.files || []).map(normalizeFileRecord) };
+    return {
+      ...data,
+      files: (data.files || []).map(normalizeFileRecord),
+      nextCursor: data.next_cursor,
+    };
   },
   listFolders: () => request<{ schema_version: number; folders: FolderEntry[] }>('/folders'),
   getFile: async (id: string) => normalizeFileRecord(await request<FileRecord>(`/files/${id}`)),
@@ -222,9 +261,31 @@ export const api = {
     const data = await request<{ schema_version: number; files: FileRecord[] }>('/public/files');
     return { ...data, files: (data.files || []).map(normalizeFileRecord) };
   },
+  restoreFile: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
+  permanentDeleteFile: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' }),
+  listTrash: async () => {
+    const data = await request<{ files: FileRecord[] }>('/trash');
+    return { ...data, files: (data.files || []).map(normalizeFileRecord) };
+  },
+  emptyTrash: () =>
+    request('/trash/empty', { method: 'POST' }),
 
   // Notes
-  listNotes: () => request<{ notes: Note[] }>('/notes'),
+  listNotes: async (limit?: number, cursor?: string) => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    if (cursor) params.append('page', cursor);
+    const query = params.toString();
+    const data = await request<{ notes: Note[]; next_cursor?: string }>(
+      `/notes${query ? `?${query}` : ''}`,
+    );
+    return {
+      ...data,
+      nextCursor: data.next_cursor,
+    };
+  },
   getNote: (id: string) => request<Note>(`/notes/${encodeURIComponent(id)}`),
   createNote: (note: Partial<Note>) =>
     request<Note>('/notes', {
@@ -251,7 +312,19 @@ export const api = {
     request(`/notes/${encodeURIComponent(id)}/pin`, { method: 'DELETE' }),
 
   // Workspaces
-  listWorkspaces: () => request<{ workspaces: Workspace[] }>('/workspaces'),
+  listWorkspaces: async (limit?: number, cursor?: string) => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    if (cursor) params.append('page', cursor);
+    const query = params.toString();
+    const data = await request<{ workspaces: Workspace[]; next_cursor?: string }>(
+      `/workspaces${query ? `?${query}` : ''}`,
+    );
+    return {
+      ...data,
+      nextCursor: data.next_cursor,
+    };
+  },
   getWorkspace: (id: string) =>
     request<Workspace>(`/workspaces/${encodeURIComponent(id)}`),
   createWorkspace: (ws: Partial<Workspace>) =>
@@ -378,6 +451,18 @@ export const api = {
     ),
   removeAdminDevice: (token: string) =>
     request<void>(`/admin/devices/${encodeURIComponent(token)}`, { method: 'DELETE' }),
+  listAdminUsers: () =>
+    request<{ schema_version: number; users: AdminUser[] }>(
+      '/admin/users'
+    ),
+  listAdminSessions: (limit?: number) =>
+    request<{ schema_version: number; sessions: AdminSession[] }>(
+      `/admin/sessions${limit ? `?limit=${limit}` : ''}`
+    ),
+  listAdminActivity: (limit?: number) =>
+    request<{ schema_version: number; items: AdminActivityItem[] }>(
+      `/admin/activity${limit ? `?limit=${limit}` : ''}`
+    ),
 
   // Chunked upload
   startUpload: (folder?: string) =>

@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use tssp_app::{PinError, PinService};
+use tssp_app::{PinError, PinService, AuditAction, log_audit_event};
 use tssp_domain::FileRecord;
 use tssp_ports::{FileRepository, PinOutcome, RepositoryError};
 
@@ -280,8 +280,25 @@ pub(crate) async fn pin(
 
     let provider = state.pin_provider.clone();
     let position = payload.and_then(|Json(p)| p.position);
+    let user_id = auth.user_id.clone();
+    let file_id_clone = id.clone();
+    let file_name = file.name.original().to_owned();
+    let repository = state.repository.clone();
     match tokio::task::spawn_blocking(move || provider.pin(id, position)).await {
-        Ok(Ok(outcome)) => pin_mutation_response(outcome),
+        Ok(Ok(outcome)) => {
+            if outcome.changed {
+                log_audit_event(
+                    repository.as_ref(),
+                    AuditAction::FilePinned,
+                    Some(&user_id),
+                    Some("file"),
+                    Some(&file_id_clone),
+                    "success",
+                    Some(&file_name),
+                );
+            }
+            pin_mutation_response(outcome)
+        },
         Ok(Err(error)) => error.response(),
         Err(error) => HttpPinError::Internal {
             message: format!("pin worker failed: {error}"),
@@ -329,8 +346,25 @@ pub(crate) async fn unpin(
     }
 
     let provider = state.pin_provider.clone();
+    let user_id = auth.user_id.clone();
+    let file_id_clone = id.clone();
+    let file_name = file.name.original().to_owned();
+    let repository = state.repository.clone();
     match tokio::task::spawn_blocking(move || provider.unpin(id)).await {
-        Ok(Ok(outcome)) => pin_mutation_response(outcome),
+        Ok(Ok(outcome)) => {
+            if outcome.changed {
+                log_audit_event(
+                    repository.as_ref(),
+                    AuditAction::FileUnpinned,
+                    Some(&user_id),
+                    Some("file"),
+                    Some(&file_id_clone),
+                    "success",
+                    Some(&file_name),
+                );
+            }
+            pin_mutation_response(outcome)
+        },
         Ok(Err(error)) => error.response(),
         Err(error) => HttpPinError::Internal {
             message: format!("pin worker failed: {error}"),

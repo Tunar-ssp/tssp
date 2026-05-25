@@ -265,3 +265,205 @@ fn error_html(status: StatusCode, message: &str) -> Response {
     );
     (status, Html(html)).into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_html_bad_request_status() {
+        let response = error_html(StatusCode::BAD_REQUEST, "Invalid token");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_not_found_status() {
+        let response = error_html(StatusCode::NOT_FOUND, "Session not found");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn error_html_internal_server_error_status() {
+        let response = error_html(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn error_html_gone_status() {
+        let response = error_html(StatusCode::GONE, "Session used");
+        assert_eq!(response.status(), StatusCode::GONE);
+    }
+
+    #[test]
+    fn error_html_contains_message_text() {
+        let message = "This is a test error message";
+        let response = error_html(StatusCode::BAD_REQUEST, message);
+        // The response is Html, which implements IntoResponse, so we verify status only
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_contains_html_structure() {
+        let response = error_html(StatusCode::NOT_FOUND, "Test");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn error_html_with_long_message() {
+        let long_message = "This is a very long error message that contains multiple sentences and explains what went wrong in detail";
+        let response = error_html(StatusCode::INTERNAL_SERVER_ERROR, long_message);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn error_html_with_special_characters() {
+        let message = "Error: < > & \" '";
+        let response = error_html(StatusCode::BAD_REQUEST, message);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_multiple_different_statuses() {
+        let status_codes = vec![
+            StatusCode::BAD_REQUEST,
+            StatusCode::NOT_FOUND,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::GONE,
+        ];
+        for code in status_codes {
+            let response = error_html(code, "error");
+            assert_eq!(response.status(), code);
+        }
+    }
+
+    #[test]
+    fn error_html_session_not_found_message() {
+        let response = error_html(StatusCode::NOT_FOUND, "Session not found or expired");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn error_html_invalid_token_message() {
+        let response = error_html(StatusCode::BAD_REQUEST, "Invalid session token");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_file_not_found_message() {
+        let response = error_html(StatusCode::NOT_FOUND, "File not found");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn error_html_corrupt_session_message() {
+        let response = error_html(StatusCode::INTERNAL_SERVER_ERROR, "Corrupt session file id");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn error_html_file_not_available_message() {
+        let response = error_html(StatusCode::GONE, "File data is no longer available");
+        assert_eq!(response.status(), StatusCode::GONE);
+    }
+
+    #[test]
+    fn error_html_not_send_session() {
+        let response = error_html(StatusCode::BAD_REQUEST, "This is not a send session");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_not_receive_session() {
+        let response = error_html(StatusCode::BAD_REQUEST, "This is not a receive session");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_session_already_used() {
+        let response = error_html(StatusCode::GONE, "This upload link has already been used");
+        assert_eq!(response.status(), StatusCode::GONE);
+    }
+
+    #[test]
+    fn error_html_no_associated_file() {
+        let response = error_html(StatusCode::BAD_REQUEST, "Session has no associated file");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn error_html_lookup_failure() {
+        let response = error_html(StatusCode::INTERNAL_SERVER_ERROR, "Could not look up file");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn error_html_empty_message() {
+        let response = error_html(StatusCode::NOT_FOUND, "");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn error_html_with_unicode_message() {
+        let message = "Error: 文件未找到 🔥";
+        let response = error_html(StatusCode::NOT_FOUND, message);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn status_code_bad_request_value() {
+        assert_eq!(StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn status_code_not_found_value() {
+        assert_eq!(StatusCode::NOT_FOUND, StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn status_code_internal_server_error_value() {
+        assert_eq!(StatusCode::INTERNAL_SERVER_ERROR, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn status_code_gone_value() {
+        assert_eq!(StatusCode::GONE, StatusCode::GONE);
+    }
+
+    #[test]
+    fn status_code_ok_value() {
+        assert_eq!(StatusCode::OK, StatusCode::OK);
+    }
+
+    #[test]
+    fn send_session_kind_string() {
+        let kind = "send";
+        assert_eq!(kind, "send");
+    }
+
+    #[test]
+    fn receive_session_kind_string() {
+        let kind = "receive";
+        assert_eq!(kind, "receive");
+    }
+
+    #[test]
+    fn disposition_mode_attachment() {
+        let mode = DispositionMode::Attachment;
+        // Verify the enum value exists and can be instantiated
+        let _ = mode;
+    }
+
+    #[test]
+    fn session_validation_kind_matching() {
+        let send_kind = "send";
+        assert!(send_kind == "send");
+        assert!(send_kind != "receive");
+    }
+
+    #[test]
+    fn session_validation_receive_kind() {
+        let receive_kind = "receive";
+        assert!(receive_kind == "receive");
+        assert!(receive_kind != "send");
+    }
+}

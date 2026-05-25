@@ -1,7 +1,4 @@
 <script lang="ts">
-  import { useEditor, EditorContent } from '@tiptap/core';
-  import StarterKit from '@tiptap/starter-kit';
-  import Link from '@tiptap/extension-link';
   import * as Icons from 'lucide-svelte';
 
   interface Props {
@@ -12,87 +9,100 @@
 
   let { content = '', onChange, placeholder = 'Start typing...' }: Props = $props();
 
-  let editor = $state<any>(null);
   let isFocused = $state(false);
+  let editorContent = $state(content);
+  let editorElement: HTMLDivElement | undefined;
 
   $effect(() => {
-    if (!editor) {
-      editor = useEditor({
-        extensions: [
-          StarterKit,
-          Link.configure({
-            openOnClick: false,
-            autolink: true,
-          }),
-        ],
-        content,
-        onUpdate: ({ editor }) => {
-          const html = editor.getHTML();
-          onChange?.(html);
-        },
-      });
-    }
-
-    return () => {
-      if (editor) {
-        editor.destroy();
-      }
-    };
+    editorContent = content;
   });
 
+  function handleInput(e: Event) {
+    if (editorElement) {
+      editorContent = editorElement.textContent || '';
+      onChange?.(editorContent);
+    }
+  }
+
+  function handlePaste(e: ClipboardEvent) {
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain') || '';
+    if (document.execCommand) {
+      document.execCommand('insertText', false, text);
+    }
+  }
+
+  function wrapSelection(before: string, after: string = before) {
+    const selection = window.getSelection();
+    if (!selection || selection.toString() === '') return;
+
+    if (editorElement && document.execCommand) {
+      editorElement.focus();
+      const text = selection.toString();
+      document.execCommand('insertText', false, before + text + after);
+    }
+  }
+
   function toggleBold() {
-    editor?.chain().focus().toggleBold().run();
+    if (document.execCommand) {
+      document.execCommand('bold', false);
+      editorElement?.focus();
+    }
   }
 
   function toggleItalic() {
-    editor?.chain().focus().toggleItalic().run();
+    if (document.execCommand) {
+      document.execCommand('italic', false);
+      editorElement?.focus();
+    }
   }
 
   function toggleUnderline() {
-    editor?.chain().focus().toggleUnderline().run();
+    if (document.execCommand) {
+      document.execCommand('underline', false);
+      editorElement?.focus();
+    }
   }
 
   function toggleCode() {
-    editor?.chain().focus().toggleCode().run();
+    wrapSelection('`');
   }
 
   function toggleCodeBlock() {
-    editor?.chain().focus().toggleCodeBlock().run();
+    wrapSelection('```\n', '\n```');
   }
 
   function toggleH1() {
-    editor?.chain().focus().toggleHeading({ level: 1 }).run();
+    wrapSelection('# ');
   }
 
   function toggleH2() {
-    editor?.chain().focus().toggleHeading({ level: 2 }).run();
+    wrapSelection('## ');
   }
 
   function toggleH3() {
-    editor?.chain().focus().toggleHeading({ level: 3 }).run();
+    wrapSelection('### ');
   }
 
   function toggleBulletList() {
-    editor?.chain().focus().toggleBulletList().run();
+    wrapSelection('- ');
   }
 
   function toggleOrderedList() {
-    editor?.chain().focus().toggleOrderedList().run();
+    wrapSelection('1. ');
   }
 
   function toggleBlockquote() {
-    editor?.chain().focus().toggleBlockquote().run();
+    wrapSelection('> ');
   }
 
   function insertLink() {
     const url = prompt('Enter URL:');
     if (url) {
-      editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+      const selection = window.getSelection();
+      const text = selection?.toString() || url;
+      wrapSelection('[' + text + '](' + url + ')');
     }
-  }
-
-  function insertTable() {
-    editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   }
 
   function handleEditorFocus() {
@@ -110,32 +120,28 @@
       <button
         class="toolbar-btn"
         title="Bold (Ctrl+B)"
-        on:click={toggleBold}
-        class:active={editor?.isActive('bold')}
+        onclick={toggleBold}
       >
         <Icons.Bold size={16} />
       </button>
       <button
         class="toolbar-btn"
         title="Italic (Ctrl+I)"
-        on:click={toggleItalic}
-        class:active={editor?.isActive('italic')}
+        onclick={toggleItalic}
       >
         <Icons.Italic size={16} />
       </button>
       <button
         class="toolbar-btn"
         title="Underline (Ctrl+U)"
-        on:click={toggleUnderline}
-        class:active={editor?.isActive('underline')}
+        onclick={toggleUnderline}
       >
         <Icons.Underline size={16} />
       </button>
       <button
         class="toolbar-btn"
         title="Code"
-        on:click={toggleCode}
-        class:active={editor?.isActive('code')}
+        onclick={toggleCode}
       >
         <Icons.Code2 size={16} />
       </button>
@@ -145,24 +151,21 @@
       <button
         class="toolbar-btn"
         title="Heading 1"
-        on:click={toggleH1}
-        class:active={editor?.isActive('heading', { level: 1 })}
+        onclick={toggleH1}
       >
         <span style="font-weight: bold;">H1</span>
       </button>
       <button
         class="toolbar-btn"
         title="Heading 2"
-        on:click={toggleH2}
-        class:active={editor?.isActive('heading', { level: 2 })}
+        onclick={toggleH2}
       >
         <span style="font-weight: bold;">H2</span>
       </button>
       <button
         class="toolbar-btn"
         title="Heading 3"
-        on:click={toggleH3}
-        class:active={editor?.isActive('heading', { level: 3 })}
+        onclick={toggleH3}
       >
         <span style="font-weight: bold;">H3</span>
       </button>
@@ -172,24 +175,21 @@
       <button
         class="toolbar-btn"
         title="Bullet List"
-        on:click={toggleBulletList}
-        class:active={editor?.isActive('bulletList')}
+        onclick={toggleBulletList}
       >
         <Icons.List size={16} />
       </button>
       <button
         class="toolbar-btn"
         title="Ordered List"
-        on:click={toggleOrderedList}
-        class:active={editor?.isActive('orderedList')}
+        onclick={toggleOrderedList}
       >
         <Icons.ListOrdered size={16} />
       </button>
       <button
         class="toolbar-btn"
         title="Code Block"
-        on:click={toggleCodeBlock}
-        class:active={editor?.isActive('codeBlock')}
+        onclick={toggleCodeBlock}
       >
         <Icons.Brackets size={16} />
       </button>
@@ -199,23 +199,31 @@
       <button
         class="toolbar-btn"
         title="Blockquote"
-        on:click={toggleBlockquote}
-        class:active={editor?.isActive('blockquote')}
+        onclick={toggleBlockquote}
       >
-        <Icons.Quote2 size={16} />
+        <Icons.Quote size={16} />
       </button>
-      <button class="toolbar-btn" title="Link" on:click={insertLink}>
+      <button class="toolbar-btn" title="Link" onclick={insertLink}>
         <Icons.Link2 size={16} />
       </button>
     </div>
   </div>
 
   <div class="editor-container" class:focused={isFocused}>
-    <EditorContent
-      editor={editor}
-      on:focus={handleEditorFocus}
-      on:blur={handleEditorBlur}
-    />
+    <div
+      bind:this={editorElement}
+      class="editor-content"
+      contenteditable="true"
+      onfocus={handleEditorFocus}
+      onblur={handleEditorBlur}
+      oninput={handleInput}
+      onpaste={handlePaste}
+      role="textbox"
+      aria-label="Note editor"
+      aria-placeholder={placeholder}
+    >
+      {editorContent}
+    </div>
   </div>
 </div>
 
@@ -273,100 +281,24 @@
     color: var(--text);
   }
 
-  .toolbar-btn.active {
-    background: var(--blue);
-    color: white;
-    border-color: var(--blue);
-  }
-
   .editor-container {
     flex: 1;
     overflow-y: auto;
     padding: var(--s-4);
   }
 
-  .editor-container :global(.ProseMirror) {
+  .editor-content {
     outline: none;
     min-height: 300px;
-  }
-
-  .editor-container :global(.ProseMirror p) {
-    margin: 0 0 1em 0;
     line-height: 1.6;
+    color: var(--text);
+    word-wrap: break-word;
   }
 
-  .editor-container :global(.ProseMirror h1) {
-    font-size: 2em;
-    font-weight: 700;
-    margin: 0.5em 0;
-  }
-
-  .editor-container :global(.ProseMirror h2) {
-    font-size: 1.5em;
-    font-weight: 600;
-    margin: 0.4em 0;
-  }
-
-  .editor-container :global(.ProseMirror h3) {
-    font-size: 1.25em;
-    font-weight: 600;
-    margin: 0.3em 0;
-  }
-
-  .editor-container :global(.ProseMirror ul) {
-    margin: 1em 0;
-    padding-left: 2em;
-  }
-
-  .editor-container :global(.ProseMirror ol) {
-    margin: 1em 0;
-    padding-left: 2em;
-  }
-
-  .editor-container :global(.ProseMirror li) {
-    margin: 0.25em 0;
-  }
-
-  .editor-container :global(.ProseMirror code) {
-    background: var(--surface-2);
-    padding: 0.1em 0.3em;
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 0.9em;
-    color: var(--orange);
-  }
-
-  .editor-container :global(.ProseMirror pre) {
-    background: var(--surface-2);
-    border-radius: var(--r-2);
-    padding: var(--s-3);
-    overflow-x: auto;
-    margin: 1em 0;
-  }
-
-  .editor-container :global(.ProseMirror pre code) {
-    background: none;
-    padding: 0;
-    color: inherit;
-  }
-
-  .editor-container :global(.ProseMirror blockquote) {
-    border-left: 4px solid var(--blue);
-    padding-left: 1em;
-    margin: 1em 0;
-    color: var(--text-2);
-    font-style: italic;
-  }
-
-  .editor-container :global(.ProseMirror a) {
-    color: var(--blue);
-    text-decoration: underline;
-    cursor: pointer;
-  }
-
-  .editor-container :global(.ProseMirror a:hover) {
-    color: var(--blue);
-    text-decoration-color: transparent;
+  .editor-content:empty::before {
+    content: attr(aria-placeholder);
+    color: var(--text-3);
+    pointer-events: none;
   }
 
   .editor-container.focused {

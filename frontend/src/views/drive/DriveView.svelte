@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import { api } from '$lib/api';
-  import { visibleFiles, folders, isLoading, loadFiles, setFolder } from '$lib/stores/drive';
+  import { visibleFiles, folders, isLoading, loadFiles, setFolder, hasMore, loadMoreFiles } from '$lib/stores/drive';
   import { error } from '$lib/stores/notifications';
   import FolderTree from '$lib/components/FolderTree.svelte';
   import FileGrid from '$lib/components/FileGrid.svelte';
@@ -18,6 +18,7 @@
   let shareFile: any = $state(null);
   let fileInput: HTMLInputElement;
   let filterQuery = $state('');
+  let currentTab = $state<'files' | 'trash'>('files');
   let viewMode: 'list' | 'grid' = $state(
     (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'grid') || 'grid',
   );
@@ -25,6 +26,8 @@
   let searchResults: any[] = $state([]);
   let isSearching = $state(false);
   let searchTimeout: NodeJS.Timeout | null = null;
+  let trashFiles: any[] = $state([]);
+  let trashLoading = $state(false);
 
   function toggleViewMode(mode: 'list' | 'grid') {
     viewMode = mode;
@@ -133,7 +136,57 @@
     void handlePreview(file);
   }
 
+  async function loadTrash() {
+    trashLoading = true;
+    try {
+      const data = await api.listTrash();
+      trashFiles = data.files || [];
+    } catch (err) {
+      error(err instanceof Error ? err.message : 'Failed to load trash');
+    } finally {
+      trashLoading = false;
+    }
+  }
+
+  async function handleRestoreFile(file: any) {
+    try {
+      await api.restoreFile(file.id);
+      trashFiles = trashFiles.filter(f => f.id !== file.id);
+      await loadFiles();
+    } catch (err) {
+      error(err instanceof Error ? err.message : 'Failed to restore file');
+    }
+  }
+
+  async function handlePermanentDelete(file: any) {
+    if (confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) {
+      try {
+        await api.permanentDeleteFile(file.id);
+        trashFiles = trashFiles.filter(f => f.id !== file.id);
+      } catch (err) {
+        error(err instanceof Error ? err.message : 'Failed to delete file');
+      }
+    }
+  }
+
+  async function handleEmptyTrash() {
+    if (confirm('Permanently delete all files in trash? This cannot be undone.')) {
+      try {
+        await api.emptyTrash();
+        trashFiles = [];
+      } catch (err) {
+        error(err instanceof Error ? err.message : 'Failed to empty trash');
+      }
+    }
+  }
+
   function getContextItems(file: any) {
+    if (currentTab === 'trash') {
+      return [
+        { label: 'Restore', action: () => handleRestoreFile(file) },
+        { label: 'Delete permanently', action: () => handlePermanentDelete(file), danger: true },
+      ];
+    }
     return [
       { label: 'Preview', action: () => handlePreview(file) },
       { label: 'Download', action: () => handleDownload(file) },
@@ -153,58 +206,214 @@
   <div class="main-content">
     <div class="header">
       <div>
-        <h2>Cloud Drive</h2>
-        <p class="subtitle">Organize, share, and access your files</p>
+        <h2>{currentTab === 'files' ? 'Cloud Drive' : 'Trash'}</h2>
+        <p class="subtitle">{currentTab === 'files' ? 'Organize, share, and access your files' : 'Recently deleted files'}</p>
       </div>
-      <button type="button" class="upload-btn" onclick={() => fileInput?.click()}>
-        <Icons.Upload size={16} />
-        Upload
-      </button>
-      <input
-        bind:this={fileInput}
-        type="file"
-        multiple
-        onchange={handleUpload}
-        style="display: none"
-      />
+      {#if currentTab === 'files'}
+        <button type="button" class="upload-btn" onclick={() => fileInput?.click()}>
+          <Icons.Upload size={16} />
+          Upload
+        </button>
+        <input
+          bind:this={fileInput}
+          type="file"
+          multiple
+          onchange={handleUpload}
+          style="display: none"
+        />
+      {:else if trashFiles.length > 0}
+        <button type="button" class="upload-btn danger" onclick={handleEmptyTrash}>
+          <Icons.Trash2 size={16} />
+          Empty Trash
+        </button>
+      {/if}
     </div>
 
-    <div class="search-bar">
-      <Icons.Search size={16} />
-      <input
-        type="text"
-        placeholder="Search files... (server-side)"
-        value={filterQuery}
-        oninput={handleSearchInput}
-      />
-      {#if isSearching}
-        <div style="color: var(--muted); font-size: 12px;">Searching...</div>
-      {/if}
-      <div style="flex: 1"></div>
-      <div class="view-toggle">
-        <button
-          type="button"
-          class="toggle-btn"
-          class:active={viewMode === 'grid'}
-          onclick={() => toggleViewMode('grid')}
-          title="Grid view"
-        >
-          <Icons.Grid2x2 size={16} />
-        </button>
-        <button
-          type="button"
-          class="toggle-btn"
-          class:active={viewMode === 'list'}
-          onclick={() => toggleViewMode('list')}
-          title="List view"
-        >
-          <Icons.List size={16} />
-        </button>
-      </div>
+    <div class="tabs">
+      <button
+        class="tab-btn"
+        class:active={currentTab === 'files'}
+        onclick={() => {
+          currentTab = 'files';
+          filterQuery = '';
+          searchResults = [];
+        }}
+      >
+        <Icons.HardDrive size={16} />
+        My Files
+      </button>
+      <button
+        class="tab-btn"
+        class:active={currentTab === 'trash'}
+        onclick={() => {
+          currentTab = 'trash';
+          if (trashFiles.length === 0) loadTrash();
+        }}
+      >
+        <Icons.Trash2 size={16} />
+        Trash
+      </button>
     </div>
+
+    {#if currentTab === 'files'}
+      <div class="search-bar">
+        <Icons.Search size={16} />
+        <input
+          type="text"
+          placeholder="Search files... (server-side)"
+          value={filterQuery}
+          oninput={handleSearchInput}
+        />
+        {#if isSearching}
+          <div style="color: var(--muted); font-size: 12px;">Searching...</div>
+        {/if}
+        <div style="flex: 1"></div>
+        <div class="view-toggle">
+          <button
+            type="button"
+            class="toggle-btn"
+            class:active={viewMode === 'grid'}
+            onclick={() => toggleViewMode('grid')}
+            title="Grid view"
+          >
+            <Icons.Grid2x2 size={16} />
+          </button>
+          <button
+            type="button"
+            class="toggle-btn"
+            class:active={viewMode === 'list'}
+            onclick={() => toggleViewMode('list')}
+            title="List view"
+          >
+            <Icons.List size={16} />
+          </button>
+        </div>
+      </div>
+    {/if}
 
     <div class="files-container">
-      {#if $isLoading}
+      {#if currentTab === 'trash'}
+        {#if trashLoading}
+          <div class="loading">
+            <div class="spinner"></div>
+            Loading trash...
+          </div>
+        {:else if trashFiles.length === 0}
+          <div class="empty">
+            <Icons.Trash2 size={48} />
+            <h3>Trash is empty</h3>
+            <p>Deleted files will appear here</p>
+          </div>
+        {:else if viewMode === 'list'}
+          <div class="files-list">
+            {#each trashFiles as file (file.id)}
+              <div
+                class="file-row"
+                oncontextmenu={(e) => showContextMenu(e, file)}
+                onkeydown={(e) => handleFileKeydown(e, file)}
+                role="button"
+                tabindex="0"
+              >
+                <div class="file-details">
+                  <div class="file-icon">
+                    <FileIcon mimeType={file.mime_type} name={file.name} size={20} />
+                  </div>
+                  <div class="file-info">
+                    <div class="file-name">{file.name}</div>
+                    <div class="file-meta">
+                      {(file.size_bytes / 1024 / 1024).toFixed(1)} MB • {new Date((file.updated_at || file.uploaded_at) * 1000).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="file-actions">
+                  <button
+                    type="button"
+                    class="action-btn"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      void handleRestoreFile(file);
+                    }}
+                    title="Restore"
+                  >
+                    <Icons.RotateCcw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn danger"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      void handlePermanentDelete(file);
+                    }}
+                    title="Delete permanently"
+                  >
+                    <Icons.Trash size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn"
+                    onclick={(e) => showContextMenu(e, file)}
+                    title="More"
+                  >
+                    <Icons.MoreVertical size={14} />
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="files-grid">
+            {#each trashFiles as file (file.id)}
+              <div
+                class="file-card"
+                oncontextmenu={(e) => showContextMenu(e, file)}
+                onkeydown={(e) => handleFileKeydown(e, file)}
+                role="button"
+                tabindex="0"
+              >
+                <div class="file-header">
+                  <FileIcon mimeType={file.mime_type} name={file.name} size={24} />
+                  <button
+                    type="button"
+                    class="card-action-btn"
+                    onclick={(e) => showContextMenu(e, file)}
+                  >
+                    <Icons.MoreVertical size={16} />
+                  </button>
+                </div>
+                <div class="file-title">{file.name}</div>
+                <div class="file-footer">
+                  <span class="file-size">{(file.size_bytes / 1024 / 1024).toFixed(1)} MB</span>
+                  <div class="file-actions-compact">
+                    <button
+                      type="button"
+                      class="action-btn"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        void handleRestoreFile(file);
+                      }}
+                      title="Restore"
+                    >
+                      <Icons.RotateCcw size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      class="action-btn danger"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        void handlePermanentDelete(file);
+                      }}
+                      title="Delete permanently"
+                    >
+                      <Icons.Trash size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {:else if $isLoading}
         <div class="loading">
           <div class="spinner"></div>
           Loading files...
@@ -298,6 +507,24 @@
           {/each}
         </div>
       {/if}
+      {#if currentTab === 'files' && $hasMore}
+        <div class="load-more-container">
+          <button
+            type="button"
+            class="load-more-btn"
+            onclick={() => loadMoreFiles()}
+            disabled={$isLoading}
+          >
+            {#if $isLoading}
+              <div class="spinner-small"></div>
+              Loading...
+            {:else}
+              <Icons.ChevronDown size={16} />
+              Load More Files
+            {/if}
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -382,6 +609,41 @@
     border: 1px solid var(--border);
     background: var(--blue);
     color: #0a1228;
+  }
+
+  .upload-btn.danger {
+    background: var(--red);
+    color: white;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .tab-btn:hover {
+    color: var(--text);
+  }
+
+  .tab-btn.active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
     font-weight: 500;
     cursor: pointer;
     transition: opacity 0.15s;
@@ -578,6 +840,14 @@
     color: var(--text);
   }
 
+  .action-btn.danger {
+    color: var(--red);
+  }
+
+  .action-btn.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
   .files-grid {
     flex: 1;
     overflow: auto;
@@ -644,5 +914,46 @@
     position: absolute;
     top: 8px;
     right: 8px;
+  }
+
+  .load-more-container {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .load-more-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .load-more-btn:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .spinner-small {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--surface-3);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 </style>

@@ -246,7 +246,7 @@
           bind:value={titleDraft}
           oninput={scheduleSave}
           onchange={() => handleSaveNote()}
-          on:blur={handleFieldBlur}
+          onblur={handleFieldBlur}
           class="editor-title"
           placeholder="Note title..."
         />

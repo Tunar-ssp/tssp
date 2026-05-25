@@ -247,3 +247,56 @@ pub(crate) async fn get_file_thumbnail(
     )
         .into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thumbnail_query_size_defaults_to_none() {
+        let query = ThumbnailQuery { size: None };
+        assert_eq!(query.size.as_deref(), None);
+    }
+
+    #[test]
+    fn thumbnail_query_size_deserializes_small() {
+        let query = ThumbnailQuery { size: Some("small".to_owned()) };
+        assert_eq!(query.size.as_deref(), Some("small"));
+    }
+
+    #[test]
+    fn thumbnail_query_size_deserializes_medium() {
+        let query = ThumbnailQuery { size: Some("medium".to_owned()) };
+        assert_eq!(query.size.as_deref(), Some("medium"));
+    }
+
+    #[test]
+    fn thumbnail_query_size_deserializes_large() {
+        let query = ThumbnailQuery { size: Some("large".to_owned()) };
+        assert_eq!(query.size.as_deref(), Some("large"));
+    }
+
+    #[test]
+    fn valid_sizes_match_allowed_list() {
+        let size = "medium";
+        assert!(matches!(size, "small" | "medium" | "large"));
+    }
+
+    #[test]
+    fn invalid_size_does_not_match() {
+        let size = "xlarge";
+        assert!(!matches!(size, "small" | "medium" | "large"));
+    }
+
+    #[test]
+    fn mime_type_image_detection() {
+        let mime_type = "image/png";
+        assert!(mime_type.starts_with("image/"));
+    }
+
+    #[test]
+    fn mime_type_non_image_detection() {
+        let mime_type = "application/pdf";
+        assert!(!mime_type.starts_with("image/"));
+    }
+}

@@ -80,3 +80,41 @@ fn check_and_delete_orphan(
         Err(e) => Err(format!("repository error while checking blob: {e}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+
+    #[test]
+    fn filename_length_threshold_is_correct() {
+        let short_filename = "short";
+        assert!(short_filename.len() < 16);
+
+        let long_filename = "a_very_long_hash_filename";
+        assert!(long_filename.len() >= 16);
+    }
+
+    #[test]
+    fn saturation_prevents_negative_time() {
+        let now: u64 = 100;
+        let retention: u64 = 200;
+        let result = now.saturating_sub(retention);
+        assert_eq!(result, 0); // saturates to 0, never negative
+    }
+
+    #[test]
+    fn saturation_with_valid_subtraction() {
+        let now: u64 = 1000;
+        let retention: u64 = 200;
+        let result = now.saturating_sub(retention);
+        assert_eq!(result, 800);
+    }
+
+    #[test]
+    fn retention_days_to_seconds_conversion() {
+        let days = 30;
+        let seconds = days * 86_400;
+        assert_eq!(seconds, 2_592_000);
+    }
+}

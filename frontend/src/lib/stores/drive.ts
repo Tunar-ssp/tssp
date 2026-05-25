@@ -6,6 +6,8 @@ export const selectedIds = writable<Set<string>>(new Set());
 export const currentFolder = writable<string>('');
 export const isLoading = writable(false);
 export const folders = writable<string[]>([]);
+export const hasMore = writable(false);
+export const nextCursor = writable<string | undefined>(undefined);
 
 export const selectedCount = derived(selectedIds, ($ids) => $ids.size);
 
@@ -19,8 +21,10 @@ export const visibleFiles = derived(
 export async function loadFiles(folder?: string) {
   isLoading.set(true);
   try {
-    const data = await api.listFiles(500);
+    const data = await api.listFiles(100);
     files.set(data.files || []);
+    hasMore.set(!!data.nextCursor);
+    nextCursor.set(data.nextCursor);
 
     // Extract unique folders
     const folderSet = new Set(data.files?.map(f => f.folder_path || '') || []);
@@ -29,6 +33,23 @@ export async function loadFiles(folder?: string) {
     if (folder !== undefined) {
       currentFolder.set(folder);
     }
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+export async function loadMoreFiles() {
+  try {
+    const cursor = (await new Promise(resolve => {
+      nextCursor.subscribe(resolve)();
+    })) as string | undefined;
+    if (!cursor) return;
+
+    isLoading.set(true);
+    const data = await api.listFiles(100, cursor);
+    files.update(existing => [...existing, ...(data.files || [])]);
+    hasMore.set(!!data.nextCursor);
+    nextCursor.set(data.nextCursor);
   } finally {
     isLoading.set(false);
   }

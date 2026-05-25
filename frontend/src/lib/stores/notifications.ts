@@ -34,18 +34,26 @@ export function removeNotification(id: string) {
   notifications.update(n => n.filter(notif => notif.id !== id));
 }
 
-export function success(title: string, message: string) {
-  return addNotification('success', title, message);
+export function success(titleOrMessage: string, message?: string) {
+  const title = message ? titleOrMessage : 'Success';
+  const msg = message || titleOrMessage;
+  return addNotification('success', title, msg);
 }
 
-export function error(title: string, message: string) {
-  return addNotification('error', title, message, 5000);
+export function error(titleOrMessage: string, message?: string) {
+  const title = message ? titleOrMessage : 'Error';
+  const msg = message || titleOrMessage;
+  return addNotification('error', title, msg, 5000);
 }
 
-export function info(title: string, message: string) {
-  return addNotification('info', title, message);
+export function info(titleOrMessage: string, message?: string) {
+  const title = message ? titleOrMessage : 'Info';
+  const msg = message || titleOrMessage;
+  return addNotification('info', title, msg);
 }
 
-export function warning(title: string, message: string) {
-  return addNotification('warning', title, message, 5000);
+export function warning(titleOrMessage: string, message?: string) {
+  const title = message ? titleOrMessage : 'Warning';
+  const msg = message || titleOrMessage;
+  return addNotification('warning', title, msg, 5000);
 }
