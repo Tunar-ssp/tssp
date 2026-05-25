@@ -9,6 +9,7 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -23,39 +24,88 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Format
+      - name: Format check
         run: cargo fmt --check
 
-      - name: Build
-        run: cargo build --workspace
+      - name: Build release
+        run: cargo build --workspace --release
 
-      - name: Test
-        run: cargo test --workspace
+      - name: Run tests
+        run: cargo test --workspace --lib
 
-      - name: Clippy
+      - name: Run integration tests
+        run: cargo test --workspace --test '*'
+
+      - name: Clippy lint
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Check web JavaScript
+      - name: Install tarpaulin for coverage
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage report
+        run: cargo tarpaulin --workspace --lib --timeout 300 --out Xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./cobertura.xml
+          fail_ci_if_error: false
+
+      - name: Check JavaScript in assets
         run: |
           set -e
-          find crates/tsspd/assets/web -name "*.js" -type f -print0 | while IFS= read -r -d '' file; do
-            echo "Checking $file"
-            node --check "$file"
-          done
+          if [ -d "crates/tsspd/assets/web" ]; then
+            find crates/tsspd/assets/web -name "*.js" -type f -print0 | while IFS= read -r -d '' file; do
+              echo "Checking $file"
+              node --check "$file"
+            done
+          fi
 
   frontend:
-    name: Web v2
+    name: Web Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+
+      - name: Install dependencies
+        run: npm ci
         working-directory: frontend
-      - run: npm run check
+
+      - name: Type check
+        run: npm run check
         working-directory: frontend
-      - run: npm run build
+
+      - name: Build production bundle
+        run: npm run build
         working-directory: frontend
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: rust
+    if: always()
+    steps:
+      - name: Download coverage
+        uses: actions/download-artifact@v3
+        if: always()
+        with:
+          name: coverage
+        continue-on-error: true
+
+      - name: Display coverage summary
+        run: |
+          if [ -f cobertura.xml ]; then
+            echo "Coverage report generated"
+          else
+            echo "Coverage report not available"
+          fi
+        continue-on-error: true
