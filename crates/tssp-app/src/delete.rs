@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::unreadable_literal, clippy::needless_raw_string_hashes)]
 //! Delete use case orchestration.
 //!
 //! File deletion is metadata-first: once the index record is gone the file is no
@@ -77,7 +76,6 @@ pub enum DeleteFileError {
 }
 
 /// Coordinates restoration of soft-deleted files.
-#[allow(dead_code)]
 pub struct RestoreFileService<R> {
     repository: R,
 }
@@ -85,7 +83,6 @@ pub struct RestoreFileService<R> {
 impl<R> RestoreFileService<R> {
     /// Creates a restore service from a repository.
     #[must_use]
-    #[allow(dead_code)]
     pub const fn new(repository: R) -> Self {
         Self { repository }
     }
@@ -100,7 +97,6 @@ where
     /// # Errors
     ///
     /// Returns [`RestoreFileError`] when restoration fails.
-    #[allow(dead_code)]
     pub fn restore(&self, id: &FileId) -> Result<RestoreFileResult, RestoreFileError> {
         match self.repository.restore_file(id)? {
             Some(_) => Ok(RestoreFileResult { existed: true }),
@@ -111,7 +107,6 @@ where
 
 /// Successful restore outcome.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
 pub struct RestoreFileResult {
     /// True when a soft-deleted file record was restored.
     pub existed: bool,
@@ -119,7 +114,6 @@ pub struct RestoreFileResult {
 
 /// Restore use-case failure.
 #[derive(Debug, Error)]
-#[allow(dead_code)]
 pub enum RestoreFileError {
     /// Metadata restore transaction failed.
     #[error(transparent)]
@@ -127,7 +121,6 @@ pub enum RestoreFileError {
 }
 
 /// Coordinates background purging of deleted files after retention period.
-#[allow(dead_code)]
 pub struct PurgeDeletedFilesService<B, R> {
     blob_store: B,
     repository: R,
@@ -136,7 +129,6 @@ pub struct PurgeDeletedFilesService<B, R> {
 impl<B, R> PurgeDeletedFilesService<B, R> {
     /// Creates a purge service from infrastructure ports.
     #[must_use]
-    #[allow(dead_code)]
     pub const fn new(blob_store: B, repository: R) -> Self {
         Self {
             blob_store,
@@ -157,7 +149,6 @@ where
     /// # Errors
     ///
     /// Returns [`PurgeError`] when metadata or blob operations fail.
-    #[allow(dead_code)]
     pub fn purge(&self, older_than: tssp_domain::UnixTimestamp) -> Result<u64, PurgeError> {
         let deleted_files = self.repository.list_deleted_files(older_than)?;
         let mut purged_count = 0;
@@ -184,7 +175,6 @@ where
 
 /// Purge use-case failure.
 #[derive(Debug, Error)]
-#[allow(dead_code)]
 pub enum PurgeError {
     /// Metadata operation failed.
     #[error(transparent)]
@@ -196,6 +186,7 @@ pub enum PurgeError {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use std::cell::RefCell;
     use std::io::Read;

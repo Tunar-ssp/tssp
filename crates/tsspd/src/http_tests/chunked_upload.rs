@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::unreadable_literal, clippy::needless_raw_string_hashes)]
 //! Chunked upload system tests covering security, reliability, and correctness.
 
 #![allow(unused_imports)]
