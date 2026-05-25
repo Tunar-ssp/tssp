@@ -10,6 +10,7 @@
     size?: 'sm' | 'md' | 'lg';
     icon?: any;
     iconRight?: any;
+    children?: import("svelte").Snippet;
     disabled?: boolean;
     onClick?: () => void;
     onclick?: (event: MouseEvent) => void;

@@ -1,73 +1,111 @@
-//! Logical folder rename/move/delete.
-
-const MAX_FOLDER_PATH_BYTES: usize = 1024;
-
-/// Normalizes a folder path for storage (no leading/trailing slashes).
-#[must_use]
-pub fn normalize_folder_path(value: &str) -> String {
-    value.trim().trim_matches('/').replace('\\', "/")
-}
-
-/// Validates a normalized folder path.
-///
-/// Returns `Err` with a human-readable message when the path contains null bytes,
-/// `..` traversal components, or exceeds the length limit.
-///
-/// # Errors
-///
-/// Returns `Err(&'static str)` when the path fails validation.
-pub fn validate_folder_path(path: &str) -> Result<(), &'static str> {
-    if path.contains('\0') {
-        return Err("folder path must not contain null bytes");
-    }
-    if path.len() > MAX_FOLDER_PATH_BYTES {
-        return Err("folder path is too long (max 1024 bytes)");
-    }
-    // Reject any component that is exactly ".." after splitting on "/"
-    for component in path.split('/') {
-        if component == ".." {
-            return Err("folder path must not contain '..' components");
-        }
-    }
-    Ok(())
-}
+//! Folder management delivery.
 
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use tssp_app::{FolderError, FolderService};
+use tssp_ports::FileRepository;
 
 use crate::auth::AuthContext;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
+/// Handles folder operations through the application layer.
+pub trait FolderProvider: Send + Sync {
+    /// Renames or moves a virtual folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpFolderError`] when the path is invalid or the operation fails.
+    fn move_folder(&self, from: &str, to: &str) -> Result<u64, HttpFolderError>;
+    /// Moves all files out of a virtual folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpFolderError`] when the path is invalid or the operation fails.
+    fn delete_folder(&self, path: &str) -> Result<u64, HttpFolderError>;
+    /// Lists virtual folders and their file counts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpFolderError`] when the query fails.
+    fn list_folders(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, HttpFolderError>;
+}
+
+/// Folder provider backed by the core application folder service.
+pub struct ApplicationFolderProvider<R> {
+    service: FolderService<R>,
+}
+
+impl<R> ApplicationFolderProvider<R> {
+    /// Creates a new folder provider.
+    pub const fn new(service: FolderService<R>) -> Self {
+        Self { service }
+    }
+}
+
+impl<R> FolderProvider for ApplicationFolderProvider<R>
+where
+    R: FileRepository + Send + Sync,
+{
+    fn move_folder(&self, from: &str, to: &str) -> Result<u64, HttpFolderError> {
+        self.service.move_folder(from, to).map_err(map_folder_error)
+    }
+
+    fn delete_folder(&self, path: &str) -> Result<u64, HttpFolderError> {
+        self.service.delete_folder(path).map_err(map_folder_error)
+    }
+
+    fn list_folders(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, HttpFolderError> {
+        self.service
+            .list_folders(owner_id)
+            .map_err(map_folder_error)
+    }
+}
+
+/// Request body for moving a virtual folder.
 #[derive(Debug, Deserialize)]
 pub struct FolderMoveBody {
+    /// Original folder path.
     pub from: String,
+    /// New folder path.
     pub to: String,
 }
 
+/// Request body for creating a new virtual folder.
 #[derive(Debug, Deserialize)]
 pub struct FolderCreateBody {
+    /// Virtual folder path.
     pub path: String,
 }
 
+/// Request body for deleting a virtual folder.
 #[derive(Debug, Deserialize)]
 pub struct FolderDeleteBody {
+    /// Virtual folder path to remove.
     pub path: String,
 }
 
+/// Logical folder entry with file count.
 #[derive(Debug, Serialize)]
 pub struct FolderEntry {
+    /// Normalized folder path.
     pub path: String,
+    /// Number of files within the folder.
     pub file_count: u64,
 }
 
 /// `POST /api/v1/folders` — create a new folder.
 pub async fn create_folder(auth: AuthContext, Json(body): Json<FolderCreateBody>) -> Response {
-    // Folders are namespaced by the user's files, so all authenticated users can create folders
     let _ = auth;
-    let path = normalize_folder_path(&body.path);
+    let path = tssp_app::normalize_folder_path(&body.path);
 
     if path.is_empty() {
         return (
@@ -82,7 +120,7 @@ pub async fn create_folder(auth: AuthContext, Json(body): Json<FolderCreateBody>
             .into_response();
     }
 
-    if let Err(message) = validate_folder_path(&path) {
+    if let Err(message) = tssp_app::validate_folder_path(&path) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -113,7 +151,7 @@ pub async fn list_folders(State(state): State<HttpState>, auth: AuthContext) -> 
         Some(&auth.user_id)
     };
 
-    match state.stats_provider.list_folder_counts(owner_id) {
+    match state.folder_provider.list_folders(owner_id) {
         Ok(folders) => {
             let entries: Vec<FolderEntry> = folders
                 .into_iter()
@@ -129,7 +167,7 @@ pub async fn list_folders(State(state): State<HttpState>, auth: AuthContext) -> 
             )
                 .into_response()
         }
-        Err(message) => internal(message),
+        Err(error) => error.response(),
     }
 }
 
@@ -143,36 +181,7 @@ pub async fn move_folder(
         return forbidden();
     }
 
-    let from = normalize_folder_path(&body.from);
-    let to = normalize_folder_path(&body.to);
-
-    if let Err(message) = validate_folder_path(&from) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "invalid_request",
-                    message: format!("invalid 'from' path: {message}"),
-                },
-            }),
-        )
-            .into_response();
-    }
-
-    if let Err(message) = validate_folder_path(&to) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "invalid_request",
-                    message: format!("invalid 'to' path: {message}"),
-                },
-            }),
-        )
-            .into_response();
-    }
-
-    match state.stats_provider.update_folder_path_prefix(&from, &to) {
+    match state.folder_provider.move_folder(&body.from, &body.to) {
         Ok(count) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -181,14 +190,11 @@ pub async fn move_folder(
             })),
         )
             .into_response(),
-        Err(message) => internal(message),
+        Err(error) => error.response(),
     }
 }
 
 /// `POST /api/v1/folders/delete` — move all files out of a folder (admin).
-///
-/// Files directly in `path` move to the bucket root. Nested paths under `path`
-/// are rewritten so their parent prefix is removed (e.g. `photos/2024` → `2024`).
 pub async fn delete_folder(
     State(state): State<HttpState>,
     auth: AuthContext,
@@ -198,34 +204,7 @@ pub async fn delete_folder(
         return forbidden();
     }
 
-    let path = normalize_folder_path(&body.path);
-    if path.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "invalid_request",
-                    message: "cannot delete the bucket root".to_owned(),
-                },
-            }),
-        )
-            .into_response();
-    }
-
-    if let Err(message) = validate_folder_path(&path) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "invalid_request",
-                    message: format!("invalid folder path: {message}"),
-                },
-            }),
-        )
-            .into_response();
-    }
-
-    match state.stats_provider.update_folder_path_prefix(&path, "") {
+    match state.folder_provider.delete_folder(&body.path) {
         Ok(count) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -234,55 +213,66 @@ pub async fn delete_folder(
             })),
         )
             .into_response(),
-        Err(message) => internal(message),
+        Err(error) => error.response(),
+    }
+}
+
+/// Errors returned by the folder provider mapped to HTTP.
+#[derive(Debug)]
+pub enum HttpFolderError {
+    /// Provided folder path was invalid.
+    InvalidPath(String),
+    /// Internal server error occurred.
+    Internal(String),
+    /// User does not have permission.
+    Forbidden,
+}
+
+impl HttpFolderError {
+    fn response(&self) -> Response {
+        match self {
+            Self::InvalidPath(message) => (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "invalid_request",
+                        message: message.clone(),
+                    },
+                }),
+            )
+                .into_response(),
+            Self::Internal(message) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "internal_error",
+                        message: message.clone(),
+                    },
+                }),
+            )
+                .into_response(),
+            Self::Forbidden => (
+                StatusCode::FORBIDDEN,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "forbidden",
+                        message: "admin role required".to_owned(),
+                    },
+                }),
+            )
+                .into_response(),
+        }
+    }
+}
+
+fn map_folder_error(error: FolderError) -> HttpFolderError {
+    match error {
+        FolderError::InvalidPath(message) => HttpFolderError::InvalidPath(message.to_owned()),
+        FolderError::Repository(error) => HttpFolderError::Internal(error.to_string()),
+        FolderError::Forbidden => HttpFolderError::Forbidden,
     }
 }
 
 fn forbidden() -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: "forbidden",
-                message: "admin role required".to_owned(),
-            },
-        }),
-    )
-        .into_response()
-}
-
-fn internal(message: String) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: "internal_error",
-                message,
-            },
-        }),
-    )
-        .into_response()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{normalize_folder_path, validate_folder_path};
-
-    #[test]
-    fn normalize_strips_slashes() {
-        assert_eq!(
-            normalize_folder_path("/photos/vacation/"),
-            "photos/vacation"
-        );
-    }
-
-    #[test]
-    fn validate_rejects_traversal() {
-        assert!(validate_folder_path("photos/../secret").is_err());
-    }
-
-    #[test]
-    fn validate_accepts_nested_paths() {
-        assert!(validate_folder_path("archive/2024/q1").is_ok());
-    }
+    HttpFolderError::Forbidden.response()
 }

@@ -9,6 +9,16 @@ export interface User {
   role: 'admin' | 'user';
 }
 
+export interface Device {
+  id: string;
+  name: string;
+  token: string;
+  fingerprint: string;
+  created_at: number;
+  last_used_at: number;
+  is_current: boolean;
+}
+
 export interface FileRecord {
   schema_version?: number;
   id: string;
@@ -133,6 +143,7 @@ export interface FileShareResponse {
 }
 
 export interface SearchResult {
+  url?: string;
   type: 'file' | 'note' | 'workspace';
   id: string;
   name?: string;
@@ -372,9 +383,17 @@ export const api = {
       corrupt_file_count: number;
       public_url?: string;
     }>('/status'),
-  search: (query: string, limit = 25) =>
+  searchNotes: (query: string) => Promise<{ notes: Note[] }>,
+  searchWorkspaces: (query: string) => Promise<{ workspaces: Workspace[] }>,
+  searchFiles: (query: string) => Promise<{ files: FileRecord[] }>,
+  getFileContent: (id: string) => Promise<string>,
+  getFileDownloadUrl: (id: string) => Promise<string>,
+  generateShareLink: (id: string) => Promise<{ url: string }>,
+  revokeShareLink: (id: string, linkId: string) => Promise<void>,
+  listShareLinks: (id: string) => Promise<{ links: { id: string }[] }>,
+  search: (query: string, limit?: number) =>
     request<{ schema_version: number; results: SearchResult[] }>(
-      `/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      `/search?q=${encodeURIComponent(query)}&limit=${limit || 25}`,
     ),
 
   // File download (returns blob)

@@ -644,6 +644,21 @@ pub async fn complete_upload(
         }
     };
 
+    // Verify assembled file size matches expected total size
+    if file_size.bytes() != session.total_size {
+        let _ = std::fs::remove_file(&assembled_path);
+        let _ = std::fs::remove_dir_all(&chunk_dir);
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "corrupt_upload",
+            &format!(
+                "assembled file size mismatch: expected {} bytes, got {} bytes",
+                session.total_size,
+                file_size.bytes()
+            ),
+        );
+    }
+
     let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
     let upload_request = HttpUploadRequest {
         filename: session.filename.clone(),

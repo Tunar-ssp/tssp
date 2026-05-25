@@ -6,6 +6,7 @@
 
 pub mod audit;
 mod delete;
+mod folders;
 mod notes;
 mod pins;
 mod sessions;
@@ -17,6 +18,7 @@ pub use delete::{
     DeleteFileError, DeleteFileResult, DeleteFileService, PurgeDeletedFilesService, PurgeError,
     RestoreFileError, RestoreFileService,
 };
+pub use folders::{normalize_folder_path, validate_folder_path, FolderError, FolderService};
 pub use notes::{CreateNoteRequest, NoteError, NoteService, UpdateNoteRequest};
 pub use pins::{PinError, PinService};
 pub use sessions::SessionService;

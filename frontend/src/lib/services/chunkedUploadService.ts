@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { uploadQueue } from '../stores/uploadQueue';
+import { uploadQueue, type UploadQueueItem } from '../stores/uploadQueue';
 
 const CHUNK_SIZE = 262_144; // 256 KB
 const MAX_RETRIES = 5;
@@ -132,7 +132,7 @@ async function uploadFile(
 
 export async function processUploadQueue(): Promise<void> {
   // Load current queue state
-  let queueState: any = null;
+  let queueState: { items: UploadQueueItem[] } = { items: [] };
   uploadQueue.subscribe((state) => {
     queueState = state;
   })();
@@ -160,7 +160,7 @@ export async function processUploadQueue(): Promise<void> {
 }
 
 export async function retryFailedUploads(): Promise<void> {
-  let queueState: any = null;
+  let queueState: { items: UploadQueueItem[] } = { items: [] };
   uploadQueue.subscribe((state) => {
     queueState = state;
   })();

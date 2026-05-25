@@ -11,6 +11,8 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_ports::Clock;
 
+use tssp_app::{log_audit_event, AuditAction};
+
 use crate::auth::AuthContext;
 use crate::workspaces::{WorkspaceDocumentSummary, WorkspaceError};
 use crate::{ErrorBody, ErrorResponse, HttpState};
@@ -223,7 +225,7 @@ pub(crate) async fn admin_editor_list_documents(
 pub(crate) async fn admin_editor_create_document(
     State(state): State<HttpState>,
     auth: AuthContext,
-    Path(id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(body): Json<EditorDocumentBody>,
 ) -> impl IntoResponse {
     if !auth.is_admin() {
@@ -233,7 +235,7 @@ pub(crate) async fn admin_editor_create_document(
         return unavailable();
     };
     match store.create_document(
-        &id,
+        &workspace_id,
         None,
         &body.path,
         &body.language,
@@ -241,11 +243,39 @@ pub(crate) async fn admin_editor_create_document(
         body.make_primary,
         now_seconds(),
     ) {
-        Ok(document) => (StatusCode::CREATED, Json(document)).into_response(),
-        Err(error) => editor_error(
-            error,
-            "a document with this path already exists in the workspace",
-        ),
+        Ok(document) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::NoteUpdate, // Workspace document create
+                Some(&auth.user_id),
+                Some("workspace_document"),
+                Some(&document.id),
+                "success",
+                Some(&format!(
+                    "admin created document {path} in workspace {workspace_id}",
+                    path = body.path
+                )),
+            );
+            (StatusCode::CREATED, Json(document)).into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::NoteUpdate,
+                Some(&auth.user_id),
+                Some("workspace_document"),
+                None,
+                "failure",
+                Some(&format!(
+                    "admin failed to create document {path} in workspace {workspace_id}: {error:?}",
+                    path = body.path
+                )),
+            );
+            editor_error(
+                error,
+                "a document with this path already exists in the workspace",
+            )
+        }
     }
 }
 
@@ -290,11 +320,39 @@ pub(crate) async fn admin_editor_update_document(
         body.make_primary,
         now_seconds(),
     ) {
-        Ok(document) => (StatusCode::OK, Json(document)).into_response(),
-        Err(error) => editor_error(
-            error,
-            "a document with this path already exists in the workspace",
-        ),
+        Ok(document) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::NoteUpdate,
+                Some(&auth.user_id),
+                Some("workspace_document"),
+                Some(&document.id),
+                "success",
+                Some(&format!(
+                    "admin updated document {path} in workspace {workspace_id}",
+                    path = body.path
+                )),
+            );
+            (StatusCode::OK, Json(document)).into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::NoteUpdate,
+                Some(&auth.user_id),
+                Some("workspace_document"),
+                Some(&document_id),
+                "failure",
+                Some(&format!(
+                    "admin failed to update document {path} in workspace {workspace_id}: {error:?}",
+                    path = body.path
+                )),
+            );
+            editor_error(
+                error,
+                "a document with this path already exists in the workspace",
+            )
+        }
     }
 }
 
@@ -311,8 +369,34 @@ pub(crate) async fn admin_editor_delete_document(
         return unavailable();
     };
     match store.delete_document(&workspace_id, &document_id, None, now_seconds()) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => editor_error(error, "workspace document could not be deleted"),
+        Ok(()) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::NoteDelete,
+                Some(&auth.user_id),
+                Some("workspace_document"),
+                Some(&document_id),
+                "success",
+                Some(&format!(
+                    "admin deleted document {document_id} from workspace {workspace_id}"
+                )),
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::NoteDelete,
+                Some(&auth.user_id),
+                Some("workspace_document"),
+                Some(&document_id),
+                "failure",
+                Some(&format!(
+                    "admin failed to delete document {document_id} from workspace {workspace_id}: {error:?}"
+                )),
+            );
+            editor_error(error, "workspace document could not be deleted")
+        }
     }
 }
 

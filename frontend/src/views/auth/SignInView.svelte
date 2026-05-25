@@ -99,7 +99,7 @@
         kind="primary"
         size="lg"
         disabled={$isLoading}
-        on:click={handleSignIn}
+        onclick={handleSignIn}
         style="width: 100%"
       >
         {#if $isLoading}

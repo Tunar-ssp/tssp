@@ -16,7 +16,7 @@ mod edge_cases_tests;
 pub mod error_handler;
 mod error_handling_tests;
 mod file;
-mod folders;
+pub mod folders;
 mod garbage_collection;
 mod http_error;
 mod integrity;
@@ -62,6 +62,7 @@ pub use delete::{
     ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, FileDeleteProvider,
     FileRestoreProvider, HttpDeleteError, HttpDeleteOutcome, HttpRestoreError, HttpRestoreOutcome,
 };
+pub use folders::{ApplicationFolderProvider, FolderProvider, HttpFolderError};
 pub use garbage_collection::collect_garbage;
 pub use integrity::{run_startup_integrity_scan, spawn_startup_integrity_scan};
 pub use mdns::spawn_advertisement;

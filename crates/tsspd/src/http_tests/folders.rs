@@ -7,7 +7,8 @@ use super::imports::*;
 async fn folders_endpoint_returns_json_not_spa_fallback() {
     let app = build_router(
         HttpState::test_http_state(std::env::temp_dir())
-            .with_stats_provider(Arc::new(FixedStatsProvider)),
+            .with_stats_provider(Arc::new(FixedStatsProvider))
+            .with_folder_provider(Arc::new(FixedFolderProvider)),
     );
 
     let response = app

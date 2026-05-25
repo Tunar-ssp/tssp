@@ -13,8 +13,8 @@ use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository, SqliteSes
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
 use tssp_app::{
-    DeleteFileService, NoteService, PinService, PurgeDeletedFilesService, RestoreFileService,
-    SessionService, TagService, UploadService,
+    DeleteFileService, FolderService, NoteService, PinService, PurgeDeletedFilesService,
+    RestoreFileService, SessionService, TagService, UploadService,
 };
 use tssp_ports::Clock;
 use tsspd::workspaces::WorkspaceStore;
@@ -27,9 +27,9 @@ use tsspd::{
     spawn_startup_integrity_scan,
     trash_cleanup::purge_expired_trash,
     ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileRestoreProvider,
-    ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationNoteProvider,
-    ApplicationSessionProvider, CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder,
-    RepositoryFileSearchProvider, RepositoryMetadataStatsProvider,
+    ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationFolderProvider,
+    ApplicationNoteProvider, ApplicationSessionProvider, CliOverrides, DaemonSettings, HttpState,
+    PublicUrlBuilder, RepositoryFileSearchProvider, RepositoryMetadataStatsProvider,
 };
 
 use super::Cli;
@@ -269,6 +269,7 @@ fn build_http_state(
         SystemClock,
     );
     let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
+    let folder_service = FolderService::new(repository.clone());
     let restore_service = RestoreFileService::new(repository.clone());
     let tag_service = TagService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
@@ -286,6 +287,7 @@ fn build_http_state(
     .with_workspaces(workspace_store)
     .with_stats_provider(Arc::new(stats_provider))
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
+    .with_folder_provider(Arc::new(ApplicationFolderProvider::new(folder_service)))
     .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
     .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(
         restore_service,
