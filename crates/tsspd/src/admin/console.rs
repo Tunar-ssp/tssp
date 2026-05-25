@@ -185,10 +185,19 @@ fn run_storage_stats(state: &HttpState) -> (bool, serde_json::Value) {
 
 async fn run_cleanup_temp(state: &HttpState) -> (bool, serde_json::Value) {
     let dir = state.upload_temp_dir.clone();
-    let removed = tokio::task::spawn_blocking(move || cleanup_files(&dir))
+    let report = tokio::task::spawn_blocking(move || cleanup_files(&dir))
         .await
-        .unwrap_or(0);
-    (true, serde_json::json!({ "removed": removed }))
+        .unwrap_or_default();
+    (
+        true,
+        serde_json::json!({
+            "removed": report.total_removed(),
+            "files_removed": report.files_removed,
+            "directories_removed": report.directories_removed,
+            "errors": report.errors,
+            "minimum_age_seconds": 2 * 60 * 60,
+        }),
+    )
 }
 
 fn run_cleanup_sessions() -> (bool, serde_json::Value) {
@@ -320,16 +329,11 @@ fn run_tag_stats(state: &HttpState) -> (bool, serde_json::Value) {
     }
 }
 
-fn cleanup_files(dir: &std::path::Path) -> u64 {
-    let mut removed = 0_u64;
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_file() && std::fs::remove_file(entry.path()).is_ok() {
-                removed += 1;
-            }
-        }
-    }
-    removed
+fn cleanup_files(dir: &std::path::Path) -> crate::temp_cleanup::TempCleanupReport {
+    crate::temp_cleanup::cleanup_temp_upload_dir(
+        dir,
+        Some(std::time::Duration::from_secs(2 * 60 * 60)),
+    )
 }
 
 #[cfg(test)]

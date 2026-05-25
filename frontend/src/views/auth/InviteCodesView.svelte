@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { user, isAdmin } from '$lib/stores/auth';
-  import { success, error as showError } from '$lib/stores/notifications';
+  import { isAdmin } from '$lib/stores/auth';
+  import { info } from '$lib/stores/notifications';
   import Btn from '$lib/components/Btn.svelte';
   import Card from '$lib/components/Card.svelte';
   import StatusDot from '$lib/components/StatusDot.svelte';
@@ -23,46 +23,24 @@
   async function loadInviteCodes() {
     if (!$isAdmin) return;
     isLoading = true;
-    try {
-      const response = await fetch('/api/invites');
-      if (!response.ok) throw new Error('Failed to load invite codes');
-      inviteCodes = await response.json();
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Failed to load invite codes');
-    } finally {
-      isLoading = false;
-    }
+    inviteCodes = [];
+    isLoading = false;
   }
 
   async function createInviteCode() {
-    try {
-      const response = await fetch('/api/invites', { method: 'POST' });
-      if (!response.ok) throw new Error('Failed to create invite code');
-      const newCode = await response.json();
-      inviteCodes = [newCode, ...inviteCodes];
-      showCreateForm = false;
-      success('Invite code created');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Failed to create invite code');
-    }
+    showCreateForm = false;
+    info('Invite Codes Disabled', 'The backend does not expose invite-code APIs yet.');
   }
 
   async function revokeInviteCode(codeId: string) {
     if (!confirm('Revoke this invite code?')) return;
 
-    try {
-      const response = await fetch(`/api/invites/${codeId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to revoke code');
-      inviteCodes = inviteCodes.filter((c) => c.id !== codeId);
-      success('Invite code revoked');
-    } catch (e) {
-      showError(e instanceof Error ? e.message : 'Failed to revoke code');
-    }
+    info('Invite Codes Disabled', `Cannot revoke ${codeId}; invite-code APIs are not available.`);
   }
 
   function copyCode(code: string) {
     navigator.clipboard.writeText(code);
-    success('Copied to clipboard');
+    info('Copied', 'Invite code copied to clipboard');
   }
 
   function formatDate(timestamp: number) {
@@ -103,10 +81,11 @@
       </div>
       <Btn
         kind="primary"
-        on:click={() => (showCreateForm = !showCreateForm)}
+        disabled
+        onClick={() => (showCreateForm = !showCreateForm)}
       >
         <Icons.Plus size={14} />
-        New Code
+        Invite API missing
       </Btn>
     </div>
 
@@ -116,12 +95,12 @@
           <div class="form-content">
             <p>Create a new invite code for a new user</p>
             <div class="form-actions">
-              <Btn kind="primary" on:click={createInviteCode}>
+              <Btn kind="primary" onClick={createInviteCode}>
                 Create Code
               </Btn>
               <Btn
                 kind="ghost"
-                on:click={() => (showCreateForm = false)}
+                onClick={() => (showCreateForm = false)}
               >
                 Cancel
               </Btn>
@@ -140,7 +119,7 @@
       <div class="empty">
         <Icons.Mail size={48} />
         <h3>No invite codes</h3>
-        <p>Create one to invite new users</p>
+        <p>Invite-code APIs are not implemented on the backend yet.</p>
       </div>
     {:else}
       <div class="invites-list">
@@ -164,7 +143,7 @@
                 </div>
                 <div class="code-value">
                   <code>{code.code}</code>
-                  <button class="copy-btn" on:click={() => copyCode(code.code)}>
+                  <button type="button" class="copy-btn" onclick={() => copyCode(code.code)}>
                     <Icons.Copy size={14} />
                   </button>
                 </div>
@@ -183,7 +162,7 @@
                   <Btn
                     kind="danger"
                     size="sm"
-                    on:click={() => revokeInviteCode(code.id)}
+                    onClick={() => revokeInviteCode(code.id)}
                   >
                     <Icons.Trash2 size={14} />
                     Revoke

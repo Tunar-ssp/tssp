@@ -23,7 +23,8 @@
   async function loadDevices() {
     try {
       isLoading = true;
-      const response = await fetch('/api/v1/admin/devices');
+      const response = await fetch('/api/v1/admin/devices', { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`Failed to load devices (${response.status})`);
       const data = await response.json();
 
       devices = data.devices || [];
@@ -42,6 +43,7 @@
     try {
       const response = await fetch(`/api/v1/admin/devices/${token}`, {
         method: 'DELETE',
+        credentials: 'same-origin',
       });
 
       if (response.ok) {
@@ -107,10 +109,11 @@
     <div class="devices-list">
       {#each devices as device (device.token)}
         {@const DeviceIcon = getDeviceIcon(device.user_agent)}
+        {@const DeviceIconComponent = DeviceIcon}
         {@const isCurrent = device.token === currentDeviceToken}
         <div class="device-card" class:current={isCurrent}>
           <div class="device-icon">
-            <svelte:component this={DeviceIcon} size={20} />
+            <DeviceIconComponent size={20} />
           </div>
 
           <div class="device-info">
@@ -131,9 +134,10 @@
 
           {#if !isCurrent}
             <button
+              type="button"
               class="revoke-btn"
               title="Revoke this session"
-              on:click={() => revokeDevice(device.token)}
+              onclick={() => revokeDevice(device.token)}
             >
               <Icons.X size={16} />
             </button>

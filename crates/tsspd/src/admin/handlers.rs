@@ -376,14 +376,18 @@ pub async fn admin_corrupt_files(State(state): State<HttpState>) -> impl IntoRes
 /// `POST /api/v1/admin/cleanup/temp`
 pub async fn admin_cleanup_temp(State(state): State<HttpState>) -> impl IntoResponse {
     let dir = state.upload_temp_dir.clone();
-    let removed = tokio::task::spawn_blocking(move || cleanup_dir_files(&dir))
+    let report = tokio::task::spawn_blocking(move || cleanup_dir_files(&dir))
         .await
-        .unwrap_or(0);
+        .unwrap_or_default();
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "schema_version": 1,
-            "removed": removed,
+            "removed": report.total_removed(),
+            "files_removed": report.files_removed,
+            "directories_removed": report.directories_removed,
+            "errors": report.errors,
+            "minimum_age_seconds": 2 * 60 * 60,
         })),
     )
         .into_response()
@@ -447,14 +451,9 @@ pub async fn admin_folders(State(state): State<HttpState>) -> impl IntoResponse 
     }
 }
 
-fn cleanup_dir_files(dir: &std::path::Path) -> u64 {
-    let mut removed = 0_u64;
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_file() && std::fs::remove_file(entry.path()).is_ok() {
-                removed += 1;
-            }
-        }
-    }
-    removed
+fn cleanup_dir_files(dir: &std::path::Path) -> crate::temp_cleanup::TempCleanupReport {
+    crate::temp_cleanup::cleanup_temp_upload_dir(
+        dir,
+        Some(std::time::Duration::from_secs(2 * 60 * 60)),
+    )
 }

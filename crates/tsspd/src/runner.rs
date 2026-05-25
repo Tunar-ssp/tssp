@@ -71,30 +71,19 @@ fn run_integrity_check(db_path: &Path) -> Result<(), String> {
 }
 
 fn cleanup_temp_uploads(temp_dir: &Path) {
-    if !temp_dir.exists() {
-        return;
+    let report = tsspd::temp_cleanup::cleanup_temp_upload_dir(temp_dir, None);
+    if report.total_removed() > 0 {
+        tracing::info!(
+            files_removed = report.files_removed,
+            directories_removed = report.directories_removed,
+            "startup: cleaned up orphaned temp uploads"
+        );
     }
-
-    let mut removed = 0;
-    if let Ok(entries) = std::fs::read_dir(temp_dir) {
-        for entry in entries.flatten() {
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.is_file() {
-                    if let Err(e) = std::fs::remove_file(entry.path()) {
-                        tracing::warn!(
-                            "startup: could not remove temp file {}: {e}",
-                            entry.path().display()
-                        );
-                    } else {
-                        removed += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    if removed > 0 {
-        tracing::info!("startup: cleaned up {removed} orphaned temp uploads");
+    if report.errors > 0 {
+        tracing::warn!(
+            errors = report.errors,
+            "startup: some temp upload entries could not be removed"
+        );
     }
 }
 

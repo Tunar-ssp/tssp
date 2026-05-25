@@ -6,7 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -351,7 +351,17 @@ pub async fn complete_upload(
     let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
     let assembly_path = state.upload_temp_dir.join(format!("{}.assembly", session_id.0));
 
-    if let Err(e) = assemble_chunks(&chunk_dir, &assembly_path, &session) {
+    let assembly_result = tokio::task::spawn_blocking({
+        let chunk_dir = chunk_dir.clone();
+        let assembly_path = assembly_path.clone();
+        let session = session.clone();
+        move || assemble_chunks(&chunk_dir, &assembly_path, &session)
+    })
+    .await
+    .map_err(|e| format!("spawn error: {e}"))
+    .and_then(|result| result);
+
+    if let Err(e) = assembly_result {
         let _ = std::fs::remove_dir_all(&chunk_dir);
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -471,19 +481,24 @@ fn assemble_chunks(
     output_path: &StdPath,
     session: &UploadSession,
 ) -> Result<(), String> {
-    let mut output = std::fs::File::create(output_path)
+    let output = std::fs::File::create(output_path)
         .map_err(|e| format!("failed to create output file: {e}"))?;
+    let mut output = BufWriter::new(output);
 
     for chunk_index in 0..session.uploaded_chunks.len() {
         let chunk_path = chunk_file_path(chunk_dir, chunk_index as u32);
-        let chunk_data =
-            std::fs::read(&chunk_path).map_err(|e| format!("failed to read chunk {}: {e}", chunk_index))?;
-        output
-            .write_all(&chunk_data)
+        let input = std::fs::File::open(&chunk_path)
+            .map_err(|e| format!("failed to read chunk {}: {e}", chunk_index))?;
+        let mut input = BufReader::new(input);
+        std::io::copy(&mut input, &mut output)
             .map_err(|e| format!("failed to write chunk {}: {e}", chunk_index))?;
     }
 
     output
+        .flush()
+        .map_err(|e| format!("failed to flush output file: {e}"))?;
+    output
+        .get_ref()
         .sync_all()
         .map_err(|e| format!("failed to sync output file: {e}"))?;
     Ok(())

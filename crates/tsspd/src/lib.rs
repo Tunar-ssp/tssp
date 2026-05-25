@@ -45,6 +45,7 @@ mod startup;
 mod state;
 mod status;
 mod tags;
+pub mod temp_cleanup;
 mod upload;
 mod chunked_upload;
 mod urls;

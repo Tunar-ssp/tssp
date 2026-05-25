@@ -8,21 +8,21 @@
   import StatusDot from '$lib/components/StatusDot.svelte';
 
   interface SystemStats {
-    totalUsers: number;
-    activeUsers: number;
-    totalStorage: number;
+    fileCount: number;
+    noteCount: number;
+    workspaceCount: number;
     usedStorage: number;
     uptime: number;
-    databaseSize: number;
+    corruptFileCount: number;
   }
 
   let stats = $state<SystemStats>({
-    totalUsers: 0,
-    activeUsers: 0,
-    totalStorage: 0,
+    fileCount: 0,
+    noteCount: 0,
+    workspaceCount: 0,
     usedStorage: 0,
     uptime: 0,
-    databaseSize: 0,
+    corruptFileCount: 0,
   });
 
   let isLoading = $state(false);
@@ -32,9 +32,17 @@
     if (!$isAdmin) return;
     isLoading = true;
     try {
-      const response = await fetch('/api/admin/stats');
+      const response = await fetch('/api/v1/admin/overview', { credentials: 'same-origin' });
       if (!response.ok) throw new Error('Failed to load stats');
-      stats = await response.json();
+      const overview = await response.json();
+      stats = {
+        fileCount: overview.file_count || 0,
+        noteCount: overview.note_count || 0,
+        workspaceCount: overview.workspace_count || 0,
+        usedStorage: overview.storage_bytes_used || 0,
+        uptime: overview.uptime_seconds || 0,
+        corruptFileCount: overview.corrupt_file_count || 0,
+      };
     } catch (e) {
       showError(e instanceof Error ? e.message : 'Failed to load stats');
     } finally {
@@ -121,8 +129,8 @@
                 <h3>Total Users</h3>
                 <Icons.Users size={20} />
               </div>
-              <div class="stat-value">{stats.totalUsers}</div>
-              <div class="stat-meta">{stats.activeUsers} active today</div>
+              <div class="stat-value">{stats.fileCount}</div>
+              <div class="stat-meta">{stats.noteCount} notes · {stats.workspaceCount} workspaces</div>
             </div>
           </Card>
 
@@ -135,11 +143,11 @@
               <div class="stat-value">{formatBytes(stats.usedStorage)}</div>
               <div class="stat-progress">
                 <Bar
-                  value={(stats.usedStorage / stats.totalStorage) * 100}
-                  tone="ok"
+                  value={stats.usedStorage > 0 ? 100 : 0}
+                  tone="blue"
                 />
               </div>
-              <div class="stat-meta">{formatBytes(stats.totalStorage)} total</div>
+              <div class="stat-meta">Indexed object storage</div>
             </div>
           </Card>
 
@@ -163,8 +171,8 @@
                 <h3>Database</h3>
                 <Icons.Database size={20} />
               </div>
-              <div class="stat-value">{formatBytes(stats.databaseSize)}</div>
-              <div class="stat-meta">SQLite database size</div>
+              <div class="stat-value">{stats.corruptFileCount}</div>
+              <div class="stat-meta">Corrupt indexed blobs</div>
             </div>
           </Card>
         </div>
@@ -175,7 +183,7 @@
               <h3>Maintenance</h3>
             </div>
             <div class="actions-list">
-              <button class="action-item">
+              <button type="button" class="action-item" disabled>
                 <Icons.Database size={16} />
                 <div class="action-text">
                   <span class="action-name">Database Backup</span>
@@ -183,7 +191,7 @@
                 </div>
                 <Icons.ChevronRight size={16} />
               </button>
-              <button class="action-item">
+              <button type="button" class="action-item" disabled>
                 <Icons.CheckCircle2 size={16} />
                 <div class="action-text">
                   <span class="action-name">Integrity Check</span>
@@ -191,7 +199,7 @@
                 </div>
                 <Icons.ChevronRight size={16} />
               </button>
-              <button class="action-item">
+              <button type="button" class="action-item" disabled>
                 <Icons.RotateCw size={16} />
                 <div class="action-text">
                   <span class="action-name">System Restart</span>
