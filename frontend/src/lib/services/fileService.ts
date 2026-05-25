@@ -57,13 +57,13 @@ export async function togglePin(id: string, currentlyPinned: boolean) {
 
 export async function togglePublic(id: string, isPublic: boolean) {
   try {
-    await api.setFileVisibility(id, isPublic);
+    const result = await api.setFileVisibility(id, isPublic);
     await loadFiles();
     success('Visibility Updated', isPublic ? 'File shared' : 'File made private');
-    return true;
+    return result;
   } catch (err: any) {
     error('Update Failed', err.message || 'Could not update visibility');
-    return false;
+    return null;
   }
 }
 

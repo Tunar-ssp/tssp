@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { api, type Workspace } from '../api';
 
 export const workspaces = writable<Workspace[]>([]);
@@ -21,7 +21,7 @@ export async function loadWorkspaces() {
   }
 }
 
-export async function setActiveWorkspace(id: string) {
+export function setActiveWorkspace(id: string | null) {
   activeWorkspaceId.set(id);
 }
 
@@ -29,7 +29,7 @@ export async function createNewWorkspace() {
   try {
     const newWorkspace = await api.createWorkspace({
       name: 'untitled',
-      language: 'txt',
+      language: 'text',
       body: '',
     });
     workspaces.update(w => [newWorkspace, ...w]);
@@ -42,9 +42,7 @@ export async function createNewWorkspace() {
 }
 
 export async function updateActiveWorkspace(updates: Partial<Workspace>) {
-  let id: string | null = null;
-
-  activeWorkspaceId.subscribe(val => { id = val; })();
+  const id = get(activeWorkspaceId);
 
   if (!id) return;
 
@@ -64,7 +62,7 @@ export async function deleteWorkspace(id: string) {
   try {
     await api.deleteWorkspace(id);
     workspaces.update(w => w.filter(workspace => workspace.id !== id));
-    if (id === activeWorkspaceId) {
+    if (id === get(activeWorkspaceId)) {
       activeWorkspaceId.set(null);
     }
   } catch (err) {

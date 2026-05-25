@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { visibleFiles, folders, isLoading, loadFiles, setFolder, selectedIds } from '$lib/stores/drive';
-  import { success, error } from '$lib/stores/notifications';
+  import { visibleFiles, folders, isLoading, loadFiles, setFolder } from '$lib/stores/drive';
+  import { error } from '$lib/stores/notifications';
   import FolderTree from '$lib/components/FolderTree.svelte';
   import FileGrid from '$lib/components/FileGrid.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
@@ -9,7 +9,6 @@
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import UploadQueue from '$lib/components/UploadQueue.svelte';
   import SharingModal from '$lib/components/SharingModal.svelte';
-  import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import * as FileService from '$lib/services/fileService';
   import { onMount } from 'svelte';
 
@@ -86,7 +85,9 @@
   }
 
   async function handleShareToggle(fileId: string, isPublic: boolean) {
-    await FileService.togglePublic(fileId, isPublic);
+    const result = await FileService.togglePublic(fileId, isPublic);
+    if (result?.file) shareFile = result.file;
+    return result;
   }
 
   async function performSearch(query: string) {

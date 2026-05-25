@@ -47,6 +47,24 @@ pub fn build_router(state: HttpState) -> Router {
                 .layer(upload_body_limit),
         )
         .route(
+            "/api/v1/files/upload/start",
+            post(crate::chunked_upload::start_upload).options(options_response),
+        )
+        .route(
+            "/api/v1/files/upload/:session_id/chunk/:chunk_index",
+            post(crate::chunked_upload::upload_chunk)
+                .options(options_response)
+                .layer(upload_body_limit),
+        )
+        .route(
+            "/api/v1/files/upload/:session_id/complete",
+            post(crate::chunked_upload::complete_upload).options(options_response),
+        )
+        .route(
+            "/api/v1/files/upload/:session_id",
+            axum::routing::delete(crate::chunked_upload::cancel_upload).options(options_response),
+        )
+        .route(
             "/api/v1/pins",
             get(crate::pins::list_pins).options(options_response),
         )

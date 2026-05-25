@@ -7,6 +7,7 @@ use std::time::Instant;
 use tssp_ports::BlobReader;
 
 use crate::auth::AuthService;
+use crate::chunked_upload::UploadSessionManager;
 use crate::content::StaticBlobReader;
 use crate::delete::{FileDeleteProvider, StaticFileDeleteProvider};
 use crate::notes::{NoteProvider, StaticNoteProvider};
@@ -31,6 +32,7 @@ pub struct HttpState {
     pub(crate) settings: Arc<DaemonSettings>,
     pub(crate) public_urls: PublicUrlBuilder,
     pub(crate) corrupt_file_count: u64,
+    pub(crate) upload_session_manager: Arc<UploadSessionManager>,
     pub(crate) stats_provider: Arc<dyn MetadataStatsProvider>,
     pub(crate) upload_provider: Arc<dyn FileUploadProvider>,
     pub(crate) delete_provider: Arc<dyn FileDeleteProvider>,
@@ -61,6 +63,7 @@ impl HttpState {
             settings,
             public_urls,
             corrupt_file_count,
+            upload_session_manager: Arc::new(UploadSessionManager::new()),
             stats_provider: Arc::new(StaticMetadataStatsProvider),
             upload_provider: Arc::new(StaticFileUploadProvider),
             delete_provider: Arc::new(StaticFileDeleteProvider),

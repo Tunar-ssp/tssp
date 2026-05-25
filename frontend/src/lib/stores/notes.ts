@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { api, type Note } from '../api';
 
 export const notes = writable<Note[]>([]);
@@ -41,7 +41,7 @@ export async function loadNotes() {
   }
 }
 
-export async function setActiveNote(id: string) {
+export function setActiveNote(id: string | null) {
   activeNoteId.set(id);
 }
 
@@ -62,10 +62,7 @@ export async function createNewNote() {
 }
 
 export async function updateActiveNote(updates: Partial<Note>) {
-  const $activeNoteId = activeNoteId;
-  let id: string | null = null;
-
-  activeNoteId.subscribe(val => { id = val; })();
+  const id = get(activeNoteId);
 
   if (!id) return;
 
@@ -81,11 +78,54 @@ export async function updateActiveNote(updates: Partial<Note>) {
   }
 }
 
+export async function replaceActiveNoteTags(tags: string[]) {
+  const id = get(activeNoteId);
+  if (!id) return;
+
+  isSaving.set(true);
+  try {
+    await api.replaceNoteTags(id, tags);
+    notes.update(n => n.map(note => note.id === id ? { ...note, tags } : note));
+  } catch (err) {
+    console.error('Failed to update note tags:', err);
+    throw err;
+  } finally {
+    isSaving.set(false);
+  }
+}
+
+export async function duplicateNote(id: string) {
+  try {
+    const duplicated = await api.duplicateNote(id);
+    notes.update(n => [duplicated, ...n]);
+    activeNoteId.set(duplicated.id);
+    return duplicated;
+  } catch (err) {
+    console.error('Failed to duplicate note:', err);
+    throw err;
+  }
+}
+
+export async function toggleNotePin(id: string, currentlyPinned: boolean) {
+  try {
+    if (currentlyPinned) {
+      await api.unpinNote(id);
+    } else {
+      await api.pinNote(id);
+    }
+    await loadNotes();
+    activeNoteId.set(id);
+  } catch (err) {
+    console.error('Failed to update note pin:', err);
+    throw err;
+  }
+}
+
 export async function deleteNote(id: string) {
   try {
     await api.deleteNote(id);
     notes.update(n => n.filter(note => note.id !== id));
-    if (id === activeNoteId) {
+    if (id === get(activeNoteId)) {
       activeNoteId.set(null);
     }
   } catch (err) {

@@ -2,13 +2,14 @@
   import * as Icons from 'lucide-svelte';
   import QRCodeGenerator from './QRCodeGenerator.svelte';
   import Btn from './Btn.svelte';
-  import Kbd from './Kbd.svelte';
+  import { api, type VisibilityResponse } from '$lib/api';
+  import { success, error } from '$lib/stores/notifications';
 
   interface $$Props {
     file?: any;
     isOpen?: boolean;
     onClose?: () => void;
-    onShare?: (fileId: string, isPublic: boolean) => void;
+    onShare?: (fileId: string, isPublic: boolean) => Promise<VisibilityResponse | null | void>;
     class?: string;
   }
 
@@ -21,33 +22,66 @@
   } = $props<$$Props>();
 
   let isPublic = $state(false);
-  let expiryDays = $state(7);
   let shareLink = $state('');
   let showQR = $state(false);
+  let isUpdating = $state(false);
+  let statusMessage = $state('');
 
   $effect(() => {
-    if (file) {
-      isPublic = file.public || false;
-      if (isPublic) {
-        shareLink = `${window.location.origin}/share/${file.id}`;
-      }
+    if (isOpen && file) {
+      isPublic = file.public || file.visibility === 'public';
+      shareLink = file.public_token ? `${window.location.origin}/p/${file.public_token}` : '';
+      statusMessage = '';
+      showQR = false;
+      if (isPublic) void loadShareLink(file);
     }
   });
 
   async function togglePublic() {
-    if (onShare) {
-      onShare(file.id, !isPublic);
-      isPublic = !isPublic;
-      if (isPublic) {
-        shareLink = `${window.location.origin}/share/${file.id}`;
+    if (!file || !onShare || isUpdating) return;
+
+    isUpdating = true;
+    statusMessage = '';
+    try {
+      const nextPublic = !isPublic;
+      const result = await onShare(file.id, nextPublic);
+      isPublic = nextPublic;
+      file = result?.file ?? { ...file, public: nextPublic, visibility: nextPublic ? 'public' : 'private' };
+      shareLink = result?.public_url || '';
+
+      if (nextPublic && !shareLink) {
+        await loadShareLink(file);
       }
+
+      if (!nextPublic) {
+        showQR = false;
+        statusMessage = 'This file is private again.';
+      }
+    } catch (err) {
+      statusMessage = err instanceof Error ? err.message : 'Could not update sharing.';
+      error('Share Failed', statusMessage);
+    } finally {
+      isUpdating = false;
     }
   }
 
-  function copyLink() {
-    if (shareLink) {
-      navigator.clipboard.writeText(shareLink);
+  async function loadShareLink(targetFile: any) {
+    if (!targetFile?.id || !(targetFile.public || targetFile.visibility === 'public')) return;
+
+    try {
+      statusMessage = 'Loading public link...';
+      const response = await api.getFileShare(targetFile.id);
+      shareLink = response.public_url;
+      statusMessage = '';
+    } catch (err) {
+      statusMessage = err instanceof Error ? err.message : 'Public link is not ready yet.';
     }
+  }
+
+  async function copyLink() {
+    if (!shareLink) return;
+    await navigator.clipboard.writeText(shareLink);
+    success('Copied', 'Public link copied to clipboard');
   }
 
   function handleBackdropClick(e: MouseEvent) {
@@ -55,15 +89,25 @@
       onClose();
     }
   }
+
+  function handleBackdropKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && onClose) onClose();
+  }
 </script>
 
 {#if isOpen && file}
-  <div class="sharing-backdrop" on:click={handleBackdropClick}>
-    <div class="sharing-modal {className || ''}">
+  <div
+    class="sharing-backdrop"
+    role="presentation"
+    tabindex="-1"
+    onclick={handleBackdropClick}
+    onkeydown={handleBackdropKeydown}
+  >
+    <div class="sharing-modal {className || ''}" role="dialog" aria-modal="true" aria-labelledby="sharing-title">
       <div class="sharing-header">
-        <h2>Share "{file.name}"</h2>
+        <h2 id="sharing-title">Share "{file.name}"</h2>
         {#if onClose}
-          <button class="sharing-close" on:click={onClose} aria-label="Close">
+          <button type="button" class="sharing-close" onclick={onClose} aria-label="Close">
             <Icons.X size={18} />
           </button>
         {/if}
@@ -77,13 +121,21 @@
               <p>Anyone with the link can view and download</p>
             </div>
             <button
+              type="button"
               class="toggle-btn"
               class:active={isPublic}
-              on:click={togglePublic}
+              aria-label={isPublic ? 'Make file private' : 'Make file public'}
+              aria-pressed={isPublic}
+              disabled={isUpdating}
+              onclick={togglePublic}
             >
               <div class="toggle-slider"></div>
             </button>
           </div>
+
+          {#if statusMessage}
+            <p class="share-status">{statusMessage}</p>
+          {/if}
 
           {#if isPublic && shareLink}
             <div class="share-link-container">
@@ -94,14 +146,15 @@
                   readonly
                   class="link-input"
                 />
-                <button class="copy-btn" on:click={copyLink} title="Copy link">
+                <button type="button" class="copy-btn" onclick={copyLink} title="Copy link">
                   <Icons.Copy size={16} />
                 </button>
               </div>
 
               <button
+                type="button"
                 class="qr-toggle-btn"
-                on:click={() => (showQR = !showQR)}
+                onclick={() => (showQR = !showQR)}
               >
                 <Icons.QrCode size={14} />
                 {showQR ? 'Hide' : 'Show'} QR Code
@@ -119,38 +172,16 @@
         <div class="share-option">
           <div class="option-header">
             <div>
-              <h3>Expiry Date</h3>
-              <p>Automatically revoke access after</p>
+              <h3>Security</h3>
+              <p>Public links are tokenized and can be revoked by making the file private.</p>
             </div>
-          </div>
-
-          <div class="expiry-inputs">
-            <select bind:value={expiryDays} disabled={!isPublic} class="expiry-select">
-              <option value={1}>1 day</option>
-              <option value={7}>7 days</option>
-              <option value={30}>30 days</option>
-              <option value={90}>90 days</option>
-              <option value={0}>Never</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="share-option">
-          <h3>Keyboard Shortcut</h3>
-          <p>Share or unshare this file</p>
-          <div class="shortcut-display">
-            <Kbd>Ctrl</Kbd>
-            <span>+</span>
-            <Kbd>Shift</Kbd>
-            <span>+</span>
-            <Kbd>S</Kbd>
           </div>
         </div>
       </div>
 
       <div class="sharing-footer">
         {#if onClose}
-          <Btn kind="ghost" on:click={onClose}>Done</Btn>
+          <Btn kind="ghost" onclick={onClose}>Done</Btn>
         {/if}
       </div>
     </div>
@@ -242,6 +273,14 @@
     color: var(--text);
   }
 
+  .sharing-close:focus-visible,
+  .toggle-btn:focus-visible,
+  .copy-btn:focus-visible,
+  .qr-toggle-btn:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
   .sharing-body {
     flex: 1;
     overflow-y: auto;
@@ -291,6 +330,11 @@
     flex-shrink: 0;
   }
 
+  .toggle-btn:disabled {
+    cursor: progress;
+    opacity: 0.65;
+  }
+
   .toggle-btn.active {
     background: var(--green);
   }
@@ -305,6 +349,12 @@
 
   .toggle-btn.active .toggle-slider {
     transform: translateX(20px);
+  }
+
+  .share-status {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-12);
   }
 
   .share-link-container {

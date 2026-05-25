@@ -1,24 +1,35 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { sortedNotes, activeNote, loadNotes, setActiveNote, updateActiveNote, createNewNote, deleteNote, isSaving } from '$lib/stores/notes';
+  import {
+    sortedNotes,
+    activeNote,
+    loadNotes,
+    setActiveNote,
+    updateActiveNote,
+    createNewNote,
+    deleteNote,
+    duplicateNote,
+    toggleNotePin,
+    replaceActiveNoteTags,
+    isSaving,
+  } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
   import RichEditor from '$lib/components/RichEditor.svelte';
   import Outline from '$lib/components/Outline.svelte';
   import SlashMenu from '$lib/components/SlashMenu.svelte';
-  import ColorPicker from '$lib/components/ColorPicker.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import Btn from '$lib/components/Btn.svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
 
-  let contextMenu = { visible: false, x: 0, y: 0, note: null as any };
+  let contextMenu = $state({ visible: false, x: 0, y: 0, note: null as any });
   let searchQuery = $state('');
   let isLoading = $state(true);
   let titleDraft = $state('');
   let bodyDraft = $state('');
-  let noteColor = $state('#6ea8ff');
-  let showColorPicker = $state(false);
+  let tagDraft = $state('');
   let showSlashMenu = $state(false);
-  let slashMenuPos = { x: 0, y: 0 };
+  let slashMenuPos = $state({ x: 0, y: 0 });
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(async () => {
     await loadNotes();
@@ -29,37 +40,60 @@
     if ($activeNote) {
       titleDraft = $activeNote.title;
       bodyDraft = $activeNote.body;
-      noteColor = $activeNote.color || '#6ea8ff';
+      tagDraft = '';
     }
   });
 
-  function handleCreateNote() {
-    createNewNote();
-    success('New note created');
+  onDestroy(() => {
+    if (saveTimer) clearTimeout(saveTimer);
+  });
+
+  async function handleCreateNote() {
+    try {
+      await createNewNote();
+      success('Note Created', 'A new note is ready to edit');
+    } catch (err) {
+      error('Create Failed', err instanceof Error ? err.message : 'Could not create note');
+    }
   }
 
   function handleSelectNote(id: string) {
     setActiveNote(id);
   }
 
-  async function handleSaveNote() {
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      void handleSaveNote(false);
+    }, 900);
+  }
+
+  async function handleSaveNote(showToast = true) {
     if (!$activeNote) return;
-    await updateActiveNote({
-      title: titleDraft,
-      body: bodyDraft,
-      color: noteColor,
-    });
-    success('Note saved');
+    try {
+      await updateActiveNote({
+        title: titleDraft,
+        body: bodyDraft,
+      });
+      if (showToast) success('Note Saved', 'Changes were written to TSSP');
+    } catch (err) {
+      error('Save Failed', err instanceof Error ? err.message : 'Could not save note');
+    }
   }
 
   async function handleDeleteNote(id: string) {
     if (!confirm('Delete this note?')) return;
-    await deleteNote(id);
-    success('Note deleted');
+    try {
+      await deleteNote(id);
+      success('Note Deleted', 'The note was removed');
+    } catch (err) {
+      error('Delete Failed', err instanceof Error ? err.message : 'Could not delete note');
+    }
   }
 
   function showContextMenu(event: MouseEvent, note: any) {
     event.preventDefault();
+    event.stopPropagation();
     contextMenu = {
       visible: true,
       x: event.clientX,
@@ -79,10 +113,52 @@
 
   function getContextItems(note: any) {
     return [
-      { label: 'Duplicate', action: () => null },
-      { label: 'Archive', action: () => null },
+      { label: note.pinned_at ? 'Unpin' : 'Pin', action: () => handlePinNote(note) },
+      { label: 'Duplicate', action: () => handleDuplicateNote(note.id) },
       { label: 'Delete', action: () => handleDeleteNote(note.id), danger: true },
     ];
+  }
+
+  async function handleDuplicateNote(id: string) {
+    try {
+      await duplicateNote(id);
+      success('Note Duplicated', 'A copy was created and opened');
+    } catch (err) {
+      error('Duplicate Failed', err instanceof Error ? err.message : 'Could not duplicate note');
+    }
+  }
+
+  async function handlePinNote(note: any) {
+    try {
+      await toggleNotePin(note.id, !!note.pinned_at);
+      success(note.pinned_at ? 'Note Unpinned' : 'Note Pinned', 'Pinned notes stay at the top');
+    } catch (err) {
+      error('Pin Failed', err instanceof Error ? err.message : 'Could not update pin state');
+    }
+  }
+
+  async function addTag() {
+    if (!$activeNote || !tagDraft.trim()) return;
+    const nextTag = tagDraft.trim();
+    const tags = Array.from(new Set([...($activeNote.tags || []), nextTag]));
+    try {
+      await replaceActiveNoteTags(tags);
+      tagDraft = '';
+      success('Tag Added', `"${nextTag}" was added`);
+    } catch (err) {
+      error('Tag Failed', err instanceof Error ? err.message : 'Could not update tags');
+    }
+  }
+
+  async function removeTag(tag: string) {
+    if (!$activeNote) return;
+    const tags = ($activeNote.tags || []).filter((item: string) => item !== tag);
+    try {
+      await replaceActiveNoteTags(tags);
+      success('Tag Removed', `"${tag}" was removed`);
+    } catch (err) {
+      error('Tag Failed', err instanceof Error ? err.message : 'Could not update tags');
+    }
   }
 
   function formatDate(timestamp: number) {

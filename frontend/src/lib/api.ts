@@ -10,16 +10,21 @@ export interface User {
 }
 
 export interface FileRecord {
+  schema_version?: number;
   id: string;
   name: string;
   size_bytes: number;
+  content_hash?: string;
   mime_type: string;
   uploaded_at: number;
   updated_at?: number;
   folder_path?: string;
   tags?: string[];
+  pinned?: boolean;
   pinned_at?: number;
-  public: boolean;
+  public?: boolean;
+  visibility?: 'public' | 'private' | string;
+  public_token?: string;
 }
 
 export interface FolderEntry {
@@ -48,6 +53,45 @@ export interface Workspace {
 
 const BASE = '/api/v1';
 
+export interface VisibilityResponse {
+  schema_version: number;
+  file: FileRecord;
+  public_url?: string;
+}
+
+export interface FileShareResponse {
+  schema_version: number;
+  public_url: string;
+  qr_terminal: string;
+}
+
+export interface SearchResult {
+  type: 'file' | 'note' | 'workspace';
+  id: string;
+  name?: string;
+  title?: string;
+  snippet?: string;
+  tags?: string[];
+  visibility?: string;
+  folder_path?: string;
+  updated_at?: number;
+}
+
+function normalizeFileRecord(file: FileRecord): FileRecord {
+  const isPublic = file.public ?? file.visibility === 'public';
+  const isPinned = file.pinned ?? file.pinned_at !== undefined;
+
+  return {
+    ...file,
+    public: isPublic,
+    pinned: isPinned,
+    pinned_at: file.pinned_at ?? (isPinned ? 1 : undefined),
+    updated_at: file.updated_at ?? file.uploaded_at,
+    tags: file.tags ?? [],
+    folder_path: file.folder_path ?? '',
+  };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
     credentials: 'same-origin',
@@ -73,10 +117,14 @@ export const api = {
   getMe: () => request<User>('/auth/me'),
   
   // Files
-  listFiles: (limit?: number) =>
-    request<{ files: FileRecord[] }>(`/files${limit ? `?limit=${limit}` : ''}`),
+  listFiles: async (limit?: number) => {
+    const data = await request<{ files: FileRecord[] }>(
+      `/files${limit ? `?limit=${limit}` : ''}`,
+    );
+    return { ...data, files: (data.files || []).map(normalizeFileRecord) };
+  },
   listFolders: () => request<{ schema_version: number; folders: FolderEntry[] }>('/folders'),
-  getFile: (id: string) => request<FileRecord>(`/files/${id}`),
+  getFile: async (id: string) => normalizeFileRecord(await request<FileRecord>(`/files/${id}`)),
   deleteFile: (id: string) =>
     request(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   renameFile: (id: string, newName: string) =>
@@ -94,10 +142,19 @@ export const api = {
   unpinFile: (id: string) =>
     request(`/files/${encodeURIComponent(id)}/pin`, { method: 'DELETE' }),
   setFileVisibility: (id: string, isPublic: boolean) =>
-    request(`/files/${encodeURIComponent(id)}/visibility`, {
+    request<VisibilityResponse>(`/files/${encodeURIComponent(id)}/visibility`, {
       method: 'PATCH',
       body: JSON.stringify({ visibility: isPublic ? 'public' : 'private' }),
-    }),
+    }).then((response) => ({
+      ...response,
+      file: normalizeFileRecord(response.file),
+    })),
+  getFileShare: (id: string) =>
+    request<FileShareResponse>(`/files/${encodeURIComponent(id)}/share`),
+  listPublicFiles: async () => {
+    const data = await request<{ schema_version: number; files: FileRecord[] }>('/public/files');
+    return { ...data, files: (data.files || []).map(normalizeFileRecord) };
+  },
 
   // Notes
   listNotes: () => request<{ notes: Note[] }>('/notes'),
@@ -114,6 +171,17 @@ export const api = {
     }),
   deleteNote: (id: string) =>
     request(`/notes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  duplicateNote: (id: string) =>
+    request<Note>(`/notes/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
+  replaceNoteTags: (id: string, tags: string[]) =>
+    request(`/notes/${encodeURIComponent(id)}/tags`, {
+      method: 'PUT',
+      body: JSON.stringify(tags),
+    }),
+  pinNote: (id: string) =>
+    request(`/notes/${encodeURIComponent(id)}/pin`, { method: 'PUT' }),
+  unpinNote: (id: string) =>
+    request(`/notes/${encodeURIComponent(id)}/pin`, { method: 'DELETE' }),
 
   // Workspaces
   listWorkspaces: () => request<{ workspaces: Workspace[] }>('/workspaces'),
@@ -148,4 +216,11 @@ export const api = {
       corrupt_file_count: number;
       public_url?: string;
     }>('/status'),
+  search: (query: string, limit = 25) =>
+    request<{ schema_version: number; results: SearchResult[] }>(
+      `/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
 };
+
+export const listPublicFiles = api.listPublicFiles;
+export const runSearch = api.search;

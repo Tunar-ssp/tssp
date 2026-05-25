@@ -45,6 +45,7 @@ mod state;
 mod status;
 mod tags;
 mod upload;
+mod chunked_upload;
 mod urls;
 mod visibility;
 mod web;

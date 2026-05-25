@@ -13,7 +13,7 @@ export const visibleFiles = derived(
   [files, currentFolder],
   ([$files, $folder]) =>
     $files.filter(f => (f.folder_path || '') === $folder)
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .sort((a, b) => (b.updated_at ?? b.uploaded_at) - (a.updated_at ?? a.uploaded_at))
 );
 
 export async function loadFiles(folder?: string) {
