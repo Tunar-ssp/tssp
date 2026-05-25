@@ -10,7 +10,7 @@
   let { content = '', onChange, placeholder = 'Start typing...' }: Props = $props();
 
   let isFocused = $state(false);
-  let editorContent = $state(content);
+  let editorContent = $state('');
   let editorElement: HTMLDivElement | undefined;
 
   $effect(() => {

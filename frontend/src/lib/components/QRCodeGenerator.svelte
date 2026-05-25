@@ -10,8 +10,8 @@
 
   let { data, size = 256, level = 'M' }: Props = $props();
 
-  let canvas: HTMLCanvasElement;
-  let qrCode: any;
+  let canvas = $state<HTMLCanvasElement | undefined>(undefined);
+  let qrCode = $state<any>(null);
   let isLoading = $state(true);
   let error = $state<string | null>(null);
 
@@ -65,7 +65,9 @@
 <div class="qr-container">
   {#if isLoading}
     <div class="loading">
-      <Icons.Loader2 size={24} class="spinner" />
+      <div class="spinner-wrap">
+        <Icons.Loader2 size={24} />
+      </div>
       <p>Generating QR code...</p>
     </div>
   {:else if error}
@@ -77,11 +79,11 @@
     <div class="qr-content">
       <canvas bind:this={canvas} class="qr-canvas"></canvas>
       <div class="qr-actions">
-        <button class="btn btn-primary" title="Download QR code" on:click={downloadQRCode}>
+        <button class="btn btn-primary" title="Download QR code" onclick={downloadQRCode}>
           <Icons.Download size={14} />
           Download
         </button>
-        <button class="btn btn-secondary" title="Copy to clipboard" on:click={copyToClipboard}>
+        <button class="btn btn-secondary" title="Copy to clipboard" onclick={copyToClipboard}>
           <Icons.Copy size={14} />
           Copy
         </button>
@@ -111,7 +113,10 @@
     padding: var(--s-4);
   }
 
-  .spinner {
+  .spinner-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     animation: spin 1s linear infinite;
   }
 

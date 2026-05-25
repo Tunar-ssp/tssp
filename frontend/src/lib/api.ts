@@ -280,7 +280,7 @@ export const api = {
   restoreFile: (id: string) =>
     request(`/files/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
   permanentDeleteFile: (id: string) =>
-    request(`/files/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' }),
+    request(`/files/${encodeURIComponent(id)}/purge`, { method: 'DELETE' }),
   listTrash: async () => {
     const data = await request<{ files: FileRecord[] }>('/trash');
     return { ...data, files: (data.files || []).map(normalizeFileRecord) };
@@ -506,6 +506,10 @@ export const api = {
         body: JSON.stringify({ files }),
       }
     ),
+  cancelUpload: (sessionId: string) =>
+    request<void>(`/files/upload/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    }),
 
   // Share
   getSharedFile: (shareId: string) =>

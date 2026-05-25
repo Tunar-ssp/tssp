@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import * as Icons from 'lucide-svelte';
+  import { api, type SearchResult } from '$lib/api';
+  import { currentView, navigateTo, commandQuery } from '$lib/stores/ui';
+  import { error as notifyError } from '$lib/stores/notifications';
 
   interface Command {
     id: string;
@@ -28,39 +30,78 @@
   let searchQuery = $state('');
   let selectedIndex = $state(0);
   let inputRef: HTMLInputElement | null = $state(null);
+  let searchResults = $state<SearchResult[]>([]);
+  let isSearching = $state(false);
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const appCommands: Command[] = [
+    {
+      id: 'app-home',
+      label: 'Open launcher',
+      description: 'Return to the local-cloud home screen',
+      icon: Icons.Home,
+      action: () => navigateTo('home'),
+    },
+    {
+      id: 'app-drive',
+      label: 'Open Cloud Drive',
+      description: 'Browse files, folders, previews, and uploads',
+      icon: Icons.Cloud,
+      action: () => navigateTo('drive'),
+    },
+    {
+      id: 'app-notes',
+      label: 'Open Notes',
+      description: 'Review notes, tags, and pinned pages',
+      icon: Icons.BookText,
+      action: () => navigateTo('notes'),
+    },
+    {
+      id: 'app-workspace',
+      label: 'Open Workspace',
+      description: 'Switch into the editor workspace',
+      icon: Icons.Code2,
+      action: () => navigateTo('workspace'),
+    },
+    {
+      id: 'app-admin',
+      label: 'Open Admin',
+      description: 'Inspect system health and operations',
+      icon: Icons.Shield,
+      action: () => navigateTo('admin'),
+    },
+  ];
 
   $effect(() => {
     if (isOpen && inputRef) {
-      inputRef.focus();
-      searchQuery = '';
+      searchQuery = $commandQuery || '';
       selectedIndex = 0;
+      inputRef.focus();
     }
   });
 
   $effect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'k') {
-        e.preventDefault();
-        if (isOpen && onClose) {
-          onClose();
-        }
-      }
-      if (!isOpen) return;
+    if (!isOpen) return;
 
-      if (e.key === 'Escape' && onClose) {
-        onClose();
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        onClose?.();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        onClose?.();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        selectedIndex = Math.min(selectedIndex + 1, filteredCommands.length - 1);
+        selectedIndex = Math.min(selectedIndex + 1, visibleItems.length - 1);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         selectedIndex = Math.max(selectedIndex - 1, 0);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (filteredCommands[selectedIndex]) {
-          filteredCommands[selectedIndex].action();
-          if (onClose) onClose();
-        }
+        visibleItems[selectedIndex]?.action();
+        onClose?.();
       }
     };
 
@@ -68,7 +109,31 @@
     return () => document.removeEventListener('keydown', handleKeydown);
   });
 
-  let filteredCommands = $derived(
+  $effect(() => {
+    if (!isOpen) return;
+    if (searchTimer) clearTimeout(searchTimer);
+
+    if (!searchQuery.trim()) {
+      searchResults = [];
+      isSearching = false;
+      return;
+    }
+
+    isSearching = true;
+    searchTimer = setTimeout(async () => {
+      try {
+        const response = await api.search(searchQuery, 12);
+        searchResults = response.results || [];
+      } catch (err) {
+        searchResults = [];
+        notifyError('Search Failed', err instanceof Error ? err.message : 'Could not search');
+      } finally {
+        isSearching = false;
+      }
+    }, 180);
+  });
+
+  const filteredCommands = $derived(
     searchQuery
       ? commands.filter(
           (cmd) =>
@@ -76,6 +141,39 @@
             cmd.description?.toLowerCase().includes(searchQuery.toLowerCase())
         )
       : commands
+  );
+
+  const resultCommands = $derived(
+    searchResults.map((result) => ({
+      id: `result-${result.type}-${result.id}`,
+      label: result.name || result.title || result.id,
+      description:
+        result.type === 'file'
+          ? `${result.folder_path || 'bucket root'} · ${result.visibility || 'private'}`
+          : result.snippet || `${result.type} result`,
+      shortcut: result.type.toUpperCase(),
+      icon:
+        result.type === 'file'
+          ? Icons.File
+          : result.type === 'note'
+            ? Icons.NotebookPen
+            : Icons.FolderGit2,
+      action: () => {
+        if (result.type === 'file') {
+          navigateTo('drive', { kind: 'file', id: result.id });
+        } else if (result.type === 'note') {
+          navigateTo('notes', { kind: 'note', id: result.id });
+        } else {
+          navigateTo('workspace', { kind: 'workspace', id: result.id });
+        }
+      },
+    }))
+  );
+
+  const visibleItems = $derived(
+    searchQuery.trim()
+      ? [...resultCommands, ...filteredCommands]
+      : [...appCommands, ...commands]
   );
 
   function handleBackdropClick(e: MouseEvent) {
@@ -101,20 +199,22 @@
         <input
           bind:this={inputRef}
           type="text"
-          placeholder="Search commands..."
+          placeholder="Search files, notes, workspaces, commands..."
           bind:value={searchQuery}
           class="palette-input"
         />
+        <span class="search-meta">{isSearching ? 'searching' : $currentView}</span>
       </div>
 
       <div class="palette-results">
-        {#if filteredCommands.length === 0}
+        {#if visibleItems.length === 0}
           <div class="palette-empty">
             <Icons.AlertCircle size={32} />
-            <p>No commands found</p>
+            <p>No results for "{searchQuery}"</p>
           </div>
         {:else}
-          {#each filteredCommands as cmd, idx (cmd.id)}
+          <div class="result-section">{searchQuery.trim() ? 'Search results' : 'Apps and commands'}</div>
+          {#each visibleItems as cmd, idx (cmd.id)}
             {@const Icon = cmd.icon}
             <button
               type="button"
@@ -122,7 +222,7 @@
               class:selected={idx === selectedIndex}
               onclick={() => {
                 cmd.action();
-                if (onClose) onClose();
+                onClose?.();
               }}
             >
               <div class="item-content">
@@ -147,7 +247,7 @@
       </div>
 
       <div class="palette-footer">
-        <span class="footer-hint">↑ ↓ to select • Enter to run • Esc to close</span>
+        <span class="footer-hint">↑ ↓ to select • Enter to open • Esc to close</span>
       </div>
     </div>
   </div>
@@ -156,11 +256,8 @@
 <style>
   .palette-backdrop {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.62);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -179,35 +276,36 @@
   }
 
   .palette {
-    width: 90%;
-    max-width: 600px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-3);
+    width: min(92vw, 720px);
+    background:
+      linear-gradient(180deg, rgba(20, 22, 29, 0.98), rgba(10, 11, 16, 0.98)),
+      radial-gradient(circle at 0% 0%, rgba(91, 227, 154, 0.08), transparent 42%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 28px;
     box-shadow: var(--shadow-modal);
     display: flex;
     flex-direction: column;
-    max-height: 400px;
+    max-height: min(76vh, 640px);
     animation: paletteSlideIn var(--duration-normal) var(--ease-smooth);
   }
 
   @keyframes paletteSlideIn {
     from {
       opacity: 0;
-      transform: scale(0.95);
+      transform: scale(0.96) translateY(-8px);
     }
     to {
       opacity: 1;
-      transform: scale(1);
+      transform: scale(1) translateY(0);
     }
   }
 
   .palette-search {
     display: flex;
     align-items: center;
-    gap: var(--s-3);
-    padding: var(--s-4);
-    border-bottom: 1px solid var(--border);
+    gap: 14px;
+    padding: 20px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
     color: var(--muted);
   }
@@ -217,7 +315,7 @@
     border: none;
     background: transparent;
     color: var(--text);
-    font-size: var(--fs-14);
+    font-size: 20px;
     outline: none;
     font-family: var(--ff-sans);
   }
@@ -226,9 +324,26 @@
     color: var(--muted);
   }
 
+  .search-meta {
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+
   .palette-results {
     flex: 1;
     overflow-y: auto;
+    padding: 12px;
+  }
+
+  .result-section {
+    padding: 8px 10px 10px;
+    color: var(--muted);
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
   }
 
   .palette-empty {
@@ -236,14 +351,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--s-3);
-    padding: var(--s-8);
+    gap: 12px;
+    padding: 64px 24px;
     color: var(--muted);
-  }
-
-  .palette-empty p {
-    margin: 0;
-    font-size: var(--fs-13);
   }
 
   .palette-item {
@@ -251,26 +361,25 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: var(--s-3) var(--s-4);
+    padding: 14px 16px;
     border: none;
     background: transparent;
     color: var(--text);
     text-align: left;
     cursor: pointer;
     transition: all var(--duration-quick) var(--ease-smooth);
-    border-left: 2px solid transparent;
+    border-radius: 18px;
   }
 
   .palette-item:hover,
   .palette-item.selected {
-    background: var(--surface-2);
-    border-left-color: var(--blue);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .item-content {
     display: flex;
     align-items: flex-start;
-    gap: var(--s-3);
+    gap: 12px;
     flex: 1;
     min-width: 0;
   }
@@ -279,9 +388,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
     flex-shrink: 0;
     color: var(--text-2);
-    margin-top: 2px;
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .item-text {
@@ -290,30 +402,33 @@
   }
 
   .item-label {
-    font-weight: 500;
-    font-size: var(--fs-13);
-    color: var(--text);
+    font-weight: 600;
+    font-size: 15px;
   }
 
   .item-description {
-    font-size: var(--fs-12);
+    font-size: 13px;
     color: var(--muted);
-    margin-top: 2px;
+    margin-top: 3px;
   }
 
   .item-shortcut {
-    display: flex;
-    gap: 4px;
-    font-size: var(--fs-11);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    padding: 4px 8px;
+    border-radius: 10px;
+    font-size: 11px;
     color: var(--muted);
-    flex-shrink: 0;
-    margin-left: var(--s-4);
+    background: rgba(255, 255, 255, 0.06);
+    font-family: var(--ff-mono);
   }
 
   .palette-footer {
-    padding: var(--s-3) var(--s-4);
-    border-top: 1px solid var(--hairline);
-    font-size: var(--fs-11);
+    padding: 14px 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 12px;
     color: var(--muted);
     text-align: center;
     flex-shrink: 0;

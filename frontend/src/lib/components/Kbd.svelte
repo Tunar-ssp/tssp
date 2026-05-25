@@ -7,7 +7,7 @@
 </script>
 
 <kbd class="kbd {className || ''}" {...rest}>
-  <slot />
+  {@render children?.()}
 </kbd>
 
 <style>

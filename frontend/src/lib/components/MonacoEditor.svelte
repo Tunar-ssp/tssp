@@ -6,10 +6,19 @@
     value: string;
     language?: string;
     onChange?: (value: string) => void;
+    onCursorChange?: (position: { line: number; column: number }) => void;
     height?: string;
+    showToolbar?: boolean;
   }
 
-  let { value = '', language = 'javascript', onChange, height = '100%' }: Props = $props();
+  let {
+    value = '',
+    language = 'javascript',
+    onChange,
+    onCursorChange,
+    height = '100%',
+    showToolbar = true,
+  }: Props = $props();
 
   let container: HTMLDivElement;
   let editor: any;
@@ -72,6 +81,13 @@
         onChange?.(editor.getValue());
       });
 
+      editor.onDidChangeCursorPosition((event: any) => {
+        onCursorChange?.({
+          line: event.position.lineNumber,
+          column: event.position.column,
+        });
+      });
+
       isInitialized = true;
       } catch (err) {
         console.error('Failed to initialize Monaco:', err);
@@ -128,27 +144,29 @@
 </script>
 
 <div class="monaco-wrapper" style="height: {height}">
-  <div class="editor-toolbar">
-    <div class="toolbar-left">
-      <select class="language-select" value={language} onchange={handleLanguageChange}>
-        {#each languages as lang}
-          <option value={lang}>{lang}</option>
-        {/each}
-      </select>
-    </div>
+  {#if showToolbar}
+    <div class="editor-toolbar">
+      <div class="toolbar-left">
+        <select class="language-select" value={language} onchange={handleLanguageChange}>
+          {#each languages as lang}
+            <option value={lang}>{lang}</option>
+          {/each}
+        </select>
+      </div>
 
-    <div class="toolbar-right">
-      <button type="button" class="toolbar-btn" title="Undo" onclick={handleUndo}>
-        <Icons.Undo2 size={14} />
-      </button>
-      <button type="button" class="toolbar-btn" title="Redo" onclick={handleRedo}>
-        <Icons.Redo2 size={14} />
-      </button>
-      <button type="button" class="toolbar-btn" title="Format (Alt+Shift+F)" onclick={handleFormat}>
-        <Icons.Wand2 size={14} />
-      </button>
+      <div class="toolbar-right">
+        <button type="button" class="toolbar-btn" title="Undo" onclick={handleUndo}>
+          <Icons.Undo2 size={14} />
+        </button>
+        <button type="button" class="toolbar-btn" title="Redo" onclick={handleRedo}>
+          <Icons.Redo2 size={14} />
+        </button>
+        <button type="button" class="toolbar-btn" title="Format (Alt+Shift+F)" onclick={handleFormat}>
+          <Icons.Wand2 size={14} />
+        </button>
+      </div>
     </div>
-  </div>
+  {/if}
 
   <div bind:this={container} class="editor-container"></div>
 </div>

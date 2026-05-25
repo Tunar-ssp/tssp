@@ -36,18 +36,6 @@
     expanded[id] = !expanded[id];
   }
 
-  function renderFiles(items: FileItem[], depth = 0) {
-    return items.map((item) => {
-      const isOpen = expanded[item.id];
-      return {
-        ...item,
-        depth,
-        isOpen,
-        hasChildren: item.children && item.children.length > 0,
-      };
-    });
-  }
-
   function flattenFiles(items: FileItem[], depth = 0): any[] {
     let result: any[] = [];
     items.forEach((item) => {
@@ -106,11 +94,11 @@
               style="transform: rotate({item.isOpen ? 90 : 0}deg); transition: transform 0.2s;"
             />
           </button>
-          <Icons.Folder size={16} class="item-icon folder-icon" />
+          <Icons.Folder size={16} class="folder-icon" />
           <span class="item-name">{item.name}</span>
         {:else}
-          <div class="file-toggle" />
-          <Icons.File size={16} class="item-icon file-icon" />
+          <div class="file-toggle"></div>
+          <Icons.File size={16} class="file-icon" />
           <button
             class="file-button"
             class:active={selectedFileId === item.id}
@@ -245,16 +233,13 @@
     flex-shrink: 0;
   }
 
-  .item-icon {
-    flex-shrink: 0;
-    color: var(--text-2);
-  }
-
   .folder-icon {
+    flex-shrink: 0;
     color: var(--orange);
   }
 
   .file-icon {
+    flex-shrink: 0;
     color: var(--muted);
   }
 

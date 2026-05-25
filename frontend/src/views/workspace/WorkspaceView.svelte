@@ -9,6 +9,7 @@
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { onDestroy, onMount } from 'svelte';
+  import { consumeSelectionIntent } from '$lib/stores/ui';
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, workspace: null as any });
   let isLoading = $state(true);
@@ -43,6 +44,14 @@
 
   onMount(async () => {
     await loadWorkspaces();
+    const intent = consumeSelectionIntent();
+    if (intent?.kind === 'workspace') {
+      setActiveWorkspace(intent.id);
+      activeTabId = intent.id;
+    } else if (!$activeWorkspace && $workspaces.length > 0) {
+      setActiveWorkspace($workspaces[0].id);
+      activeTabId = $workspaces[0].id;
+    }
     isLoading = false;
   });
 
@@ -232,7 +241,7 @@
       <div class="no-workspace">
         <Icons.Code size={48} />
         <h3>Select a workspace</h3>
-        <p>Click a workspace to edit or create a new one</p>
+        <p>Open a workspace to edit files and documents. Execution remains disabled until a safe sandbox exists.</p>
       </div>
     {:else}
       <TabBar
@@ -247,6 +256,14 @@
         onClose={() => showFindWidget = false}
         onFind={handleFind}
       />
+
+      <div class="workspace-banner">
+        <div class="banner-copy">
+          <Icons.Terminal size={14} />
+          <span>Editor mode only. Run/terminal remains locked until sandbox execution is implemented safely.</span>
+        </div>
+        <span class="banner-meta">{selectedLanguage || 'text'} · autosave enabled</span>
+      </div>
 
       <div class="editor-main">
         <div class="editor-header">
@@ -362,6 +379,30 @@
     overflow: hidden;
   }
 
+  .workspace-banner {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: rgba(20, 22, 29, 0.92);
+    color: var(--text-2);
+    font-size: var(--fs-12);
+  }
+
+  .banner-copy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .banner-meta {
+    color: var(--muted);
+    font-family: var(--ff-mono);
+    font-size: 11px;
+  }
+
   .editor-header {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
@@ -428,21 +469,4 @@
     color: var(--text);
   }
 
-  .code-editor {
-    flex: 1;
-    border: none;
-    background: var(--bg);
-    color: var(--text);
-    padding: 16px;
-    font-family: var(--ff-mono);
-    font-size: var(--fs-13);
-    line-height: 1.6;
-    outline: none;
-    resize: none;
-    tab-size: 2;
-  }
-
-  .code-editor::placeholder {
-    color: var(--muted);
-  }
 </style>

@@ -25,8 +25,8 @@
   let input = $state('');
   let history: Array<{ type: 'input' | 'output' | 'error'; text: string }> = $state([]);
   let isExecuting = $state(false);
-  let consoleElement: HTMLDivElement;
-  let inputElement: HTMLInputElement;
+  let consoleElement = $state<HTMLDivElement | undefined>(undefined);
+  let inputElement = $state<HTMLInputElement | undefined>(undefined);
 
   const defaultCommands: ConsoleCommand[] = [
     { id: 'help', name: 'help', description: 'Show available commands', category: 'System' },

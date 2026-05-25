@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import * as Icons from 'lucide-svelte';
   import Bar from './Bar.svelte';
+  import { uploadQueue } from '../stores/uploadQueue';
 
   interface Upload {
     id: string;
@@ -25,6 +27,36 @@
     class: className,
   } = $props<$$Props>();
 
+  let queueState = $state<{ items: any[]; totalUploadingCount: number }>({
+    items: [],
+    totalUploadingCount: 0,
+  });
+
+  const unsubscribe = uploadQueue.subscribe((value) => {
+    queueState = value;
+  });
+  onDestroy(unsubscribe);
+
+  const queueUploads = $derived(
+    uploads.length
+      ? uploads
+      : queueState.items.map((item) => ({
+          id: item.id,
+          name: item.filename,
+          progress: item.uploadedBytes,
+          total: item.fileSize,
+          status:
+            item.status === 'completed'
+              ? 'success'
+              : item.status === 'failed'
+                ? 'error'
+                : item.status === 'uploading'
+                  ? 'uploading'
+                  : 'pending',
+          error: item.lastError,
+        })),
+  );
+
   function formatBytes(bytes: number) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -38,18 +70,18 @@
   }
 </script>
 
-{#if uploads.length > 0}
+{#if queueUploads.length > 0}
   <div class="upload-queue {className || ''}">
     <div class="queue-header">
       <h3>
         <Icons.Upload size={16} />
         Uploads
       </h3>
-      <span class="queue-count">{uploads.length}</span>
+      <span class="queue-count">{queueUploads.length}</span>
     </div>
 
     <div class="queue-items">
-      {#each uploads as upload (upload.id)}
+      {#each queueUploads as upload (upload.id)}
         <div class="upload-item" class:error={upload.status === 'error'}>
           <div class="item-info">
             <div class="item-icon">
@@ -78,7 +110,7 @@
             {#if upload.status === 'uploading'}
               <button
                 class="action-btn"
-                on:click={() => onCancel?.(upload.id)}
+                onclick={() => onCancel?.(upload.id)}
                 title="Cancel"
               >
                 <Icons.X size={14} />
@@ -86,7 +118,7 @@
             {:else if upload.status === 'error' && onRetry}
               <button
                 class="action-btn"
-                on:click={() => onRetry(upload.id)}
+                onclick={() => onRetry(upload.id)}
                 title="Retry"
               >
                 <Icons.RotateCw size={14} />

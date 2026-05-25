@@ -1,3 +1,4 @@
+import { api } from '../api';
 import { uploadQueue } from '../stores/uploadQueue';
 
 const CHUNK_SIZE = 262_144; // 256 KB
@@ -29,24 +30,7 @@ export async function startChunkedUpload(
   folder: string
 ): Promise<string | null> {
   try {
-    const res = await fetch('/api/v1/files/upload/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filename: file.name,
-        total_size: file.size,
-        folder_path: folder || undefined,
-        mime_type: file.type || undefined,
-        tags: [],
-      }),
-      credentials: 'same-origin',
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to start upload: ${res.statusText}`);
-    }
-
-    const data = await res.json();
+    const data = await api.startUpload(folder);
     return data.session_id;
   } catch (err) {
     console.error('Error starting upload:', err);
@@ -63,24 +47,7 @@ async function uploadChunk(
   retryCount: number = 0
 ): Promise<boolean> {
   try {
-    const res = await fetch(
-      `/api/v1/files/upload/${sessionId}/chunk/${chunkIndex}`,
-      {
-        method: 'POST',
-        body: chunk,
-        credentials: 'same-origin',
-      }
-    );
-
-    if (!res.ok) {
-      if (res.status >= 500 && retryCount < MAX_RETRIES) {
-        await delay(getRetryDelay(retryCount));
-        return uploadChunk(uploadId, sessionId, chunkIndex, chunk, retryCount + 1);
-      }
-      throw new Error(`Chunk upload failed: ${res.statusText}`);
-    }
-
-    const data = await res.json();
+    await api.uploadChunk(sessionId, chunkIndex, chunk);
     const uploadedBytes = (chunkIndex + 1) * CHUNK_SIZE;
     await uploadQueue.updateProgress(uploadId, uploadedBytes, chunkIndex);
 
@@ -98,20 +65,16 @@ async function uploadChunk(
 
 async function completeUpload(
   uploadId: string,
-  sessionId: string
+  sessionId: string,
+  file: File
 ): Promise<boolean> {
   try {
-    const res = await fetch(
-      `/api/v1/files/upload/${sessionId}/complete`,
+    await api.completeUpload(sessionId, [
       {
-        method: 'POST',
-        credentials: 'same-origin',
-      }
-    );
-
-    if (!res.ok) {
-      throw new Error(`Failed to complete upload: ${res.statusText}`);
-    }
+        name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+      },
+    ]);
 
     await uploadQueue.setStatus(uploadId, 'completed');
     return true;
@@ -124,10 +87,7 @@ async function completeUpload(
 
 async function cancelUpload(sessionId: string): Promise<void> {
   try {
-    await fetch(`/api/v1/files/upload/${sessionId}`, {
-      method: 'DELETE',
-      credentials: 'same-origin',
-    });
+    await api.cancelUpload(sessionId);
   } catch (err) {
     console.error('Error canceling upload:', err);
   }
@@ -167,7 +127,7 @@ async function uploadFile(
     }
 
     // Complete the upload
-    const completed = await completeUpload(uploadId, sessionId);
+    const completed = await completeUpload(uploadId, sessionId, file);
     return completed;
   } catch (err) {
     console.error('Error uploading file:', err);

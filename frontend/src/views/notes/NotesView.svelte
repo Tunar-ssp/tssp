@@ -20,6 +20,7 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import Btn from '$lib/components/Btn.svelte';
   import { onDestroy, onMount } from 'svelte';
+  import { consumeSelectionIntent } from '$lib/stores/ui';
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, note: null as any });
   let searchQuery = $state('');
@@ -27,12 +28,19 @@
   let titleDraft = $state('');
   let bodyDraft = $state('');
   let tagDraft = $state('');
+  let sidebarFilter = $state<'all' | 'pinned' | 'recent'>('all');
   let showSlashMenu = $state(false);
   let slashMenuPos = $state({ x: 0, y: 0 });
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(async () => {
     await loadNotes();
+    const intent = consumeSelectionIntent();
+    if (intent?.kind === 'note') {
+      setActiveNote(intent.id);
+    } else if (!$activeNote && $sortedNotes.length > 0) {
+      setActiveNote($sortedNotes[0].id);
+    }
     isLoading = false;
   });
 
@@ -113,12 +121,26 @@
   }
 
 
-  let filteredNotes = $derived(searchQuery
-    ? $sortedNotes.filter(n =>
-        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        n.body.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : $sortedNotes
+  let filteredNotes = $derived(
+    $sortedNotes.filter((note) => {
+      if (sidebarFilter === 'pinned' && !note.pinned_at) return false;
+      if (sidebarFilter === 'recent') {
+        const ageSeconds = Math.floor(Date.now() / 1000) - note.updated_at;
+        if (ageSeconds > 7 * 86_400) return false;
+      }
+
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        note.title.toLowerCase().includes(query) ||
+        note.body.toLowerCase().includes(query) ||
+        note.tags.some((tag) => tag.toLowerCase().includes(query))
+      );
+    })
+  );
+
+  let allTags = $derived(
+    Array.from(new Set($sortedNotes.flatMap((note) => note.tags || []))).sort((left, right) => left.localeCompare(right))
   );
 
   function getContextItems(note: any) {
@@ -188,7 +210,10 @@
 <div class="notes-view">
   <div class="notes-sidebar">
     <div class="sidebar-header">
-      <h2>Notes</h2>
+      <div>
+        <h2>Notes</h2>
+        <p>Pages, drafts, and pinned knowledge.</p>
+      </div>
       <Btn kind="primary" size="sm" onClick={handleCreateNote}>
         <Icons.Plus size={14} />
       </Btn>
@@ -202,6 +227,40 @@
         bind:value={searchQuery}
         class="search-input"
       />
+    </div>
+
+    <div class="sidebar-groups">
+      <div class="sidebar-group">
+        <span class="sidebar-label">Collections</span>
+        <button type="button" class="collection-chip" class:active={sidebarFilter === 'all'} onclick={() => (sidebarFilter = 'all')}>
+          <Icons.BookText size={12} />
+          All notes
+          <small>{$sortedNotes.length}</small>
+        </button>
+        <button type="button" class="collection-chip" class:active={sidebarFilter === 'pinned'} onclick={() => (sidebarFilter = 'pinned')}>
+          <Icons.Pin size={12} />
+          Pinned
+          <small>{$sortedNotes.filter((note) => note.pinned_at).length}</small>
+        </button>
+        <button type="button" class="collection-chip" class:active={sidebarFilter === 'recent'} onclick={() => (sidebarFilter = 'recent')}>
+          <Icons.History size={12} />
+          Recent
+          <small>{$sortedNotes.length}</small>
+        </button>
+      </div>
+
+      {#if allTags.length > 0}
+        <div class="sidebar-group">
+          <span class="sidebar-label">Tags</span>
+          <div class="tag-cloud">
+            {#each allTags.slice(0, 8) as tag}
+              <button type="button" class="sidebar-tag" onclick={() => (searchQuery = tag)}>
+                {tag}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
 
     <div class="notes-list">
@@ -356,10 +415,16 @@
   }
 
   .sidebar-header h2 {
-    margin: 0;
+    margin: 0 0 4px;
     font-size: var(--fs-18);
     font-weight: 600;
     color: var(--text);
+  }
+
+  .sidebar-header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-12);
   }
 
   .search-box {
@@ -391,6 +456,73 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+  }
+
+  .sidebar-groups {
+    padding: 4px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sidebar-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-family: var(--ff-mono);
+  }
+
+  .collection-chip {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .collection-chip small {
+    margin-left: auto;
+    color: var(--dim);
+    font-size: 11px;
+    font-family: var(--ff-mono);
+  }
+
+  .collection-chip:hover,
+  .collection-chip.active {
+    background: var(--surface-2);
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .sidebar-tag {
+    height: 26px;
+    padding: 0 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(110, 168, 255, 0.18);
+    background: rgba(110, 168, 255, 0.08);
+    color: var(--blue);
+    font-size: 11px;
+    cursor: pointer;
   }
 
   .loading,

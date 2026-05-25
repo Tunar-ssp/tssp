@@ -2,19 +2,19 @@
   import * as Icons from 'lucide-svelte';
   import { api } from '$lib/api';
   import { user, isLoading, error } from '$lib/stores/auth';
-  import { currentView } from '$lib/stores/ui';
+  import { navigateTo, preferences } from '$lib/stores/ui';
   import { success } from '$lib/stores/notifications';
   import Btn from '$lib/components/Btn.svelte';
 
-  let email = $state('');
+  let name = $state('');
   let password = $state('');
   let localError = $state('');
 
   async function handleSignIn() {
     localError = '';
 
-    if (!email || !password) {
-      localError = 'Email and password required';
+    if (!password) {
+      localError = 'Password required';
       return;
     }
 
@@ -22,10 +22,10 @@
     error.set(null);
 
     try {
-      const data = await api.login({ password });
+      const data = await api.login({ name: name.trim() || undefined, password });
       user.set({ id: '', name: data.name, role: data.role as 'admin' | 'user' });
       success(`Welcome back, ${data.name}!`);
-      currentView.set('drive');
+      navigateTo($preferences.landingApp || 'home');
     } catch (e) {
       localError = e instanceof Error ? e.message : 'Sign in failed';
       error.set(localError);
@@ -51,7 +51,13 @@
       <p>Self-hosted File Transfer System</p>
     </div>
 
-    <form class="signin-form" on:submit|preventDefault={handleSignIn}>
+    <form
+      class="signin-form"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void handleSignIn();
+      }}
+    >
       {#if localError || $error}
         <div class="signin-error">
           <Icons.AlertCircle size={16} />
@@ -60,15 +66,14 @@
       {/if}
 
       <div class="form-group">
-        <label for="email">Email</label>
+        <label for="name">Name</label>
         <input
-          id="email"
-          type="email"
-          placeholder="you@example.com"
-          bind:value={email}
-          on:keydown={handleKeydown}
+          id="name"
+          type="text"
+          placeholder="local user name"
+          bind:value={name}
+          onkeydown={handleKeydown}
           disabled={$isLoading}
-          required
         />
       </div>
 
@@ -79,7 +84,7 @@
           type="password"
           placeholder="••••••••"
           bind:value={password}
-          on:keydown={handleKeydown}
+          onkeydown={handleKeydown}
           disabled={$isLoading}
           required
         />

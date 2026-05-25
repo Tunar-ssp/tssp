@@ -62,7 +62,7 @@
         <button
           class="outline-item"
           style="--level: {getIndent(item.level)}"
-          on:click={() => onSelectItem?.(item.lineNumber)}
+          onclick={() => onSelectItem?.(item.lineNumber)}
         >
           <Icons.Heading size={14} />
           <span class="item-text">{item.title}</span>

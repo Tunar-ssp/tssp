@@ -20,8 +20,8 @@
     err: 'var(--danger)',
   };
 
-  const bgColor = toneColors[tone];
-  const clampedValue = Math.min(Math.max(value, 0), 100);
+  let bgColor = $derived(toneColors[tone]);
+  let clampedValue = $derived(Math.min(Math.max(value, 0), 100));
 </script>
 
 <div class="bar {className || ''}" {...rest}>
@@ -31,11 +31,11 @@
         <div
           class="bar-segment"
           style="width: {segment.value}%; background: {segment.color};"
-        />
+        ></div>
       {/each}
     </div>
   {:else}
-    <div class="bar-fill" style="width: {clampedValue}%; background: {bgColor};" />
+    <div class="bar-fill" style="width: {clampedValue}%; background: {bgColor};"></div>
   {/if}
 </div>
 
