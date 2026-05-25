@@ -33,14 +33,19 @@ pub fn collect_garbage(
                     if let Ok(blob_files) = std::fs::read_dir(second_entry.path()) {
                         for blob_entry in blob_files.flatten() {
                             if let Some(filename) = blob_entry.file_name().to_str() {
-                                if let Err(e) = check_and_delete_orphan(
+                                match check_and_delete_orphan(
                                     blob_entry.path(),
                                     filename,
                                     repository,
                                 ) {
-                                    eprintln!("warning: failed to check blob {}: {e}", filename);
-                                } else {
-                                    deleted_count += 1;
+                                    Ok(was_deleted) => {
+                                        if was_deleted {
+                                            deleted_count += 1;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("warning: failed to check blob {}: {e}", filename);
+                                    }
                                 }
                             }
                         }
@@ -57,20 +62,20 @@ fn check_and_delete_orphan(
     path: std::path::PathBuf,
     filename: &str,
     repository: &dyn FileRepository,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if filename.len() < 16 {
-        return Ok(());
+        return Ok(false);
     }
 
     let content_hash = ContentHash::new(filename)
         .map_err(|e| format!("invalid content hash in filename: {e}"))?;
 
     match repository.find_file_by_content_hash(&content_hash) {
-        Ok(Some(_)) => Ok(()),
+        Ok(Some(_)) => Ok(false),
         Ok(None) => {
             std::fs::remove_file(&path)
                 .map_err(|e| format!("failed to delete orphan blob: {e}"))?;
-            Ok(())
+            Ok(true)
         }
         Err(e) => Err(format!("repository error while checking blob: {e}")),
     }
