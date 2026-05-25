@@ -73,7 +73,7 @@ async fn upload_chunk_rejects_oversized_chunks() {
 
     let req = serde_json::json!({
         "filename": "test.txt",
-        "total_size": 500000  // 500KB total
+        "total_size": 500_000  // 500KB total
     });
 
     let start_response = app
@@ -117,7 +117,7 @@ async fn upload_chunk_rejects_out_of_range_index() {
 
     let req = serde_json::json!({
         "filename": "test.txt",
-        "total_size": 100000  // Only 1 chunk
+        "total_size": 100_000  // Only 1 chunk
     });
 
     let start_response = app
@@ -182,7 +182,7 @@ async fn complete_upload_rejects_incomplete_chunks() {
 
     let req = serde_json::json!({
         "filename": "test.txt",
-        "total_size": 500000  // Will need 2 chunks
+        "total_size": 500_000  // Will need 2 chunks
     });
 
     let start_response = app
@@ -256,7 +256,7 @@ async fn cancel_upload_cleans_up_resources() {
 
     let req = serde_json::json!({
         "filename": "test.txt",
-        "total_size": 500000
+        "total_size": 500_000
     });
 
     let start_response = app
@@ -282,7 +282,7 @@ async fn cancel_upload_cleans_up_resources() {
             Request::builder()
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/0", session_id))
-                .body(Body::from(vec![0u8; 100000]))
+                .body(Body::from(vec![0u8; 100_000]))
                 .expect("should succeed"),
         )
         .await
@@ -310,7 +310,7 @@ async fn cancel_upload_cleans_up_resources() {
             Request::builder()
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/1", session_id))
-                .body(Body::from(vec![0u8; 100000]))
+                .body(Body::from(vec![0u8; 100_000]))
                 .expect("should succeed"),
         )
         .await
