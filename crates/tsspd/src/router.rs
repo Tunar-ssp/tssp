@@ -51,6 +51,12 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::chunked_upload::start_upload).options(options_response),
         )
         .route(
+            "/api/v1/files/upload/{session_id}",
+            get(crate::chunked_upload::get_upload_session)
+                .delete(crate::chunked_upload::cancel_upload)
+                .options(options_response),
+        )
+        .route(
             "/api/v1/files/upload/{session_id}/chunk/{chunk_index}",
             post(crate::chunked_upload::upload_chunk)
                 .options(options_response)
@@ -59,10 +65,6 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/files/upload/{session_id}/complete",
             post(crate::chunked_upload::complete_upload).options(options_response),
-        )
-        .route(
-            "/api/v1/files/upload/{session_id}",
-            axum::routing::delete(crate::chunked_upload::cancel_upload).options(options_response),
         )
         .route(
             "/api/v1/auth/devices/{device_token}",

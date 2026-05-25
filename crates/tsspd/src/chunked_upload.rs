@@ -139,7 +139,12 @@ impl UploadSession {
     }
 }
 
-/// Session manager for chunked uploads (in-memory for now).
+/// Session manager for chunked uploads (in-memory only).
+///
+/// WARNING: Sessions are stored in-memory and are lost on daemon restart.
+/// This means clients CANNOT resume uploads after the server restarts.
+/// Resumability is only guaranteed within a single daemon lifetime.
+/// Consider implementing database persistence for true resumability.
 #[derive(Clone)]
 pub struct UploadSessionManager {
     sessions: Arc<RwLock<HashMap<String, UploadSession>>>,
@@ -243,6 +248,85 @@ pub struct ChunkUploadResponse {
 pub struct CompleteUploadResponse {
     pub session_id: String,
     pub status: String,
+}
+
+/// Response for session state query.
+#[derive(Debug, Serialize)]
+pub struct SessionStateResponse {
+    pub session_id: String,
+    pub filename: String,
+    pub total_size: u64,
+    pub uploaded_chunks: u64,
+    pub total_chunks: u64,
+    pub progress_percent: u32,
+}
+
+/// Query the state of an upload session.
+/// Returns 404 if the session doesn't exist (e.g., daemon restarted or session expired).
+pub async fn get_upload_session(
+    State(state): State<HttpState>,
+    auth: crate::auth::OptionalAuthContext,
+    Path(session_id_str): Path<String>,
+) -> Response {
+    let session_id = match UploadSessionId::new(session_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_session_id",
+                "session ID format is invalid",
+            )
+        }
+    };
+
+    let session = match state.upload_session_manager.get_session(&session_id).await {
+        Some(s) => s,
+        None => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                "session_not_found",
+                "upload session not found or expired",
+            )
+        }
+    };
+
+    // Verify ownership
+    if let Some(session_owner) = &session.owner_id {
+        if let Some(auth_ctx) = &auth.0 {
+            if auth_ctx.user_id.as_str() != *session_owner && !auth_ctx.is_admin() {
+                return error_response(
+                    StatusCode::FORBIDDEN,
+                    "forbidden",
+                    "you do not have permission to query this session",
+                );
+            }
+        } else {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "authentication required",
+            );
+        }
+    }
+
+    let uploaded_count = session
+        .uploaded_chunks
+        .iter()
+        .filter(|&&uploaded| uploaded)
+        .count();
+
+    (
+        StatusCode::OK,
+        Json(SessionStateResponse {
+            session_id: session.id.0.clone(),
+            filename: session.filename.clone(),
+            total_size: session.total_size,
+            uploaded_chunks: uploaded_count as u64,
+            total_chunks: session.uploaded_chunks.len() as u64,
+            progress_percent: session.progress_percent(),
+        }),
+    )
+        .into_response()
 }
 
 /// Start a new chunked upload session.
@@ -510,16 +594,24 @@ pub async fn complete_upload(
         size: None,
     };
 
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     let upload_provider = state.upload_provider.clone();
     let chunk_dir_cleanup = chunk_dir.clone();
-    let result = tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
-        .await
-        .map_err(|e| format!("spawn error: {e}"))
-        .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
+
+    // Hold mutation lock only during the actual upload, not cleanup
+    let result = {
+        let _mutation_guard = state.storage_mutation_lock.lock().await;
+        tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
+            .await
+            .map_err(|e| format!("spawn error: {e}"))
+            .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)))
+    };
 
     // Cleanup chunk directory after upload attempt (success or failure)
-    let _ = std::fs::remove_dir_all(&chunk_dir_cleanup);
+    // Do this asynchronously to avoid blocking handler
+    tokio::spawn(async move {
+        let _ = tokio::fs::remove_dir_all(&chunk_dir_cleanup).await;
+    });
+
     state.upload_session_manager.delete_session(&session_id).await;
 
     match result {
@@ -587,7 +679,13 @@ pub async fn cancel_upload(
     }
 
     let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
-    let _ = std::fs::remove_dir_all(&chunk_dir);
+    let chunk_dir_cleanup = chunk_dir.clone();
+
+    // Use tokio::spawn to do cleanup without blocking the handler
+    tokio::spawn(async move {
+        let _ = tokio::fs::remove_dir_all(&chunk_dir_cleanup).await;
+    });
+
     state.upload_session_manager.delete_session(&session_id).await;
 
     StatusCode::NO_CONTENT.into_response()

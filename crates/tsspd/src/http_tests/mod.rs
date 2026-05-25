@@ -2,6 +2,7 @@
 
 pub(crate) mod common;
 mod auth;
+mod chunked_upload;
 mod files;
 mod folders;
 mod imports;
