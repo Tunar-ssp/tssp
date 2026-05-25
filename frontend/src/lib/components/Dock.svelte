@@ -11,7 +11,7 @@
   interface $$Props {
     items?: DockItem[];
     activeId?: string;
-    mode?: 'always' | 'autohide' | 'compact';
+    mode?: 'always' | 'autohide' | 'compact' | 'hidden';
     class?: string;
   }
 
@@ -25,6 +25,7 @@
   let hoveredId = $state<string | null>(null);
 </script>
 
+{#if mode !== 'hidden'}
 <nav class="dock {className || ''}" class:autohide={mode === 'autohide'} class:compact={mode === 'compact'}>
   <div class="dock-glow" aria-hidden="true"></div>
   <div class="dock-container">
@@ -55,6 +56,7 @@
     {/each}
   </div>
 </nav>
+{/if}
 
 <style>
   .dock {
