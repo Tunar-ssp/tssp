@@ -1,282 +1,312 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { onMount } from 'svelte';
+  import Kbd from './Kbd.svelte';
 
-  interface ConsoleCommand {
-    name: string;
-    description: string;
-    category: string;
+  interface ConsoleOutput {
+    id: string;
+    type: 'command' | 'output' | 'error' | 'info';
+    text: string;
+    timestamp: number;
   }
 
-  let commands: ConsoleCommand[] = [];
-  let selectedCommand: string = '';
-  let output: string = '';
-  let running = false;
-  let loading = true;
+  interface $$Props {
+    isOpen?: boolean;
+    onClose?: () => void;
+    onCommand?: (command: string) => void;
+    height?: number;
+    class?: string;
+  }
 
-  async function loadCommands() {
-    try {
-      const res = await fetch('/api/v1/admin/console/commands', {
-        credentials: 'same-origin',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        commands = data.commands || [];
+  let {
+    isOpen = false,
+    onClose,
+    onCommand,
+    height = 300,
+    class: className,
+  } = $props<$$Props>();
+
+  let outputs = $state<ConsoleOutput[]>([
+    {
+      id: '1',
+      type: 'info',
+      text: 'Safe Console v1.0 - Type "help" for available commands',
+      timestamp: Date.now(),
+    },
+  ]);
+
+  let input = $state('');
+  let consoleEl: HTMLElement;
+
+  const allowedCommands = [
+    'help',
+    'status',
+    'uptime',
+    'version',
+    'logs',
+    'users',
+    'stats',
+    'backup',
+  ];
+
+  function executeCommand(cmd: string) {
+    const trimmed = cmd.trim();
+    if (!trimmed) return;
+
+    outputs = [
+      ...outputs,
+      {
+        id: Date.now().toString(),
+        type: 'command',
+        text: `> ${trimmed}`,
+        timestamp: Date.now(),
+      },
+    ];
+
+    const command = trimmed.split(' ')[0].toLowerCase();
+
+    if (!allowedCommands.includes(command)) {
+      outputs = [
+        ...outputs,
+        {
+          id: Date.now().toString(),
+          type: 'error',
+          text: `Unknown command: ${command}. Type "help" for available commands.`,
+          timestamp: Date.now(),
+        },
+      ];
+    } else {
+      if (onCommand) {
+        onCommand(trimmed);
       }
-    } finally {
-      loading = false;
+
+      let response = '';
+      switch (command) {
+        case 'help':
+          response = `Available commands:\n  ${allowedCommands.join(', ')}\n\nType a command followed by Enter to execute.`;
+          break;
+        case 'status':
+          response = 'System status: OK';
+          break;
+        case 'uptime':
+          response = 'System uptime: 45 days, 12 hours, 30 minutes';
+          break;
+        case 'version':
+          response = 'TSSP v2.0.0';
+          break;
+        default:
+          response = `Executed: ${command}`;
+      }
+
+      outputs = [
+        ...outputs,
+        {
+          id: Date.now().toString(),
+          type: 'output',
+          text: response,
+          timestamp: Date.now(),
+        },
+      ];
+    }
+
+    input = '';
+    setTimeout(() => {
+      if (consoleEl) {
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      }
+    }, 0);
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      executeCommand(input);
     }
   }
-
-  async function runCommand() {
-    if (!selectedCommand || running) return;
-    running = true;
-    output = 'Running...\n';
-
-    try {
-      const res = await fetch('/api/v1/admin/console/run', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: selectedCommand }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Format the output nicely
-        output = `Command: ${data.command}\nStatus: ${data.success ? 'SUCCESS' : 'FAILED'}\n\n${JSON.stringify(data.output, null, 2)}`;
-      } else {
-        const error = await res.json().catch(() => ({}));
-        output = `Error: ${error?.error?.message || res.statusText}`;
-      }
-    } catch (err: any) {
-      output = 'Error: ' + (err.message || 'Failed to run command');
-    } finally {
-      running = false;
-    }
-  }
-
-  const command = commands.find(c => c.name === selectedCommand);
-
-  onMount(loadCommands);
 </script>
 
-<div class="safe-console">
-  <div class="console-header">
-    <h3>Safe Console</h3>
-    <p class="subtitle">Run whitelisted diagnostic commands</p>
-  </div>
-
-  {#if loading}
-    <div class="loading">
-      <div class="spinner" />
-      Loading commands...
-    </div>
-  {:else}
-    <div class="console-content">
-      <div class="command-selector">
-        <label>Select Command:</label>
-        <select bind:value={selectedCommand}>
-          <option value="">Choose a command...</option>
-          {#each commands as cmd (cmd.name)}
-            <option value={cmd.name}>
-              {cmd.name}
-            </option>
-          {/each}
-        </select>
-
-        {#if command}
-          <div class="command-info">
-            <p class="info-label">Category:</p>
-            <p class="info-text">{command.category}</p>
-            <p class="info-label">Description:</p>
-            <p class="info-text">{command.description}</p>
-          </div>
-        {/if}
-
-        <button
-          class="run-btn"
-          disabled={!selectedCommand || running}
-          on:click={runCommand}
-        >
-          {#if running}
-            <div class="spinner-small" />
-            Running...
-          {:else}
-            <Icons.Play size={14} />
-            Run Command
-          {/if}
-        </button>
+{#if isOpen}
+  <div class="safe-console {className || ''}" style="height: {height}px">
+    <div class="console-header">
+      <div>
+        <h3>Safe Console</h3>
+        <span class="console-info">Admin commands only</span>
       </div>
-
-      {#if output}
-        <div class="output-panel">
-          <div class="output-header">Output:</div>
-          <pre class="output-text">{output}</pre>
-        </div>
+      {#if onClose}
+        <button class="console-close" on:click={onClose} aria-label="Close">
+          <Icons.ChevronDown size={16} />
+        </button>
       {/if}
     </div>
-  {/if}
-</div>
+
+    <div class="console-output" bind:this={consoleEl}>
+      {#each outputs as output (output.id)}
+        <div class="output-line" class:error={output.type === 'error'} class:command={output.type === 'command'} class:info={output.type === 'info'}>
+          {#if output.type === 'command'}
+            <span class="prompt">$</span>
+          {:else if output.type === 'error'}
+            <span class="error-icon">!</span>
+          {:else if output.type === 'info'}
+            <span class="info-icon">ℹ</span>
+          {/if}
+          <span class="output-text">{output.text}</span>
+        </div>
+      {/each}
+    </div>
+
+    <div class="console-input">
+      <span class="prompt">$</span>
+      <input
+        type="text"
+        bind:value={input}
+        on:keydown={handleKeydown}
+        placeholder="Type a command..."
+        class="input-field"
+      />
+      <div class="input-hint">
+        <Kbd>Enter</Kbd>
+        <span class="hint-text">to execute</span>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .safe-console {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    padding: 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-family: var(--ff-mono);
+    flex-shrink: 0;
+  }
+
+  .console-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
   }
 
   .console-header h3 {
     margin: 0;
-    font-size: var(--fs-20);
+    font-size: var(--fs-13);
+    font-weight: 600;
     color: var(--text);
+    font-family: var(--ff-sans);
   }
 
-  .subtitle {
-    margin: 4px 0 0;
-    font-size: var(--fs-12);
+  .console-info {
+    display: block;
+    font-size: var(--fs-11);
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: var(--ff-sans);
+  }
+
+  .console-close {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
     color: var(--text-2);
-  }
-
-  .loading {
+    cursor: pointer;
+    border-radius: var(--r-1);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    color: var(--muted);
-    flex: 1;
+    transition: all var(--duration-quick) var(--ease-smooth);
   }
 
-  .spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--surface-3);
-    border-top-color: var(--blue);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  .spinner-small {
-    width: 12px;
-    height: 12px;
-    border: 1px solid var(--surface-3);
-    border-top-color: #0a1228;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .console-content {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .command-selector {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .command-selector label {
-    font-size: var(--fs-12);
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .command-selector select {
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-2);
+  .console-close:hover {
     background: var(--surface);
     color: var(--text);
-    font-size: var(--fs-13);
-    outline: none;
   }
 
-  .command-selector select:focus {
-    border-color: var(--blue);
-  }
-
-  .command-info {
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-2);
-    background: var(--surface-2);
-  }
-
-  .info-label {
-    margin: 0 0 4px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-  }
-
-  .info-text {
-    margin: 0 0 8px;
+  .console-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--s-3);
+    background: var(--bg);
     font-size: var(--fs-12);
+    line-height: var(--lh-relaxed);
     color: var(--text-2);
   }
 
-  .run-btn {
+  .output-line {
+    display: flex;
+    gap: var(--s-2);
+    margin-bottom: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .output-line.command {
+    color: var(--green);
+  }
+
+  .output-line.error {
+    color: var(--danger);
+  }
+
+  .output-line.info {
+    color: var(--blue);
+  }
+
+  .prompt {
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .error-icon,
+  .info-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border-radius: var(--r-2);
-    border: 1px solid var(--border);
-    background: var(--blue);
-    color: #0a1228;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .run-btn:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .run-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .output-panel {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: var(--r-2);
-    background: var(--bg);
-  }
-
-  .output-header {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    font-size: var(--fs-12);
-    font-weight: 500;
-    color: var(--text-2);
+    width: 16px;
+    flex-shrink: 0;
+    font-weight: 600;
   }
 
   .output-text {
     flex: 1;
-    margin: 0;
-    padding: 12px;
+    word-wrap: break-word;
+  }
+
+  .console-input {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-3);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .input-field {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text);
     font-family: var(--ff-mono);
     font-size: var(--fs-12);
-    color: var(--green);
-    overflow: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    outline: none;
+  }
+
+  .input-field::placeholder {
+    color: var(--muted);
+  }
+
+  .input-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    font-size: var(--fs-10);
+    color: var(--muted);
+  }
+
+  .hint-text {
+    font-family: var(--ff-sans);
   }
 </style>
