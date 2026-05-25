@@ -263,6 +263,14 @@ export const api = {
       ...response,
       updated: (response.updated || []).map(normalizeFileRecord),
     })),
+  moveFile: (id: string, folderPath: string) =>
+    request<{ schema_version: number; file: FileRecord }>(`/files/${encodeURIComponent(id)}/folder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ folder_path: folderPath }),
+    }).then((response) => ({
+      ...response,
+      file: normalizeFileRecord(response.file),
+    })),
   getFileShare: (id: string) =>
     request<FileShareResponse>(`/files/${encodeURIComponent(id)}/share`),
   listPublicFiles: async () => {
