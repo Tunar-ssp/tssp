@@ -2,7 +2,6 @@
 
 //! HTTP integration tests.
 
-#![allow(unused_imports)]
 
 use super::common::*;
 use super::imports::*;

@@ -142,7 +142,6 @@ pub async fn get_file_share(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use axum::body::Body;
     use axum::http::{Request, StatusCode};

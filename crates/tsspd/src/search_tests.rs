@@ -1,6 +1,5 @@
 //! Search endpoint integration tests.
 
-#![allow(clippy::unwrap_used, unused_imports)]
 
 use super::*;
 use axum::body::to_bytes;

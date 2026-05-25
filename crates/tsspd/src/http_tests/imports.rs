@@ -1,6 +1,5 @@
 //! Shared imports for HTTP integration test modules.
 
-#![allow(unused_imports)]
 
 pub use std::io::Read;
 pub use std::sync::Arc;

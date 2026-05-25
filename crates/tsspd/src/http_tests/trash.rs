@@ -1,6 +1,5 @@
 //! Trash and soft-delete integration tests.
 
-#![allow(unused_imports)]
 
 use super::common::*;
 use super::imports::*;

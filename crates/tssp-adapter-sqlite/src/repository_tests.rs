@@ -1,6 +1,5 @@
 //! Integration tests for [`SqliteFileRepository`].
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use tempfile::tempdir;
 use tssp_domain::{

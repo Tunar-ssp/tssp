@@ -555,15 +555,15 @@ mod tests {
             uptime_seconds: 3600,
             uptime_hours: 1,
             last_restart: "3600 seconds ago".to_owned(),
-            disk_used: 1000000,
-            disk_total: 10000000,
-            memory_used: 500000,
-            memory_total: 4000000,
+            disk_used: 1_000_000,
+            disk_total: 1_000_0000,
+            memory_used: 500_000,
+            memory_total: 4_000_000,
             cpu_percent: 25.5,
             load_average: 0.5,
             total_files: 100,
-            total_size: 5000000,
-            db_size: 100000,
+            total_size: 500_0000,
+            db_size: 100_000,
             db_status: "ok",
         };
         assert_eq!(response.schema_version, 1);
@@ -579,15 +579,15 @@ mod tests {
             uptime_seconds: 3600,
             uptime_hours: 1,
             last_restart: "3600 seconds ago".to_owned(),
-            disk_used: 1000000,
-            disk_total: 10000000,
-            memory_used: 500000,
-            memory_total: 4000000,
+            disk_used: 1_000_000,
+            disk_total: 1_000_0000,
+            memory_used: 500_000,
+            memory_total: 4_000_000,
             cpu_percent: 25.5,
             load_average: 0.5,
             total_files: 100,
-            total_size: 5000000,
-            db_size: 100000,
+            total_size: 500_0000,
+            db_size: 100_000,
             db_status: "ok",
         };
         let json = serde_json::to_string(&response).expect("serialization failed");
@@ -607,7 +607,7 @@ mod tests {
             pinned_count: 5,
             workspace_count: 3,
             corrupt_file_count: 0,
-            storage_bytes_used: 1000000,
+            storage_bytes_used: 1_000_000,
             public_url: Some("https://example.com".to_owned()),
         };
         assert_eq!(response.schema_version, 1);
@@ -626,7 +626,7 @@ mod tests {
             pinned_count: 5,
             workspace_count: 3,
             corrupt_file_count: 0,
-            storage_bytes_used: 1000000,
+            storage_bytes_used: 1_000_000,
             public_url: Some("https://example.com".to_owned()),
         };
         let json = serde_json::to_string(&response).expect("serialization failed");
@@ -641,13 +641,13 @@ mod tests {
             id: "file123".to_owned(),
             title: "document.pdf".to_owned(),
             detail: "/documents".to_owned(),
-            occurred_at: 1609459200,
+            occurred_at: 1_609_459_200,
             visibility: Some("public".to_owned()),
-            size_bytes: Some(1024000),
+            size_bytes: Some(1_024_000),
             language: None,
         };
         assert_eq!(item.kind, "file");
-        assert_eq!(item.size_bytes, Some(1024000));
+        assert_eq!(item.size_bytes, Some(1_024_000));
     }
 
     #[test]
@@ -657,9 +657,9 @@ mod tests {
             id: "file123".to_owned(),
             title: "document.pdf".to_owned(),
             detail: "/documents".to_owned(),
-            occurred_at: 1609459200,
+            occurred_at: 1_609_459_200,
             visibility: Some("public".to_owned()),
-            size_bytes: Some(1024000),
+            size_bytes: Some(1_024_000),
             language: None,
         };
         let json = serde_json::to_string(&item).expect("serialization failed");
@@ -673,7 +673,7 @@ mod tests {
             id: "note456".to_owned(),
             title: "My Note".to_owned(),
             detail: "my-tag, other-tag".to_owned(),
-            occurred_at: 1609459200,
+            occurred_at: 1_609_459_200,
             visibility: None,
             size_bytes: None,
             language: None,
@@ -726,7 +726,7 @@ mod tests {
 
     #[test]
     fn admin_files_query_default_limit() {
-        let json = r#"{}"#;
+        let json = r"{}";
         let query: AdminFilesQuery = serde_json::from_str(json).expect("deserialize");
         assert_eq!(query.limit, 100);
     }
@@ -756,7 +756,7 @@ mod tests {
 
     #[test]
     fn admin_activity_query_default_limit() {
-        let json = r#"{}"#;
+        let json = r"{}";
         let query: AdminActivityQuery = serde_json::from_str(json).expect("deserialize");
         assert_eq!(query.limit, 100);
     }
@@ -831,7 +831,7 @@ mod tests {
             id: "ws1".to_owned(),
             title: "Python Workspace".to_owned(),
             detail: "python".to_owned(),
-            occurred_at: 1609459200,
+            occurred_at: 1_609_459_200,
             visibility: None,
             size_bytes: None,
             language: Some("python".to_owned()),
@@ -939,12 +939,12 @@ mod tests {
             id: "test".to_owned(),
             title: "test".to_owned(),
             detail: "test".to_owned(),
-            occurred_at: 1609459200,
+            occurred_at: 1_609_459_200,
             visibility: None,
             size_bytes: None,
             language: None,
         };
-        assert_eq!(item.occurred_at, 1609459200);
+        assert_eq!(item.occurred_at, 1_609_459_200);
     }
 
     #[test]
