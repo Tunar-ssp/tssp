@@ -6,13 +6,20 @@
   import FileGrid from '$lib/components/FileGrid.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import FileIcon from '$lib/components/FileIcon.svelte';
+  import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
+  import UploadQueue from '$lib/components/UploadQueue.svelte';
+  import SharingModal from '$lib/components/SharingModal.svelte';
+  import Breadcrumb from '$lib/components/Breadcrumb.svelte';
   import * as FileService from '$lib/services/fileService';
   import { onMount } from 'svelte';
 
   let contextMenu = { visible: false, x: 0, y: 0, file: null as any };
+  let previewFile: any = null;
+  let shareFile: any = null;
   let fileInput: HTMLInputElement;
   let filterQuery = '';
-  let viewMode: 'list' | 'grid' = (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'list') || 'list';
+  let viewMode: 'list' | 'grid' = (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'grid') || 'grid';
+  let uploads: any[] = $state([]);
 
   function toggleViewMode(mode: 'list' | 'grid') {
     viewMode = mode;
@@ -65,15 +72,25 @@
   }
 
   async function handleShare(file: any) {
-    await FileService.togglePublic(file.id);
+    shareFile = file;
   }
 
-  $: filteredFiles = filterQuery 
+  async function handlePreview(file: any) {
+    previewFile = file;
+  }
+
+  async function handleShareToggle(fileId: string, isPublic: boolean) {
+    await FileService.togglePublic(fileId);
+    success(isPublic ? 'File shared' : 'File made private');
+  }
+
+  let filteredFiles = $derived(filterQuery
     ? $visibleFiles.filter(f => f.name.toLowerCase().includes(filterQuery.toLowerCase()))
-    : $visibleFiles;
+    : $visibleFiles);
 
   function getContextItems(file: any) {
     return [
+      { label: 'Preview', action: () => handlePreview(file) },
       { label: 'Download', action: () => handleDownload(file) },
       { label: file.pinned_at ? 'Unpin' : 'Pin', action: () => handlePin(file) },
       { label: file.public ? 'Make Private' : 'Share', action: () => handleShare(file) },
@@ -114,19 +131,19 @@
       <div class="view-toggle">
         <button
           class="toggle-btn"
-          class:active={viewMode === 'list'}
-          on:click={() => toggleViewMode('list')}
-          title="List view"
-        >
-          <Icons.List size={16} />
-        </button>
-        <button
-          class="toggle-btn"
           class:active={viewMode === 'grid'}
           on:click={() => toggleViewMode('grid')}
           title="Grid view"
         >
           <Icons.Grid2x2 size={16} />
+        </button>
+        <button
+          class="toggle-btn"
+          class:active={viewMode === 'list'}
+          on:click={() => toggleViewMode('list')}
+          title="List view"
+        >
+          <Icons.List size={16} />
         </button>
       </div>
     </div>
@@ -148,7 +165,10 @@
           {#each filteredFiles as file (file.id)}
             <div
               class="file-row"
+              on:click={() => handlePreview(file)}
               on:contextmenu={(e) => showContextMenu(e, file)}
+              role="button"
+              tabindex="0"
             >
               <div class="file-details">
                 <div class="file-icon">
@@ -164,15 +184,15 @@
 
               <div class="file-actions">
                 {#if file.pinned_at}
-                  <Icons.Pin size={14} style="color: var(--orange)" />
+                  <Icons.Pin size={14} style="color: var(--orange)" title="Pinned" />
                 {/if}
                 {#if file.public}
-                  <Icons.Share2 size={14} style="color: var(--green)" />
+                  <Icons.Share2 size={14} style="color: var(--green)" title="Public" />
                 {/if}
-                <button class="action-btn" on:click={() => handleDownload(file)}>
+                <button class="action-btn" on:click={() => handleDownload(file)} title="Download">
                   <Icons.Download size={14} />
                 </button>
-                <button class="action-btn" on:click={(e) => showContextMenu(e, file)}>
+                <button class="action-btn" on:click={(e) => showContextMenu(e, file)} title="More">
                   <Icons.MoreVertical size={14} />
                 </button>
               </div>
@@ -184,7 +204,10 @@
           {#each filteredFiles as file (file.id)}
             <div
               class="file-card"
+              on:click={() => handlePreview(file)}
               on:contextmenu={(e) => showContextMenu(e, file)}
+              role="button"
+              tabindex="0"
             >
               <div class="file-card-icon">
                 <FileIcon mimeType={file.mime_type} name={file.name} size={32} />
@@ -195,10 +218,10 @@
               </div>
               <div class="file-card-actions">
                 {#if file.pinned_at}
-                  <Icons.Pin size={12} style="color: var(--orange)" />
+                  <Icons.Pin size={12} style="color: var(--orange)" title="Pinned" />
                 {/if}
                 {#if file.public}
-                  <Icons.Share2 size={12} style="color: var(--green)" />
+                  <Icons.Share2 size={12} style="color: var(--green)" title="Public" />
                 {/if}
               </div>
             </div>
@@ -215,6 +238,26 @@
   y={contextMenu.y}
   items={contextMenu.file ? getContextItems(contextMenu.file) : []}
 />
+
+<FilePreviewModal
+  file={previewFile}
+  isOpen={previewFile !== null}
+  onClose={() => (previewFile = null)}
+  onDownload={(fileId) => {
+    const f = $visibleFiles.find(x => x.id === fileId);
+    if (f) handleDownload(f);
+    previewFile = null;
+  }}
+/>
+
+<SharingModal
+  file={shareFile}
+  isOpen={shareFile !== null}
+  onClose={() => (shareFile = null)}
+  onShare={(fileId, isPublic) => handleShareToggle(fileId, isPublic)}
+/>
+
+<UploadQueue {uploads} />
 
 <style>
   .drive-view {
@@ -497,9 +540,12 @@
     position: relative;
   }
 
-  .file-card:hover {
+  .file-card:hover,
+  .file-card:focus-visible {
     background: var(--surface-2);
-    border-color: var(--text-2);
+    border-color: var(--blue);
+    outline: none;
+    transform: translateY(-2px);
   }
 
   .file-card-icon {
