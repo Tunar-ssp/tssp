@@ -264,6 +264,20 @@ mod tests {
         ) -> Result<Option<FileRecord>, RepositoryError> {
             Ok(None)
         }
+
+        fn insert_audit_event(
+            &self,
+            _id: &str,
+            _timestamp: i64,
+            _user_id: Option<&str>,
+            _action: &str,
+            _resource: Option<&str>,
+            _resource_id: Option<&str>,
+            _status: &str,
+            _details: Option<&str>,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
+        }
     }
 
     #[test]

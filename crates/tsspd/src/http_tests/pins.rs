@@ -25,9 +25,10 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         UuidV7FileIdGenerator,
         SystemClock,
     );
-    let pin_service = PinService::new(repository);
+    let pin_service = PinService::new(repository.clone());
     let app = build_router(
         HttpState::test_http_state(temp.path().join("http-upload-tmp"))
+            .with_repository(repository)
             .with_stats_provider(Arc::new(stats_provider))
             .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
             .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
@@ -43,7 +44,6 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         .as_str()
         .unwrap_or_else(|| panic!("first uploaded id is missing"))
         .to_owned();
-    println!("DEBUG: first_id = {}", first_id);
 
     let second_upload = app
         .clone()
@@ -56,12 +56,14 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         .to_owned();
 
     let url = format!("/api/v1/files/{}/pin", first_id);
-    println!("DEBUG: url = {}", url);
-    let req = Request::builder()
+    let mut req = Request::builder()
         .method("PUT")
         .uri(url)
         .body(Body::empty())
         .unwrap();
+    let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    req.extensions_mut()
+        .insert(axum::extract::connect_info::ConnectInfo(peer_addr));
     let first_pin = app
         .clone()
         .oneshot(req)
@@ -74,18 +76,28 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         panic!("pin request for id {first_id} (PUT /api/v1/files/{first_id}/pin) failed with status {status} and body: {body}. Ensure the router is configured correctly.");
     }
 
+    let mut second_pin_req = pin_with_position_request(&second_id, r#"{"position":1}"#);
+    let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    second_pin_req
+        .extensions_mut()
+        .insert(axum::extract::connect_info::ConnectInfo(peer_addr));
     let second_pin = app
         .clone()
-        .oneshot(pin_with_position_request(&second_id, r#"{"position":1}"#))
+        .oneshot(second_pin_req)
         .await
         .unwrap_or_else(|error| panic!("pin with position request failed: {error}"));
     assert_eq!(second_pin.status(), StatusCode::OK);
     let second_pin_body = response_json(second_pin).await;
     assert_eq!(second_pin_body["changed"], true);
 
+    let mut list_req = pins_request();
+    let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    list_req
+        .extensions_mut()
+        .insert(axum::extract::connect_info::ConnectInfo(peer_addr));
     let listed = app
         .clone()
-        .oneshot(pins_request())
+        .oneshot(list_req)
         .await
         .unwrap_or_else(|error| panic!("pins list request failed: {error}"));
     assert_eq!(listed.status(), StatusCode::OK);
@@ -93,26 +105,41 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
     assert_eq!(listed_body["files"][0]["id"], second_id);
     assert_eq!(listed_body["files"][1]["id"], first_id);
 
+    let mut reorder_req = reorder_pins_request(&format!(
+        r#"{{"ids":["{first_id}","{second_id}"]}}"#
+    ));
+    let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    reorder_req
+        .extensions_mut()
+        .insert(axum::extract::connect_info::ConnectInfo(peer_addr));
     let reordered = app
         .clone()
-        .oneshot(reorder_pins_request(&format!(
-            r#"{{"ids":["{first_id}","{second_id}"]}}"#
-        )))
+        .oneshot(reorder_req)
         .await
         .unwrap_or_else(|error| panic!("pins reorder request failed: {error}"));
     assert_eq!(reordered.status(), StatusCode::OK);
 
+    let mut list_after_reorder_req = pins_request();
+    let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    list_after_reorder_req
+        .extensions_mut()
+        .insert(axum::extract::connect_info::ConnectInfo(peer_addr));
     let listed_after_reorder = app
         .clone()
-        .oneshot(pins_request())
+        .oneshot(list_after_reorder_req)
         .await
         .unwrap_or_else(|error| panic!("pins list after reorder request failed: {error}"));
     let reordered_body = response_json(listed_after_reorder).await;
     assert_eq!(reordered_body["files"][0]["id"], first_id);
     assert_eq!(reordered_body["files"][1]["id"], second_id);
 
+    let mut unpin_req = unpin_request(&first_id);
+    let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    unpin_req
+        .extensions_mut()
+        .insert(axum::extract::connect_info::ConnectInfo(peer_addr));
     let unpinned = app
-        .oneshot(unpin_request(&first_id))
+        .oneshot(unpin_req)
         .await
         .unwrap_or_else(|error| panic!("unpin request failed: {error}"));
     assert_eq!(unpinned.status(), StatusCode::OK);

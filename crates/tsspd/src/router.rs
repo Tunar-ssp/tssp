@@ -69,6 +69,10 @@ pub fn build_router(state: HttpState) -> Router {
             axum::routing::delete(crate::auth::revoke_user_device).options(options_response),
         )
         .route(
+            "/api/v1/pins",
+            get(crate::pins::list_pins).options(options_response),
+        )
+        .route(
             "/api/v1/pins/reorder",
             post(crate::pins::reorder).options(options_response),
         )

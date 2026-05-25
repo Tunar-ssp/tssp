@@ -88,7 +88,7 @@ pub(crate) fn find_file_in_transaction(
         .prepare(
             "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
              FROM files
-             WHERE id = ?1",
+             WHERE id = ?1 AND deleted_at IS NULL",
         )
         .map_err(map_rusqlite_repository_error)?;
     let mut rows = statement
