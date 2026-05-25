@@ -1,7 +1,6 @@
 //! Health and metadata status delivery.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::extract::State;
 use axum::http::header::CONTENT_TYPE;
@@ -13,9 +12,6 @@ use tssp_domain::{FileId, FileRecord, UnixTimestamp};
 use tssp_ports::{Clock, FileRepository, ListQuery, PagedFiles, RepositoryStats};
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
-
-static CACHED_STORAGE_BYTES: AtomicU64 = AtomicU64::new(0);
-static LAST_SIZE_CHECK: AtomicU64 = AtomicU64::new(0);
 
 /// Supplies metadata counts to the status endpoint.
 pub trait MetadataStatsProvider: Send + Sync {
@@ -126,6 +122,7 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
             pinned_count: 0,
             recent_upload_count: 0,
             recent_note_count: 0,
+            storage_bytes_used: 0,
         })
     }
 
@@ -336,39 +333,16 @@ pub(crate) async fn readyz() -> impl IntoResponse {
 }
 
 /// Returns cached or calculated directory size.
-pub async fn get_cached_storage_usage(state: &HttpState, data_root: &Path) -> u64 {
-    let now = state.started_at.elapsed().as_secs();
-    let last_check = LAST_SIZE_CHECK.load(Ordering::Relaxed);
-
-    // Cache storage size calculation every 5 minutes
-    // TODO: Replace disk walk with SUM(size_bytes) query from files table
-    // Currently: calculate_directory_size recursively walks entire data/ on each refresh
-    // Better: Add storage_bytes_used counter to database, update on upload/delete, query counter on status
-    // This would eliminate disk I/O and improve latency from 30s+ to <1ms
-    if now > last_check + 300 || last_check == 0 {
-        let root = data_root.to_path_buf();
-        let size = tokio::task::spawn_blocking(move || calculate_directory_size(&root))
-            .await
-            .unwrap_or(0);
-        CACHED_STORAGE_BYTES.store(size, Ordering::Relaxed);
-        LAST_SIZE_CHECK.store(now, Ordering::Relaxed);
-        size
-    } else {
-        CACHED_STORAGE_BYTES.load(Ordering::Relaxed)
-    }
+pub async fn get_storage_usage_from_stats(stats: &RepositoryStats) -> u64 {
+    stats.storage_bytes_used
 }
 
 pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     match state.stats_provider.stats() {
         Ok(repository_stats) => {
-            let data_root = state
-                .upload_temp_dir
-                .parent()
-                .map_or_else(|| state.upload_temp_dir.clone(), Path::to_path_buf);
             let public_url = state.public_urls().base().to_owned();
             let corrupt_file_count = state.corrupt_file_count;
-
-            let storage_bytes_used = get_cached_storage_usage(&state, &data_root).await;
+            let storage_bytes_used = get_storage_usage_from_stats(&repository_stats).await;
 
             Json(StatusResponse {
                 schema_version: 1,

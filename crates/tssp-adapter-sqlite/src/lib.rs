@@ -463,6 +463,13 @@ impl FileRepository for SqliteFileRepository {
 
     fn stats_since(&self, recent_since: UnixTimestamp) -> Result<RepositoryStats, RepositoryError> {
         let connection = self.connect()?;
+        let storage_bytes_used: u64 = connection
+            .query_row(
+                "SELECT COALESCE(SUM(size_bytes), 0) FROM files",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(map_rusqlite_repository_error)?;
         Ok(RepositoryStats {
             file_count: count(&connection, "SELECT COUNT(*) FROM files", [])?,
             note_count: count(&connection, "SELECT COUNT(*) FROM notes", [])?,
@@ -482,6 +489,7 @@ impl FileRepository for SqliteFileRepository {
                 "SELECT COUNT(*) FROM notes WHERE updated_at >= ?1",
                 params![recent_since.seconds()],
             )?,
+            storage_bytes_used,
         })
     }
 

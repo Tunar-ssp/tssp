@@ -201,6 +201,8 @@ pub struct RepositoryStats {
     pub recent_upload_count: u64,
     /// Notes created or updated at or after the recent cutoff.
     pub recent_note_count: u64,
+    /// Total bytes used by all files.
+    pub storage_bytes_used: u64,
 }
 
 /// Tag plus the number of logical files that currently use it.
