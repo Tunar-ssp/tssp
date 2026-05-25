@@ -53,6 +53,73 @@ export interface Workspace {
 
 const BASE = '/api/v1';
 
+async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch('/api/auth' + path, {
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+    ...init,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.error?.message || err?.error || `HTTP ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+async function devicesRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch('/api/devices' + path, {
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+    ...init,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.error?.message || err?.error || `HTTP ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+async function shareRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch('/api/share' + path, {
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+    ...init,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.error?.message || err?.error || `HTTP ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, {
+    credentials: 'same-origin',
+    ...init,
+  });
+}
+
 export interface VisibilityResponse {
   schema_version: number;
   file: FileRecord;
@@ -220,6 +287,121 @@ export const api = {
     request<{ schema_version: number; results: SearchResult[] }>(
       `/search?q=${encodeURIComponent(query)}&limit=${limit}`,
     ),
+
+  // File download (returns blob)
+  downloadFile: async (id: string, disposition?: 'inline') => {
+    const query = disposition ? `?disposition=${disposition}` : '';
+    const res = await rawRequest(`/api/v1/files/${encodeURIComponent(id)}/content${query}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
+
+  // Preview file content (returns text for text files, handles range requests)
+  previewFile: async (id: string, rangeHeader?: string) => {
+    const headers: Record<string, string> = {};
+    if (rangeHeader) headers['Range'] = rangeHeader;
+    const res = await rawRequest(`/api/v1/files/${encodeURIComponent(id)}/content?disposition=inline`, {
+      headers,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return {
+      text: await res.text(),
+      hasRange: res.headers.has('content-range'),
+    };
+  },
+
+  // Auth
+  login: (credentials: { name?: string; code?: string; password?: string }) =>
+    request<{ schema_version: number; token: string; name: string; role: string }>(
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify(credentials),
+      }
+    ),
+  logout: () =>
+    request<void>('/auth/logout', { method: 'POST' }),
+
+  // Devices
+  listDevices: () =>
+    devicesRequest<{ devices: Array<{ id: string; name: string; trusted_at?: number }> }>(''),
+  removeDevice: (deviceId: string) =>
+    devicesRequest<void>(`/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
+
+  // Admin
+  getAdminOverview: () =>
+    request<{
+      schema_version: number;
+      repository: {
+        file_count: number;
+        storage_bytes_used: number;
+        note_count: number;
+      };
+      system: {
+        uptime_seconds: number;
+        cpu_percent?: number;
+        memory_percent?: number;
+        disk_percent?: number;
+      };
+    }>('/admin/overview'),
+  getAdminStatus: () =>
+    request<{
+      schema_version: number;
+      status: string;
+      uptime_seconds: number;
+      version: string;
+    }>('/admin/status'),
+  listAdminConsoleCommands: () =>
+    request<{ schema_version: number; commands: Array<{ id: string; name: string; description?: string }> }>(
+      '/admin/console/commands'
+    ),
+  runAdminConsoleCommand: (command: string) =>
+    request<{ schema_version: number; output: string; success: boolean }>('/admin/console/run', {
+      method: 'POST',
+      body: JSON.stringify({ command }),
+    }),
+  listAdminDevices: () =>
+    request<{ schema_version: number; devices: Array<{ id: string; token: string; trusted_at?: number }> }>(
+      '/admin/devices'
+    ),
+  removeAdminDevice: (token: string) =>
+    request<void>(`/admin/devices/${encodeURIComponent(token)}`, { method: 'DELETE' }),
+
+  // Chunked upload
+  startUpload: (folder?: string) =>
+    request<{ session_id: string; chunk_size: number }>('/files/upload/start', {
+      method: 'POST',
+      body: JSON.stringify({ folder: folder || '' }),
+    }),
+  uploadChunk: (sessionId: string, index: number, chunk: Blob) => {
+    const formData = new FormData();
+    formData.append('chunk', chunk);
+    return request<{ session_id: string; chunk_index: number }>(
+      `/files/upload/${encodeURIComponent(sessionId)}/chunk/${index}`,
+      {
+        method: 'PUT',
+        body: formData,
+        headers: {}, // Remove Content-Type to let browser set it with boundary
+      }
+    );
+  },
+  completeUpload: (sessionId: string, files: Array<{ name: string; mime_type: string }>) =>
+    request<{ schema_version: number; files: FileRecord[] }>(
+      `/files/upload/${encodeURIComponent(sessionId)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ files }),
+      }
+    ),
+
+  // Share
+  getSharedFile: (shareId: string) =>
+    shareRequest<{ schema_version: number; file: FileRecord }>(`/${encodeURIComponent(shareId)}`),
+  downloadSharedFile: async (shareId: string) => {
+    const res = await rawRequest(`/api/files/${encodeURIComponent(shareId)}/content`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
 };
 
 export const listPublicFiles = api.listPublicFiles;

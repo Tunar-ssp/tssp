@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import Btn from '$lib/components/Btn.svelte';
 
@@ -24,27 +25,26 @@
     error = '';
 
     try {
-      const response = await fetch(`/api/share/${shareId}`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          error = 'Shared file not found or has been deleted';
-        } else if (response.status === 410) {
-          error = 'This shared file has expired';
-          isExpired = true;
-        } else {
-          error = 'Unable to load shared file';
-        }
-        return;
-      }
-
-      file = await response.json();
+      const result = await api.getSharedFile(shareId);
+      file = result.file;
 
       if (file?.expires_at && file.expires_at < Date.now() / 1000) {
         error = 'This shared file has expired';
         isExpired = true;
       }
     } catch (e) {
-      error = 'Failed to load shared file';
+      if (e instanceof Error) {
+        if (e.message.includes('404')) {
+          error = 'Shared file not found or has been deleted';
+        } else if (e.message.includes('410')) {
+          error = 'This shared file has expired';
+          isExpired = true;
+        } else {
+          error = 'Unable to load shared file';
+        }
+      } else {
+        error = 'Failed to load shared file';
+      }
     } finally {
       isLoading = false;
     }
@@ -54,10 +54,7 @@
     if (!file) return;
 
     try {
-      const response = await fetch(`/api/files/${file.id}/content`);
-      if (!response.ok) throw new Error('Failed to download');
-
-      const blob = await response.blob();
+      const blob = await api.downloadSharedFile(file.id);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

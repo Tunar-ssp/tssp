@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
   import SafeConsole from '$lib/components/SafeConsole.svelte';
   import { success, error } from '$lib/stores/notifications';
@@ -51,9 +52,7 @@
   async function loadSystemStatus() {
     try {
       isLoading = true;
-      const response = await fetch('/api/v1/admin/status', { credentials: 'same-origin' });
-      if (!response.ok) throw new Error('Failed to load system status');
-      systemStatus = await response.json();
+      systemStatus = await api.getAdminStatus();
     } catch (err) {
       error('Status Failed', err instanceof Error ? err.message : 'Failed to load system status');
       console.error(err);
@@ -64,9 +63,7 @@
 
   async function loadAvailableCommands() {
     try {
-      const response = await fetch('/api/v1/admin/console/commands', { credentials: 'same-origin' });
-      if (!response.ok) throw new Error('Failed to load commands');
-      const data = await response.json();
+      const data = await api.listAdminConsoleCommands();
       commands = data.commands || [];
     } catch (err) {
       error('Commands Failed', err instanceof Error ? err.message : 'Failed to load available commands');
@@ -78,14 +75,7 @@
     try {
       isExecuting = true;
       commandOutput = `Running ${commandName}...`;
-      const response = await fetch('/api/v1/admin/console/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ command: commandName }),
-      });
-      if (!response.ok) throw new Error('Command failed');
-      const data = await response.json();
+      const data = await api.runAdminConsoleCommand(commandName);
       commandOutput = data.output || 'Command executed successfully';
       success('Command Executed', commandName);
     } catch (err) {
@@ -103,14 +93,7 @@
 
   async function executeSafeConsoleCommand(cmd: string) {
     try {
-      const response = await fetch('/api/v1/admin/console/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ command: cmd }),
-      });
-      if (!response.ok) throw new Error(`Command failed with HTTP ${response.status}`);
-      const data = await response.json();
+      const data = await api.runAdminConsoleCommand(cmd);
       return data.output || 'Command executed';
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : 'Unknown error'}`;

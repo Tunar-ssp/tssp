@@ -88,13 +88,7 @@ export async function uploadFiles(files: FileList, folder: string = '') {
 
 export async function downloadFile(id: string, name: string) {
   try {
-    const res = await fetch(`/api/v1/files/${id}/content`, {
-      credentials: 'same-origin',
-    });
-
-    if (!res.ok) throw new Error('Download failed');
-
-    const blob = await res.blob();
+    const blob = await api.downloadFile(id);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

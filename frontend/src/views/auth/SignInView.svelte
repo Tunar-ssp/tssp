@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import { user, isLoading, error } from '$lib/stores/auth';
   import { currentView } from '$lib/stores/ui';
   import { success } from '$lib/stores/notifications';
@@ -21,19 +22,9 @@
     error.set(null);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const data = await response.json();
-      user.set(data.user);
-      success(`Welcome back, ${data.user.email}!`);
+      const data = await api.login({ password });
+      user.set({ id: '', name: data.name, role: data.role as 'admin' | 'user' });
+      success(`Welcome back, ${data.name}!`);
       currentView.set('drive');
     } catch (e) {
       localError = e instanceof Error ? e.message : 'Sign in failed';

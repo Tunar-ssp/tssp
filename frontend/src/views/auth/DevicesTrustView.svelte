@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import { user } from '$lib/stores/auth';
   import { success, error as showError } from '$lib/stores/notifications';
   import Btn from '$lib/components/Btn.svelte';
@@ -23,9 +24,8 @@
   async function loadDevices() {
     isLoading = true;
     try {
-      const response = await fetch('/api/devices');
-      if (!response.ok) throw new Error('Failed to load devices');
-      devices = await response.json();
+      const result = await api.listDevices();
+      devices = result.devices;
     } catch (e) {
       showError(e instanceof Error ? e.message : 'Failed to load devices');
     } finally {
@@ -37,8 +37,7 @@
     if (!confirm('Revoke this device?')) return;
 
     try {
-      const response = await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to revoke device');
+      await api.removeDevice(deviceId);
       success('Device revoked');
       await loadDevices();
     } catch (e) {

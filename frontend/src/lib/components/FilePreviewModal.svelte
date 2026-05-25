@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
 
   interface $$Props {
     file?: any;
@@ -50,13 +51,8 @@
     textLoading = true;
     textError = '';
     try {
-      const response = await fetch(`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`, {
-        credentials: 'same-origin',
-        headers: { Range: 'bytes=0-65535' },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const body = await response.text();
-      textPreview = response.headers.has('content-range') ? `${body}\n\n... preview truncated at 64 KiB` : body;
+      const result = await api.previewFile(file.id, 'bytes=0-65535');
+      textPreview = result.hasRange ? `${result.text}\n\n... preview truncated at 64 KiB` : result.text;
     } catch (e) {
       textError = e instanceof Error ? e.message : 'Could not load preview';
       textPreview = '';

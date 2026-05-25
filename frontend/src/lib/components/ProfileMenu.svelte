@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import { user } from '$lib/stores/auth';
   import { currentView } from '$lib/stores/ui';
 
@@ -22,7 +23,7 @@
       await onLogout();
     } else {
       try {
-        await fetch('/api/auth/logout', { method: 'POST' });
+        await api.logout();
         user.set(null);
         currentView.set('home');
         if (onClose) onClose();

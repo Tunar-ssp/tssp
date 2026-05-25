@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
 
   interface Device {
     token: string;
@@ -23,10 +24,7 @@
   async function loadDevices() {
     try {
       isLoading = true;
-      const response = await fetch('/api/v1/admin/devices', { credentials: 'same-origin' });
-      if (!response.ok) throw new Error(`Failed to load devices (${response.status})`);
-      const data = await response.json();
-
+      const data = await api.listAdminDevices();
       devices = data.devices || [];
       currentDeviceToken = localStorage.getItem('device_token');
       error = null;
@@ -41,16 +39,8 @@
     if (!confirm('Revoke this device session?')) return;
 
     try {
-      const response = await fetch(`/api/v1/admin/devices/${token}`, {
-        method: 'DELETE',
-        credentials: 'same-origin',
-      });
-
-      if (response.ok) {
-        devices = devices.filter(d => d.token !== token);
-      } else {
-        error = 'Failed to revoke device';
-      }
+      await api.removeAdminDevice(token);
+      devices = devices.filter(d => d.token !== token);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to revoke device';
     }

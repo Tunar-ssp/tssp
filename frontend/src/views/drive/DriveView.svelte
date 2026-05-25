@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import { visibleFiles, folders, isLoading, loadFiles, setFolder } from '$lib/stores/drive';
   import { error } from '$lib/stores/notifications';
   import FolderTree from '$lib/components/FolderTree.svelte';
@@ -99,12 +100,7 @@
 
     isSearching = true;
     try {
-      const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}`, {
-        credentials: 'same-origin',
-      });
-      if (!response.ok) throw new Error(`Search failed with HTTP ${response.status}`);
-      const data = await response.json();
-
+      const data = await api.search(query);
       searchResults = (data.results || []).filter((r: any) => r.type === 'file');
       isSearching = false;
     } catch {

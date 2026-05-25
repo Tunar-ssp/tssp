@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { api } from '$lib/api';
   import { isAdmin } from '$lib/stores/auth';
   import { error as showError } from '$lib/stores/notifications';
   import Btn from '$lib/components/Btn.svelte';
@@ -32,16 +33,14 @@
     if (!$isAdmin) return;
     isLoading = true;
     try {
-      const response = await fetch('/api/v1/admin/overview', { credentials: 'same-origin' });
-      if (!response.ok) throw new Error('Failed to load stats');
-      const overview = await response.json();
+      const overview = await api.getAdminOverview();
       stats = {
-        fileCount: overview.file_count || 0,
-        noteCount: overview.note_count || 0,
-        workspaceCount: overview.workspace_count || 0,
-        usedStorage: overview.storage_bytes_used || 0,
-        uptime: overview.uptime_seconds || 0,
-        corruptFileCount: overview.corrupt_file_count || 0,
+        fileCount: overview.repository.file_count || 0,
+        noteCount: overview.repository.note_count || 0,
+        workspaceCount: 0,
+        usedStorage: overview.repository.storage_bytes_used || 0,
+        uptime: overview.system.uptime_seconds || 0,
+        corruptFileCount: 0,
       };
     } catch (e) {
       showError(e instanceof Error ? e.message : 'Failed to load stats');
