@@ -27,7 +27,7 @@ impl UploadSessionId {
     ///
     /// # Errors
     ///
-    /// Returns an error if the ID doesn't match the expected format (ses_UUID) or contains
+    /// Returns an error if the ID doesn't match the expected format (`ses_UUID`) or contains
     /// path traversal characters (/, \, ..).
     pub fn new(id: String) -> Result<Self, String> {
         // Strict validation: must be "ses_" followed by UUID characters only
@@ -53,7 +53,7 @@ impl UploadSessionId {
                 }
                 _ => {
                     if !ch.is_ascii_hexdigit() {
-                        return Err(format!("invalid character '{}' in session ID", ch));
+                        return Err(format!("invalid character '{ch}' in session ID"));
                     }
                 }
             }
@@ -100,7 +100,7 @@ impl UploadSession {
         tags: Vec<String>,
         mime_type: Option<String>,
     ) -> Self {
-        let num_chunks = (total_size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        let num_chunks = total_size.div_ceil(CHUNK_SIZE);
         Self {
             id,
             filename,
@@ -362,7 +362,7 @@ pub async fn start_upload(
         req.mime_type,
     );
 
-    let total_chunks = (req.total_size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    let total_chunks = req.total_size.div_ceil(CHUNK_SIZE);
 
     let _id = state.upload_session_manager.create_session(session).await;
 
@@ -502,7 +502,7 @@ pub async fn upload_chunk(
 }
 
 /// Assembles chunks into a single temp file with hash computation.
-/// Returns (temp_file_path, content_hash, file_size) to enable put_staged() single-write.
+/// Returns (`temp_file_path`, `content_hash`, `file_size`) to enable `put_staged()` single-write.
 fn assemble_chunks_to_temp(
     chunk_dir: &StdPath,
     total_chunks: usize,
@@ -521,7 +521,7 @@ fn assemble_chunks_to_temp(
     for chunk_idx in 0..total_chunks {
         let chunk_path = chunk_file_path(chunk_dir, chunk_idx as u32);
         let mut chunk_file = File::open(&chunk_path)
-            .map_err(|e| format!("could not read chunk {}: {e}", chunk_idx))?;
+            .map_err(|e| format!("could not read chunk {chunk_idx}: {e}"))?;
 
         loop {
             let bytes_read = chunk_file
@@ -553,8 +553,7 @@ fn assemble_chunks_to_temp(
     let assembled_path = temp_file
         .into_temp_path()
         .keep()
-        .map_err(|e| format!("failed to persist assembly temp: {e}"))?
-        .to_path_buf();
+        .map_err(|e| format!("failed to persist assembly temp: {e}"))?.clone();
     let hash_hex = hasher.finalize().to_hex();
     let content_hash = tssp_domain::ContentHash::new(hash_hex)
         .map_err(|e| format!("invalid content hash: {e}"))?;
@@ -621,7 +620,7 @@ pub async fn complete_upload(
         return error_response(
             StatusCode::BAD_REQUEST,
             "incomplete_upload",
-            &format!("{} chunks still pending", missing),
+            &format!("{missing} chunks still pending"),
         );
     }
 
@@ -677,7 +676,7 @@ pub async fn complete_upload(
     let result = tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
         .await
         .map_err(|e| format!("spawn error: {e}"))
-        .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
+        .and_then(|r| r.map_err(|e| format!("upload error: {e:?}")));
 
     // Cleanup assembled file if upload failed (in spawn_blocking)
     if result.is_err() {
@@ -782,7 +781,7 @@ fn chunk_directory(temp_dir: &StdPath, session_id: &UploadSessionId) -> PathBuf 
 }
 
 fn chunk_file_path(chunk_dir: &StdPath, chunk_index: u32) -> PathBuf {
-    chunk_dir.join(format!("chunk_{}.part", chunk_index))
+    chunk_dir.join(format!("chunk_{chunk_index}.part"))
 }
 
 

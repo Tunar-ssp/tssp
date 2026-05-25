@@ -282,7 +282,7 @@ pub(crate) async fn list_tags(
             (StatusCode::OK, Json(TagListResponse::from_tags(&tags))).into_response()
         }
         Ok(Err(error)) => HttpTagError::Internal {
-            message: error.to_string(),
+            message: error.clone(),
         }
         .response(),
         Err(error) => HttpTagError::Internal {

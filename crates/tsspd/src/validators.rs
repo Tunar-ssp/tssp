@@ -95,7 +95,7 @@ pub fn validate_file_size(size: u64, max_bytes: u64) -> Result<(), ApiError> {
     if max_bytes > 0 && size > max_bytes {
         return Err(ApiError::new(
             "FILE_TOO_LARGE",
-            format!("File size exceeds limit ({} bytes max)", max_bytes),
+            format!("File size exceeds limit ({max_bytes} bytes max)"),
             StatusCode::PAYLOAD_TOO_LARGE,
         ));
     }

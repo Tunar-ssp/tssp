@@ -63,7 +63,7 @@ pub async fn move_file_to_folder(
                 Some("file"),
                 Some(file_id.as_str()),
                 "success",
-                Some(&format!("moved to folder {}", folder_path)),
+                Some(&format!("moved to folder {folder_path}")),
             );
             (
                 StatusCode::OK,

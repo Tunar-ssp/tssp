@@ -14,7 +14,7 @@ struct CachedStats {
     cached_at: u64,
 }
 
-/// In-memory statistics cache to avoid expensive SQLite COUNT(*) queries.
+/// In-memory statistics cache to avoid expensive `SQLite` COUNT(*) queries.
 pub struct StatsCache {
     cached: Arc<RwLock<Option<CachedStats>>>,
 }
@@ -33,7 +33,7 @@ impl StatsCache {
         cached.as_ref().and_then(|entry| {
             let now = now_seconds();
             if now.saturating_sub(entry.cached_at) < CACHE_TTL_SECONDS {
-                Some(entry.stats.clone())
+                Some(entry.stats)
             } else {
                 None
             }

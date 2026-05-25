@@ -44,17 +44,15 @@ pub async fn admin_status(State(state): State<HttpState>) -> impl IntoResponse {
 
     let (disk_total, disk_free) = system
         .as_ref()
-        .map(|s| (s.data_dir_total_bytes, s.data_dir_free_bytes))
-        .unwrap_or((0, 0));
+        .map_or((0, 0), |s| (s.data_dir_total_bytes, s.data_dir_free_bytes));
     let disk_used = disk_total.saturating_sub(disk_free);
 
     let (memory_total, memory_available) = system
         .as_ref()
-        .map(|s| (s.total_memory_bytes, s.available_memory_bytes))
-        .unwrap_or((0, 0));
+        .map_or((0, 0), |s| (s.total_memory_bytes, s.available_memory_bytes));
     let memory_used = memory_total.saturating_sub(memory_available);
 
-    let db_size = std::fs::metadata(&state.settings().data_dir.join("metadata.sqlite3"))
+    let db_size = std::fs::metadata(state.settings().data_dir.join("metadata.sqlite3"))
         .map(|m| m.len())
         .unwrap_or(0);
 
@@ -64,13 +62,13 @@ pub async fn admin_status(State(state): State<HttpState>) -> impl IntoResponse {
         version: env!("CARGO_PKG_VERSION"),
         uptime_seconds,
         uptime_hours,
-        last_restart: format!("{} seconds ago", uptime_seconds),
+        last_restart: format!("{uptime_seconds} seconds ago"),
         disk_used,
         disk_total,
         memory_used,
         memory_total,
         cpu_percent: 0.0, // Placeholder for now
-        load_average: system.as_ref().map(|s| s.load_average_1m).unwrap_or(0.0),
+        load_average: system.as_ref().map_or(0.0, |s| s.load_average_1m),
         total_files: repository_stats.file_count,
         total_size: repository_stats.storage_bytes_used,
         db_size,
@@ -556,7 +554,7 @@ mod tests {
             uptime_hours: 1,
             last_restart: "3600 seconds ago".to_owned(),
             disk_used: 1_000_000,
-            disk_total: 1_000_0000,
+            disk_total: 10_000_000,
             memory_used: 500_000,
             memory_total: 4_000_000,
             cpu_percent: 25.5,
@@ -580,7 +578,7 @@ mod tests {
             uptime_hours: 1,
             last_restart: "3600 seconds ago".to_owned(),
             disk_used: 1_000_000,
-            disk_total: 1_000_0000,
+            disk_total: 10_000_000,
             memory_used: 500_000,
             memory_total: 4_000_000,
             cpu_percent: 25.5,

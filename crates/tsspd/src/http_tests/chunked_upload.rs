@@ -10,7 +10,7 @@ async fn start_upload_validates_session_id_format() {
 
     let req = serde_json::json!({
         "filename": "test.txt",
-        "total_size": 1000000
+        "total_size": 1_000_000
     });
 
     let response = app
@@ -19,15 +19,15 @@ async fn start_upload_validates_session_id_format() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).unwrap()))
-                .unwrap(),
+                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = response_json(response).await;
-    let session_id = body["session_id"].as_str().unwrap();
+    let session_id = body["session_id"].as_str().expect("should succeed");
 
     // Verify session_id has correct format
     assert!(session_id.starts_with("ses_"));
@@ -53,10 +53,10 @@ async fn upload_chunk_rejects_invalid_session_id_format() {
                     .method("POST")
                     .uri(format!("/api/v1/files/upload/{}/chunk/0", invalid_id))
                     .body(Body::from("chunk data"))
-                    .unwrap(),
+                    .expect("should succeed"),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Invalid session IDs that don't match the validation will get 400 or 404
         // depending on whether the route matches at all
@@ -83,14 +83,14 @@ async fn upload_chunk_rejects_oversized_chunks() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).unwrap()))
-                .unwrap(),
+                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     let body = response_json(start_response).await;
-    let session_id = body["session_id"].as_str().unwrap();
+    let session_id = body["session_id"].as_str().expect("should succeed");
 
     // Try to upload chunk larger than expected
     let oversized_chunk = vec![0u8; 300_000]; // 300KB, exceeds CHUNK_SIZE for this upload
@@ -101,14 +101,14 @@ async fn upload_chunk_rejects_oversized_chunks() {
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/0", session_id))
                 .body(Body::from(oversized_chunk))
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().unwrap(), "invalid_chunk_size");
+    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "invalid_chunk_size");
 }
 
 #[tokio::test]
@@ -127,14 +127,14 @@ async fn upload_chunk_rejects_out_of_range_index() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).unwrap()))
-                .unwrap(),
+                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     let body = response_json(start_response).await;
-    let session_id = body["session_id"].as_str().unwrap();
+    let session_id = body["session_id"].as_str().expect("should succeed");
 
     // Try to upload chunk 5 when only chunk 0 exists
     let response = app
@@ -144,14 +144,14 @@ async fn upload_chunk_rejects_out_of_range_index() {
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/5", session_id))
                 .body(Body::from(vec![0u8; 1000]))
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().unwrap(), "invalid_chunk");
+    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "invalid_chunk");
 }
 
 #[tokio::test]
@@ -164,10 +164,10 @@ async fn cancel_upload_rejects_invalid_session_id() {
                 .method("DELETE")
                 .uri("/api/v1/files/upload/invalid-session")
                 .body(Body::empty())
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     // Invalid format returns either 400 or 404 depending on route matching
     assert!(
@@ -192,14 +192,14 @@ async fn complete_upload_rejects_incomplete_chunks() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).unwrap()))
-                .unwrap(),
+                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     let body = response_json(start_response).await;
-    let session_id = body["session_id"].as_str().unwrap();
+    let session_id = body["session_id"].as_str().expect("should succeed");
 
     // Try to complete without uploading all chunks
     let response = app
@@ -209,14 +209,14 @@ async fn complete_upload_rejects_incomplete_chunks() {
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}", session_id))
                 .body(Body::empty())
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().unwrap(), "incomplete_upload");
+    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "incomplete_upload");
 }
 
 #[tokio::test]
@@ -232,19 +232,19 @@ async fn session_not_found_returns_404() {
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/0", fake_session))
                 .body(Body::from(vec![0u8; 100]))
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().unwrap(), "session_not_found");
+    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "session_not_found");
 }
 
 #[tokio::test]
 async fn cancel_upload_cleans_up_resources() {
-    let temp = tempdir().unwrap();
+    let temp = tempdir().expect("should succeed");
     let repository = Arc::new(
         SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
             .unwrap_or_else(|e| panic!("repository open failed: {e}")),
@@ -266,14 +266,14 @@ async fn cancel_upload_cleans_up_resources() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).unwrap()))
-                .unwrap(),
+                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     let body = response_json(start_response).await;
-    let session_id = body["session_id"].as_str().unwrap();
+    let session_id = body["session_id"].as_str().expect("should succeed");
 
     // Upload first chunk
     let _ = app
@@ -283,10 +283,10 @@ async fn cancel_upload_cleans_up_resources() {
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/0", session_id))
                 .body(Body::from(vec![0u8; 100000]))
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     // Cancel upload
     let cancel_response = app
@@ -296,10 +296,10 @@ async fn cancel_upload_cleans_up_resources() {
                 .method("DELETE")
                 .uri(format!("/api/v1/files/upload/{}", session_id))
                 .body(Body::empty())
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(cancel_response.status(), StatusCode::NO_CONTENT);
 
@@ -311,10 +311,10 @@ async fn cancel_upload_cleans_up_resources() {
                 .method("POST")
                 .uri(format!("/api/v1/files/upload/{}/chunk/1", session_id))
                 .body(Body::from(vec![0u8; 100000]))
-                .unwrap(),
+                .expect("should succeed"),
         )
         .await
-        .unwrap();
+        .expect("should succeed");
 
     assert_eq!(retry_response.status(), StatusCode::NOT_FOUND);
 }

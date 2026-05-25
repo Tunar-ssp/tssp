@@ -520,7 +520,7 @@ pub async fn revoke_user_device(
 
             // Revoke the device
             match state.auth.revoke_device(&device_token) {
-                Ok(_) => {
+                Ok(()) => {
                     tssp_app::log_audit_event(
                         state.repository.as_ref(),
                         AuditAction::DeviceRevoke,

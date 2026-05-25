@@ -15,6 +15,7 @@ pub struct TrashCleanupReport {
 
 impl TrashCleanupReport {
     /// Creates a success report.
+    #[must_use] 
     pub fn success(files_purged: u64) -> Self {
         Self {
             files_purged,
@@ -23,6 +24,7 @@ impl TrashCleanupReport {
     }
 
     /// Creates an error report.
+    #[must_use] 
     pub fn failure() -> Self {
         Self {
             files_purged: 0,

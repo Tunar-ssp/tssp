@@ -16,6 +16,7 @@ pub struct TempCleanupReport {
 
 impl TempCleanupReport {
     /// Total count of removed files and directories.
+    #[must_use] 
     pub fn total_removed(self) -> u64 {
         self.files_removed + self.directories_removed
     }
@@ -25,6 +26,7 @@ impl TempCleanupReport {
 ///
 /// `min_age` protects active uploads during manual maintenance. Startup passes
 /// `None`, because in-memory chunk sessions cannot survive process restart.
+#[must_use] 
 pub fn cleanup_temp_upload_dir(dir: &Path, min_age: Option<Duration>) -> TempCleanupReport {
     let mut report = TempCleanupReport::default();
     if !dir.exists() {
@@ -32,12 +34,9 @@ pub fn cleanup_temp_upload_dir(dir: &Path, min_age: Option<Duration>) -> TempCle
     }
 
     let now = SystemTime::now();
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(_) => {
-            report.errors += 1;
-            return report;
-        }
+    let entries = if let Ok(entries) = std::fs::read_dir(dir) { entries } else {
+        report.errors += 1;
+        return report;
     };
 
     for entry in entries {

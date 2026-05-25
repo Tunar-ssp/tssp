@@ -352,7 +352,7 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     } else {
         let result = state.stats_provider.stats();
         if let Ok(stats) = &result {
-            state.stats_cache.store(stats.clone()).await;
+            state.stats_cache.store(*stats).await;
         }
         result
     };

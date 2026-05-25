@@ -44,7 +44,7 @@ pub fn collect_garbage(
                                         }
                                     }
                                     Err(e) => {
-                                        eprintln!("warning: failed to check blob {}: {e}", filename);
+                                        eprintln!("warning: failed to check blob {filename}: {e}");
                                     }
                                 }
                             }
