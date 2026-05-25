@@ -288,7 +288,7 @@ fn build_search_results(
     let limit = usize::try_from(filters.limit).unwrap_or(usize::MAX);
     let mut results: Vec<SearchResultItem> = hits
         .into_iter()
-        .filter(|hit| hit_matches_filters(hit, filters))
+        .filter(|hit| hit_matches_filters(hit, filters, auth))
         .take(limit)
         .map(|hit| match &hit {
             SearchHit::File(file) => SearchResultItem::File {
@@ -353,7 +353,11 @@ fn workspace_filters_allow_results(filters: &SearchFilters) -> bool {
         && !filters.pinned
 }
 
-fn hit_matches_filters(hit: &SearchHit, filters: &SearchFilters) -> bool {
+fn hit_matches_filters(
+    hit: &SearchHit,
+    filters: &SearchFilters,
+    auth: Option<&crate::auth::AuthContext>,
+) -> bool {
     match hit {
         SearchHit::File(file) => {
             if matches!(filters.kind, SearchKind::Note | SearchKind::Workspace) {
@@ -390,7 +394,15 @@ fn hit_matches_filters(hit: &SearchHit, filters: &SearchFilters) -> bool {
                 return false;
             }
             if let Some(tag) = &filters.tag {
-                return note.tags.iter().any(|item| item.key() == tag);
+                if !note.tags.iter().any(|item| item.key() == tag) {
+                    return false;
+                }
+            }
+            // Authorization: non-admin users can only see their own notes
+            if let Some(auth) = auth {
+                if !auth.is_admin() && note.owner_id.as_ref() != Some(&auth.user_id) {
+                    return false;
+                }
             }
             true
         }
