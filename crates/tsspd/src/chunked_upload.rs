@@ -6,7 +6,6 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -502,6 +501,64 @@ pub async fn upload_chunk(
         .into_response()
 }
 
+/// Assembles chunks into a single temp file with hash computation.
+/// Returns (temp_file_path, content_hash, file_size) to enable put_staged() single-write.
+fn assemble_chunks_to_temp(
+    chunk_dir: &StdPath,
+    total_chunks: usize,
+    upload_temp_dir: &StdPath,
+) -> Result<(PathBuf, tssp_domain::ContentHash, tssp_domain::FileSize), String> {
+    use std::fs::File;
+    use std::io::{Read, Write};
+
+    let mut temp_file = tempfile::NamedTempFile::new_in(upload_temp_dir)
+        .map_err(|e| format!("could not create assembly temp file: {e}"))?;
+
+    let mut hasher = blake3::Hasher::new();
+    let mut total_size: u64 = 0;
+    let mut buffer = vec![0_u8; 64 * 1024];
+
+    for chunk_idx in 0..total_chunks {
+        let chunk_path = chunk_file_path(chunk_dir, chunk_idx as u32);
+        let mut chunk_file = File::open(&chunk_path)
+            .map_err(|e| format!("could not read chunk {}: {e}", chunk_idx))?;
+
+        loop {
+            let bytes_read = chunk_file
+                .read(&mut buffer)
+                .map_err(|e| format!("failed to read chunk data: {e}"))?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            let chunk = &buffer[..bytes_read];
+            hasher.update(chunk);
+            temp_file
+                .write_all(chunk)
+                .map_err(|e| format!("failed to write to assembly temp: {e}"))?;
+            total_size = total_size
+                .checked_add(bytes_read as u64)
+                .ok_or_else(|| "assembly file size overflow".to_string())?;
+        }
+    }
+
+    temp_file
+        .flush()
+        .map_err(|e| format!("failed to flush assembly temp: {e}"))?;
+    temp_file
+        .as_file()
+        .sync_all()
+        .map_err(|e| format!("failed to sync assembly temp: {e}"))?;
+
+    let assembled_path = temp_file.into_temp_path().to_path_buf();
+    let hash_hex = hasher.finalize().to_hex();
+    let content_hash = tssp_domain::ContentHash::new(hash_hex)
+        .map_err(|e| format!("invalid content hash: {e}"))?;
+    let file_size = tssp_domain::FileSize::new(total_size);
+
+    Ok((assembled_path, content_hash, file_size))
+}
+
 /// Complete an upload by assembling chunks and creating the file.
 pub async fn complete_upload(
     State(state): State<HttpState>,
@@ -567,15 +624,15 @@ pub async fn complete_upload(
     let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
     let total_chunks = session.uploaded_chunks.len();
 
-    // Create ChunkReader that streams chunks directly without intermediate file
-    let chunk_reader = match ChunkReader::new(chunk_dir.clone(), total_chunks) {
-        Ok(reader) => reader,
+    // Assemble chunks into a single temp file with hash computation to avoid double-write
+    let (assembled_path, content_hash, file_size) = match assemble_chunks_to_temp(&chunk_dir, total_chunks, &state.upload_temp_dir) {
+        Ok(result) => result,
         Err(e) => {
             let _ = std::fs::remove_dir_all(&chunk_dir);
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "reader_error",
-                &format!("failed to create chunk reader: {e}"),
+                "assembly_error",
+                &format!("failed to assemble chunks: {e}"),
             );
         }
     };
@@ -588,19 +645,25 @@ pub async fn complete_upload(
         pinned: false,
         folder_path: session.folder_path.clone(),
         owner_id,
-        source: Box::new(chunk_reader),
-        staged_path: None,
-        content_hash: None,
-        size: None,
+        source: Box::new(std::io::empty()),
+        staged_path: Some(assembled_path.clone()),
+        content_hash: Some(content_hash),
+        size: Some(file_size),
     };
 
     let upload_provider = state.upload_provider.clone();
     let chunk_dir_cleanup = chunk_dir.clone();
+    let assembled_path_cleanup = assembled_path.clone();
 
     let result = tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
         .await
         .map_err(|e| format!("spawn error: {e}"))
         .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
+
+    // Cleanup assembled file if upload failed
+    if result.is_err() {
+        let _ = std::fs::remove_file(&assembled_path_cleanup);
+    }
 
     // Cleanup chunk directory after upload attempt (success or failure)
     // Do this asynchronously to avoid blocking handler
@@ -695,72 +758,6 @@ fn chunk_file_path(chunk_dir: &StdPath, chunk_index: u32) -> PathBuf {
     chunk_dir.join(format!("chunk_{}.part", chunk_index))
 }
 
-/// Streams chunks directly without writing an intermediate .assembly file.
-/// This eliminates write amplification on Orange Pi's SD card.
-struct ChunkReader {
-    chunk_dir: PathBuf,
-    current_chunk_index: usize,
-    current_file: Option<BufReader<std::fs::File>>,
-    total_chunks: usize,
-    exhausted: bool,
-}
-
-impl ChunkReader {
-    fn new(chunk_dir: PathBuf, total_chunks: usize) -> Result<Self, String> {
-        Ok(Self {
-            chunk_dir,
-            current_chunk_index: 0,
-            current_file: None,
-            total_chunks,
-            exhausted: false,
-        })
-    }
-
-    fn open_next_chunk(&mut self) -> Result<(), String> {
-        if self.current_chunk_index >= self.total_chunks {
-            self.exhausted = true;
-            return Ok(());
-        }
-
-        let chunk_path = chunk_file_path(&self.chunk_dir, self.current_chunk_index as u32);
-        let file = std::fs::File::open(&chunk_path)
-            .map_err(|e| format!("failed to read chunk {}: {e}", self.current_chunk_index))?;
-        self.current_file = Some(BufReader::new(file));
-        self.current_chunk_index += 1;
-        Ok(())
-    }
-}
-
-impl std::io::Read for ChunkReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        loop {
-            // If we have an open file, try to read from it
-            if let Some(ref mut file) = self.current_file {
-                match file.read(buf) {
-                    Ok(0) => {
-                        // End of current chunk, move to next
-                        self.current_file = None;
-                        if self.current_chunk_index >= self.total_chunks {
-                            self.exhausted = true;
-                            return Ok(0);
-                        }
-                        // Open next chunk and loop to read from it
-                        self.open_next_chunk()
-                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-                    }
-                    other => return other,
-                }
-            } else {
-                // No open file, try to open the next chunk
-                if self.exhausted || self.current_chunk_index >= self.total_chunks {
-                    return Ok(0);
-                }
-                self.open_next_chunk()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-            }
-        }
-    }
-}
 
 fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
     (

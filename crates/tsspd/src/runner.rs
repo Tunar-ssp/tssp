@@ -13,7 +13,7 @@ use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository, SqliteSes
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
 use tssp_app::{
-    DeleteFileService, RestoreFileService, NoteService, PinService, SessionService, TagService, UploadService,
+    DeleteFileService, RestoreFileService, NoteService, PinService, SessionService, TagService, UploadService, PurgeDeletedFilesService,
 };
 use tssp_ports::Clock;
 use tsspd::workspaces::WorkspaceStore;
@@ -26,7 +26,7 @@ use tsspd::{
     spawn_startup_integrity_scan, ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
     ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
     CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder, RepositoryFileSearchProvider,
-    RepositoryMetadataStatsProvider,
+    RepositoryMetadataStatsProvider, trash_cleanup::purge_expired_trash,
 };
 
 use super::Cli;
@@ -392,8 +392,10 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         state.corrupt_file_count.clone(),
     );
 
+    let storage_gc = storage.clone();
+    let repository_gc = repository.clone();
     tokio::spawn(async move {
-        match collect_garbage(storage.root(), repository.as_ref()) {
+        match collect_garbage(storage_gc.root(), repository_gc.as_ref()) {
             Ok(count) => {
                 if count > 0 {
                     tracing::info!("garbage collection: deleted {count} orphaned blobs");
@@ -405,16 +407,29 @@ pub async fn run(cli: Cli) -> Result<(), String> {
 
     let upload_session_manager = state.upload_session_manager.clone();
     let upload_temp_dir = paths.upload_temp_dir.clone();
+    let purge_service = PurgeDeletedFilesService::new(storage.clone(), repository.clone());
+    let retention_days = settings.trash_retention_days;
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
             interval.tick().await;
+
+            // Clean up abandoned upload sessions
             let max_age = std::time::Duration::from_secs(24 * 60 * 60);
             let cleaned = upload_session_manager
                 .cleanup_expired_with_disk(max_age, &upload_temp_dir)
                 .await;
             if cleaned > 0 {
                 tracing::info!("cleanup: removed {cleaned} abandoned upload sessions");
+            }
+
+            // Purge expired trash
+            let purge_report = purge_expired_trash(&purge_service, retention_days);
+            if purge_report.files_purged > 0 {
+                tracing::info!("trash: purged {count} files older than {retention_days} days", count = purge_report.files_purged);
+            }
+            if purge_report.error {
+                tracing::warn!("trash: purge operation failed");
             }
         }
     });
