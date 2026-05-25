@@ -597,14 +597,10 @@ pub async fn complete_upload(
     let upload_provider = state.upload_provider.clone();
     let chunk_dir_cleanup = chunk_dir.clone();
 
-    // Hold mutation lock only during the actual upload, not cleanup
-    let result = {
-        let _mutation_guard = state.storage_mutation_lock.lock().await;
-        tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
-            .await
-            .map_err(|e| format!("spawn error: {e}"))
-            .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)))
-    };
+    let result = tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
+        .await
+        .map_err(|e| format!("spawn error: {e}"))
+        .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
 
     // Cleanup chunk directory after upload attempt (success or failure)
     // Do this asynchronously to avoid blocking handler

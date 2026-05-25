@@ -207,7 +207,6 @@ pub(crate) async fn upload_file(
         Err(error) => return error.response(),
     };
 
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
     match upload_staged_file(&state, staged, owner_id).await {
         Ok(outcome) => upload_success_response(&outcome),
@@ -229,7 +228,6 @@ pub(crate) async fn upload_files_batch(
         Err(error) => return error.response(),
     };
 
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     let mut results = Vec::with_capacity(staged_files.len());
     for staged in staged_files {
         let filename = staged.filename.clone();

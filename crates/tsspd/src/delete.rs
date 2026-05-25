@@ -149,7 +149,6 @@ pub(crate) async fn delete_file(
     }
 
     let delete_provider = state.delete_provider.clone();
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     match tokio::task::spawn_blocking(move || delete_provider.delete(file_id)).await {
         Ok(Ok(outcome)) => delete_success_response(outcome),
         Ok(Err(error)) => error.response(),
@@ -336,7 +335,6 @@ pub(crate) async fn restore_file(
     };
 
     let restore_provider = state.restore_provider.clone();
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     match tokio::task::spawn_blocking(move || restore_provider.restore(file_id)).await {
         Ok(Ok(outcome)) => restore_success_response(outcome),
         Ok(Err(error)) => error.response(),
@@ -385,7 +383,6 @@ pub(crate) async fn permanent_delete(
         Err(error) => return invalid_file_id_response(error.to_string()),
     };
 
-    let _mutation_guard = state.storage_mutation_lock.lock().await;
     match tokio::task::spawn_blocking(move || {
         state.repository.purge_deleted_file(&file_id)
     })
