@@ -550,7 +550,11 @@ fn assemble_chunks_to_temp(
         .sync_all()
         .map_err(|e| format!("failed to sync assembly temp: {e}"))?;
 
-    let assembled_path = temp_file.into_temp_path().to_path_buf();
+    let assembled_path = temp_file
+        .into_temp_path()
+        .keep()
+        .map_err(|e| format!("failed to persist assembly temp: {e}"))?
+        .to_path_buf();
     let hash_hex = hasher.finalize().to_hex();
     let content_hash = tssp_domain::ContentHash::new(hash_hex)
         .map_err(|e| format!("invalid content hash: {e}"))?;
