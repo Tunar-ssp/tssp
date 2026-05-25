@@ -157,12 +157,15 @@ pub trait FileRepository {
         new_name: &FileName,
     ) -> Result<Option<FileRecord>, RepositoryError>;
 
-    /// Returns file counts grouped by `folder_path`.
+    /// Returns file counts grouped by `folder_path`, optionally filtered by owner.
     ///
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the aggregation query fails.
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError>;
+    fn list_folder_counts(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, RepositoryError>;
 
     /// Updates visibility and optional public link token for one file.
     ///
@@ -401,8 +404,11 @@ where
         self.as_ref().rename_file(id, new_name)
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
-        self.as_ref().list_folder_counts()
+    fn list_folder_counts(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, RepositoryError> {
+        self.as_ref().list_folder_counts(owner_id)
     }
 
     fn set_file_visibility(

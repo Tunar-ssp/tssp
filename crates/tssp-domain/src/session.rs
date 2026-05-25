@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{DomainError, FileName};
+use crate::{DomainError, FileName, UserId};
 use crate::{FileId, UnixTimestamp};
 
 const TOKEN_BITS: usize = 128;
@@ -75,6 +75,8 @@ pub struct TransferSession {
     pub token: SessionToken,
     /// Session type.
     pub kind: SessionKind,
+    /// User who created the session.
+    pub creator_id: Option<UserId>,
     /// UTC creation time.
     pub created_at: UnixTimestamp,
     /// UTC expiration time.
@@ -120,6 +122,7 @@ impl TransferSession {
         Ok(Self {
             token,
             kind,
+            creator_id: None,
             created_at,
             expires_at,
             source_file,
@@ -127,6 +130,12 @@ impl TransferSession {
             expected_name: None,
             used_at: None,
         })
+    }
+
+    /// Sets the session creator.
+    pub fn with_creator(mut self, creator_id: UserId) -> Self {
+        self.creator_id = Some(creator_id);
+        self
     }
 
     /// Returns true when the session is already consumed.

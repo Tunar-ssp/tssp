@@ -61,7 +61,7 @@ pub use delete::{
     ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
 };
 pub use garbage_collection::collect_garbage;
-pub use integrity::run_startup_integrity_scan;
+pub use integrity::{run_startup_integrity_scan, spawn_startup_integrity_scan};
 pub use mdns::spawn_advertisement;
 pub use notes::{ApplicationNoteProvider, NoteProvider};
 pub use pins::{ApplicationFilePinProvider, FilePinProvider, HttpPinError, HttpPinMutation};

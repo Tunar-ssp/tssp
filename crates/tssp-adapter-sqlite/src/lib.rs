@@ -730,17 +730,30 @@ impl FileRepository for SqliteFileRepository {
             .map(Some)
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+    fn list_folder_counts(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, RepositoryError> {
         let connection = self.connect()?;
+        let mut sql = String::from(
+            "SELECT folder_path, COUNT(*)
+             FROM files",
+        );
+        let mut parameters = Vec::<Value>::new();
+
+        if let Some(owner) = owner_id {
+            sql.push_str(" WHERE owner_id = ?");
+            parameters.push(Value::from(owner.as_str().to_owned()));
+        }
+
+        sql.push_str(" GROUP BY folder_path ORDER BY folder_path");
+
         let mut statement = connection
-            .prepare(
-                "SELECT folder_path, COUNT(*)
-                 FROM files
-                 GROUP BY folder_path
-                 ORDER BY folder_path",
-            )
+            .prepare(&sql)
             .map_err(map_rusqlite_repository_error)?;
-        let mut rows = statement.query([]).map_err(map_rusqlite_repository_error)?;
+        let mut rows = statement
+            .query(params_from_iter(parameters.iter()))
+            .map_err(map_rusqlite_repository_error)?;
         let mut counts = Vec::new();
         while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
             let path: String = row.get(0).map_err(map_rusqlite_repository_error)?;

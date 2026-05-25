@@ -13,6 +13,71 @@ use crate::admin::system::collect_system_snapshot;
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
+/// Consolidated admin status for the operations dashboard.
+#[derive(Debug, Serialize)]
+pub struct AdminStatusResponse {
+    pub schema_version: u8,
+    pub status: &'static str,
+    pub version: &'static str,
+    pub uptime_seconds: u64,
+    pub uptime_hours: u64,
+    pub last_restart: String,
+    pub disk_used: u64,
+    pub disk_total: u64,
+    pub memory_used: u64,
+    pub memory_total: u64,
+    pub cpu_percent: f64,
+    pub load_average: f64,
+    pub total_files: u64,
+    pub total_size: u64,
+    pub db_size: u64,
+    pub db_status: &'static str,
+}
+
+/// `GET /api/v1/admin/status`
+pub async fn admin_status(State(state): State<HttpState>) -> impl IntoResponse {
+    let repository_stats = state.stats_provider.stats().unwrap_or_default();
+    let system = collect_system_snapshot(&state.settings().data_dir).ok();
+
+    let uptime_seconds = state.started_at.elapsed().as_secs();
+    let uptime_hours = uptime_seconds / 3600;
+
+    let (disk_total, disk_free) = system
+        .as_ref()
+        .map(|s| (s.data_dir_total_bytes, s.data_dir_free_bytes))
+        .unwrap_or((0, 0));
+    let disk_used = disk_total.saturating_sub(disk_free);
+
+    let (memory_total, memory_available) = system
+        .as_ref()
+        .map(|s| (s.total_memory_bytes, s.available_memory_bytes))
+        .unwrap_or((0, 0));
+    let memory_used = memory_total.saturating_sub(memory_available);
+
+    let db_size = std::fs::metadata(&state.settings().data_dir.join("metadata.sqlite3"))
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    Json(AdminStatusResponse {
+        schema_version: 1,
+        status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
+        uptime_seconds,
+        uptime_hours,
+        last_restart: format!("{} seconds ago", uptime_seconds),
+        disk_used,
+        disk_total,
+        memory_used,
+        memory_total,
+        cpu_percent: 0.0, // Placeholder for now
+        load_average: system.as_ref().map(|s| s.load_average_1m).unwrap_or(0.0),
+        total_files: repository_stats.file_count,
+        total_size: repository_stats.storage_bytes_used,
+        db_size,
+        db_status: "ok",
+    })
+}
+
 /// Admin dashboard overview.
 #[derive(Debug, Serialize)]
 pub struct AdminOverviewResponse {
@@ -221,7 +286,9 @@ pub async fn admin_overview(State(state): State<HttpState>) -> impl IntoResponse
             tag_count: repository_stats.tag_count,
             pinned_count: repository_stats.pinned_count,
             workspace_count,
-            corrupt_file_count: state.corrupt_file_count,
+            corrupt_file_count: state
+                .corrupt_file_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             storage_bytes_used,
             public_url: Some(state.public_urls().base().to_owned()),
         }),
@@ -363,11 +430,14 @@ pub async fn admin_delete_file(
 
 /// `GET /api/v1/admin/corrupt`
 pub async fn admin_corrupt_files(State(state): State<HttpState>) -> impl IntoResponse {
+    let corrupt_file_count = state
+        .corrupt_file_count
+        .load(std::sync::atomic::Ordering::Relaxed);
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "schema_version": 1,
-            "corrupt_file_count": state.corrupt_file_count,
+            "corrupt_file_count": corrupt_file_count,
         })),
     )
         .into_response()
@@ -379,6 +449,20 @@ pub async fn admin_cleanup_temp(State(state): State<HttpState>) -> impl IntoResp
     let report = tokio::task::spawn_blocking(move || cleanup_dir_files(&dir))
         .await
         .unwrap_or_default();
+
+    // Also cleanup expired chunked upload sessions
+    let expired_sessions = state
+        .upload_session_manager
+        .cleanup_expired(std::time::Duration::from_secs(24 * 60 * 60))
+        .await;
+
+    for session_id in expired_sessions {
+        let session_dir = state.upload_temp_dir.join(format!(".{}", session_id.as_str()));
+        if session_dir.exists() {
+            let _ = std::fs::remove_dir_all(session_dir);
+        }
+    }
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -423,7 +507,7 @@ pub async fn admin_cleanup_sessions(State(state): State<HttpState>) -> impl Into
 
 /// `GET /api/v1/admin/folders`
 pub async fn admin_folders(State(state): State<HttpState>) -> impl IntoResponse {
-    match state.stats_provider.list_folder_counts() {
+    match state.stats_provider.list_folder_counts(None) {
         Ok(folders) => {
             let entries: Vec<FolderEntry> = folders
                 .into_iter()

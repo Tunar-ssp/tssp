@@ -187,7 +187,7 @@ pub enum SearchHit {
 }
 
 /// Aggregate metadata counts used by health and status views.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct RepositoryStats {
     /// Total logical files.
     pub file_count: u64,

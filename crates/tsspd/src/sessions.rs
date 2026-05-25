@@ -27,6 +27,7 @@ pub trait SessionProvider: Send + Sync {
         &self,
         file_id: &str,
         ttl_seconds: u64,
+        creator_id: Option<tssp_domain::UserId>,
     ) -> Result<SessionResponse, String>;
 
     /// Creates a new receive session for accepting uploads.
@@ -34,7 +35,11 @@ pub trait SessionProvider: Send + Sync {
     /// # Errors
     ///
     /// Returns an error when the session cannot be created.
-    fn create_receive_session(&self, ttl_seconds: u64) -> Result<SessionResponse, String>;
+    fn create_receive_session(
+        &self,
+        ttl_seconds: u64,
+        creator_id: Option<tssp_domain::UserId>,
+    ) -> Result<SessionResponse, String>;
 
     /// Retrieves a session by token.
     ///
@@ -67,11 +72,16 @@ impl SessionProvider for StaticSessionProvider {
         &self,
         _file_id: &str,
         _ttl_seconds: u64,
+        _creator_id: Option<tssp_domain::UserId>,
     ) -> Result<SessionResponse, String> {
         Err("session provider not initialized".to_string())
     }
 
-    fn create_receive_session(&self, _ttl_seconds: u64) -> Result<SessionResponse, String> {
+    fn create_receive_session(
+        &self,
+        _ttl_seconds: u64,
+        _creator_id: Option<tssp_domain::UserId>,
+    ) -> Result<SessionResponse, String> {
         Err("session provider not initialized".to_string())
     }
 
@@ -114,13 +124,14 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
         &self,
         file_id: &str,
         ttl_seconds: u64,
+        creator_id: Option<tssp_domain::UserId>,
     ) -> Result<SessionResponse, String> {
         let now = self.clock.now();
         let token = generate_session_token();
 
         let session = self
             .service
-            .create_send_session(token, file_id, ttl_seconds, now)
+            .create_send_session(token, file_id, ttl_seconds, now, creator_id)
             .map_err(|e| format!("failed to create send session: {e}"))?;
 
         Ok(SessionResponse {
@@ -131,6 +142,7 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             },
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
+            creator_id: session.creator_id.as_ref().map(|id| id.as_str().to_string()),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
             received_file: session
                 .received_file
@@ -146,13 +158,17 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
         })
     }
 
-    fn create_receive_session(&self, ttl_seconds: u64) -> Result<SessionResponse, String> {
+    fn create_receive_session(
+        &self,
+        ttl_seconds: u64,
+        creator_id: Option<tssp_domain::UserId>,
+    ) -> Result<SessionResponse, String> {
         let now = self.clock.now();
         let token = generate_session_token();
 
         let session = self
             .service
-            .create_receive_session(token, ttl_seconds, now)
+            .create_receive_session(token, ttl_seconds, now, creator_id)
             .map_err(|e| format!("failed to create receive session: {e}"))?;
 
         Ok(SessionResponse {
@@ -163,6 +179,7 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             },
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
+            creator_id: session.creator_id.as_ref().map(|id| id.as_str().to_string()),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
             received_file: session
                 .received_file
@@ -193,6 +210,7 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             },
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
+            creator_id: session.creator_id.as_ref().map(|id| id.as_str().to_string()),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
             received_file: session
                 .received_file
@@ -235,6 +253,9 @@ pub struct SessionResponse {
     pub created_at: i64,
     /// Unix timestamp when session expires.
     pub expires_at: i64,
+    /// User who created the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub creator_id: Option<String>,
     /// When provided for send sessions, the source file ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_file: Option<String>,
@@ -385,9 +406,10 @@ pub async fn create_send_session(
     }
 
     let urls = state.public_urls().clone();
+    let creator_id = Some(auth.user_id.clone());
     state
         .session_provider
-        .create_send_session(&payload.file_id, payload.ttl_seconds)
+        .create_send_session(&payload.file_id, payload.ttl_seconds, creator_id)
         .map(|response| (StatusCode::CREATED, Json(response.with_public_urls(&urls))))
         .map_err(|_| HttpSessionError::InternalError("Failed to create session".to_string()))
 }
@@ -395,12 +417,14 @@ pub async fn create_send_session(
 /// Creates a new receive session (POST /api/v1/sessions/receive).
 pub async fn create_receive_session(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Json(payload): Json<CreateReceiveSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionResponse>), HttpSessionError> {
     let urls = state.public_urls().clone();
+    let creator_id = Some(auth.user_id.clone());
     state
         .session_provider
-        .create_receive_session(payload.ttl_seconds)
+        .create_receive_session(payload.ttl_seconds, creator_id)
         .map(|response| (StatusCode::CREATED, Json(response.with_public_urls(&urls))))
         .map_err(|_| HttpSessionError::InternalError("Failed to create session".to_string()))
 }

@@ -22,8 +22,8 @@ use tsspd::{
         initialize_database as initialize_auth_database, AuthService, AuthStore, DeviceStore,
         UserStore,
     },
-    bind_error_message, build_router, collect_garbage, run_startup_integrity_scan, spawn_advertisement,
-    ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
+    bind_error_message, build_router, collect_garbage, spawn_advertisement,
+    spawn_startup_integrity_scan, ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
     ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
     CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder, RepositoryFileSearchProvider,
     RepositoryMetadataStatsProvider,
@@ -357,16 +357,6 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     run_integrity_check(&paths.metadata_path)
         .map_err(|error| format!("database integrity check failed: {error}"))?;
     let storage = open_storage(&settings)?;
-    let corrupt_file_count = run_startup_integrity_scan(&repository, &storage);
-
-    match collect_garbage(storage.root(), repository.as_ref()) {
-        Ok(count) => {
-            if count > 0 {
-                tracing::info!("garbage collection: deleted {count} orphaned blobs");
-            }
-        }
-        Err(e) => tracing::warn!("garbage collection failed: {e}"),
-    }
 
     let session_service = start_session_service(pool.clone(), &paths.upload_temp_dir)?;
     let auth_service = start_auth_service(pool.clone(), &settings)?;
@@ -385,12 +375,29 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         &settings,
         paths,
         pool,
-        repository,
-        storage,
+        repository.clone(),
+        storage.clone(),
         session_service,
         auth_service,
-        corrupt_file_count,
+        0, // Background scan will update this
     );
+
+    spawn_startup_integrity_scan(
+        repository.clone(),
+        storage.clone(),
+        state.corrupt_file_count.clone(),
+    );
+
+    tokio::spawn(async move {
+        match collect_garbage(storage.root(), repository.as_ref()) {
+            Ok(count) => {
+                if count > 0 {
+                    tracing::info!("garbage collection: deleted {count} orphaned blobs");
+                }
+            }
+            Err(e) => tracing::warn!("garbage collection failed: {e}"),
+        }
+    });
 
     let router = build_router(state);
 

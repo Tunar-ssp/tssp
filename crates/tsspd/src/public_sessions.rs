@@ -203,13 +203,15 @@ pub async fn post_receive_session_upload(
         }
     };
 
+    let owner_id = session.creator_id.as_ref().and_then(|id| tssp_domain::UserId::new(id).ok());
+
     let upload_req = HttpUploadRequest {
         filename: staged.filename,
         mime_type: staged.mime_type,
         tags: staged.tags,
         pinned: false,
         folder_path: staged.folder_path,
-        owner_id: None,
+        owner_id,
         source: Box::new(source),
         staged_path: None,
         content_hash: None,

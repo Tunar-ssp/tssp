@@ -1,6 +1,6 @@
 //! Application service for session management.
 
-use tssp_domain::{FileId, SessionKind, SessionToken, TransferSession, UnixTimestamp};
+use tssp_domain::{FileId, SessionKind, SessionToken, TransferSession, UnixTimestamp, UserId};
 use tssp_ports::{RepositoryError, SessionRepository};
 
 /// Application service for managing transfer sessions.
@@ -25,6 +25,7 @@ impl<R: SessionRepository> SessionService<R> {
         file_id: &str,
         ttl_seconds: u64,
         now: UnixTimestamp,
+        creator_id: Option<UserId>,
     ) -> Result<TransferSession, RepositoryError> {
         #[allow(clippy::cast_possible_wrap)]
         let ttl = ttl_seconds as i64;
@@ -39,11 +40,15 @@ impl<R: SessionRepository> SessionService<R> {
                 message: format!("invalid file id: {e}"),
             })?;
 
-        let session =
+        let mut session =
             TransferSession::new(token, SessionKind::Send, now, expires_at, Some(file_id))
                 .map_err(|e| RepositoryError::OperationFailed {
                     message: format!("failed to create send session: {e}"),
                 })?;
+
+        if let Some(creator) = creator_id {
+            session = session.with_creator(creator);
+        }
 
         self.repository.create_session(session.clone())?;
         Ok(session)
@@ -59,6 +64,7 @@ impl<R: SessionRepository> SessionService<R> {
         token: SessionToken,
         ttl_seconds: u64,
         now: UnixTimestamp,
+        creator_id: Option<UserId>,
     ) -> Result<TransferSession, RepositoryError> {
         #[allow(clippy::cast_possible_wrap)]
         let ttl = ttl_seconds as i64;
@@ -68,10 +74,14 @@ impl<R: SessionRepository> SessionService<R> {
             }
         })?;
 
-        let session = TransferSession::new(token, SessionKind::Receive, now, expires_at, None)
+        let mut session = TransferSession::new(token, SessionKind::Receive, now, expires_at, None)
             .map_err(|e| RepositoryError::OperationFailed {
                 message: format!("failed to create receive session: {e}"),
             })?;
+
+        if let Some(creator) = creator_id {
+            session = session.with_creator(creator);
+        }
 
         self.repository.create_session(session.clone())?;
         Ok(session)

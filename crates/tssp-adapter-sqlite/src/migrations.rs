@@ -96,7 +96,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_folder_path_column(connection)?;
     migrate_soft_delete_columns(connection)?;
     migrate_audit_events_table(connection)?;
-    migrate_workspace_files_table(connection)
+    migrate_workspace_files_table(connection)?;
+    migrate_session_creator_column(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -378,6 +379,27 @@ pub(crate) fn migrate_workspace_files_table(connection: &Connection) -> Result<(
         .map_err(SqliteRepositoryError::Migration)?;
 
     record_migration(connection, 15)?;
+    Ok(())
+}
+
+/// Adds creator_id column to sessions table (schema v16).
+pub(crate) fn migrate_session_creator_column(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 16)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE sessions ADD COLUMN creator_id TEXT;
+            CREATE INDEX IF NOT EXISTS idx_sessions_creator ON sessions(creator_id);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 16)?;
     Ok(())
 }
 

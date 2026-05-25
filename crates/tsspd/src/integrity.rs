@@ -1,6 +1,7 @@
 //! Blob/index consistency checks at startup.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::SqliteFileRepository;
@@ -77,6 +78,30 @@ pub fn run_startup_integrity_scan(
             0
         }
     }
+}
+
+/// Runs integrity scan in a background task.
+pub fn spawn_startup_integrity_scan(
+    repository: Arc<SqliteFileRepository>,
+    blob_store: Arc<FilesystemBlobStore>,
+    counter: Arc<std::sync::atomic::AtomicU64>,
+) {
+    tokio::spawn(async move {
+        tracing::info!("integrity: starting background consistency scan");
+        match count_missing_blobs(&repository, &blob_store) {
+            Ok(missing) => {
+                counter.store(missing, std::sync::atomic::Ordering::Relaxed);
+                if missing > 0 {
+                    tracing::warn!(missing, "integrity scan found files with missing blobs");
+                } else {
+                    tracing::info!("integrity scan: all indexed blobs present");
+                }
+            }
+            Err(error) => {
+                tracing::warn!("integrity scan failed: {error}");
+            }
+        }
+    });
 }
 
 #[cfg(test)]

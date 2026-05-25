@@ -65,12 +65,15 @@ pub trait MetadataStatsProvider: Send + Sync {
         new_name: &tssp_domain::FileName,
     ) -> Result<Option<FileRecord>, String>;
 
-    /// Returns file counts grouped by folder path prefix.
+    /// Returns file counts grouped by folder path prefix, optionally filtered by owner.
     ///
     /// # Errors
     ///
     /// Returns a short diagnostic when the query fails.
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String>;
+    fn list_folder_counts(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, String>;
 
     /// Updates file visibility and public link token.
     ///
@@ -157,7 +160,10 @@ impl MetadataStatsProvider for StaticMetadataStatsProvider {
         Ok(None)
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+    fn list_folder_counts(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, String> {
         Ok(Vec::new())
     }
 
@@ -254,9 +260,12 @@ where
             .map_err(|error| error.to_string())
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+    fn list_folder_counts(
+        &self,
+        owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, String> {
         self.repository
-            .list_folder_counts()
+            .list_folder_counts(owner_id)
             .map_err(|error| error.to_string())
     }
 
@@ -341,7 +350,9 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
     match state.stats_provider.stats() {
         Ok(repository_stats) => {
             let public_url = state.public_urls().base().to_owned();
-            let corrupt_file_count = state.corrupt_file_count;
+            let corrupt_file_count = state
+                .corrupt_file_count
+                .load(std::sync::atomic::Ordering::Relaxed);
             let storage_bytes_used = get_storage_usage_from_stats(&repository_stats).await;
 
             Json(StatusResponse {

@@ -3,7 +3,9 @@
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Row};
-use tssp_domain::{FileId, FileName, SessionKind, SessionToken, TransferSession, UnixTimestamp};
+use tssp_domain::{
+    FileId, FileName, SessionKind, SessionToken, TransferSession, UnixTimestamp, UserId,
+};
 use tssp_ports::{RepositoryError, SessionRepository};
 
 use crate::map_rusqlite_repository_error;
@@ -67,6 +69,12 @@ fn map_session_row(row: &Row<'_>) -> Result<TransferSession, RepositoryError> {
         message: format!("failed to read session used_at: {e}"),
     })?;
 
+    let creator_id_str: Option<String> =
+        row.get(8).map_err(|e| RepositoryError::OperationFailed {
+            message: format!("failed to read session creator_id: {e}"),
+        })?;
+    let creator_id = creator_id_str.as_deref().and_then(|s| UserId::new(s).ok());
+
     let mut session = TransferSession::new(token, kind, created_at, expires_at, source_file)
         .map_err(|e| RepositoryError::OperationFailed {
             message: format!("failed to construct session from database: {e}"),
@@ -77,6 +85,9 @@ fn map_session_row(row: &Row<'_>) -> Result<TransferSession, RepositoryError> {
     }
     if let Some(en) = expected_name {
         session.expected_name = Some(en);
+    }
+    if let Some(creator) = creator_id {
+        session.creator_id = Some(creator);
     }
     if let Some(used_at_secs) = used_at_secs {
         let used_at =
@@ -120,8 +131,8 @@ impl SessionRepository for SqliteSessionRepository {
         let connection = self.connect()?;
         connection
             .execute(
-                "INSERT INTO sessions (token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO sessions (token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at, creator_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     session.token.as_str(),
                     match session.kind {
@@ -137,6 +148,7 @@ impl SessionRepository for SqliteSessionRepository {
                         .as_ref()
                         .map(tssp_domain::FileName::original),
                     None::<i64>,
+                    session.creator_id.as_ref().map(tssp_domain::UserId::as_str),
                 ],
             )
             .map_err(map_rusqlite_repository_error)?;
@@ -150,7 +162,7 @@ impl SessionRepository for SqliteSessionRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at
+                "SELECT token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at, creator_id
                  FROM sessions
                  WHERE token = ?1",
             )
@@ -218,7 +230,7 @@ impl SessionRepository for SqliteSessionRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at
+                "SELECT token, kind, created_at, expires_at, source_file, received_file, expected_name, used_at, creator_id
                  FROM sessions
                  WHERE kind = ?1
                  ORDER BY created_at DESC",

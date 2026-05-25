@@ -69,7 +69,6 @@ impl UploadSessionId {
     }
 
     /// Returns the session ID as a string slice.
-    #[allow(dead_code)]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -88,6 +87,7 @@ pub struct UploadSession {
     pub owner_id: Option<String>,
     pub tags: Vec<String>,
     pub mime_type: Option<String>,
+    pub updated_at: std::time::Instant,
 }
 
 impl UploadSession {
@@ -112,6 +112,7 @@ impl UploadSession {
             owner_id,
             tags,
             mime_type,
+            updated_at: std::time::Instant::now(),
         }
     }
 
@@ -119,6 +120,7 @@ impl UploadSession {
     pub fn mark_chunk_uploaded(&mut self, chunk_index: usize) {
         if chunk_index < self.uploaded_chunks.len() {
             self.uploaded_chunks[chunk_index] = true;
+            self.updated_at = std::time::Instant::now();
         }
     }
 
@@ -167,6 +169,24 @@ impl UploadSessionManager {
 
     pub async fn delete_session(&self, id: &UploadSessionId) {
         self.sessions.write().await.remove(&id.0);
+    }
+
+    /// Removes sessions that haven't been updated for a while.
+    pub async fn cleanup_expired(&self, max_age: std::time::Duration) -> Vec<UploadSessionId> {
+        let mut sessions = self.sessions.write().await;
+        let now = std::time::Instant::now();
+        let mut expired = Vec::new();
+
+        sessions.retain(|id, session| {
+            if now.duration_since(session.updated_at) > max_age {
+                expired.push(UploadSessionId(id.clone()));
+                false
+            } else {
+                true
+            }
+        });
+
+        expired
     }
 }
 
@@ -318,7 +338,7 @@ pub async fn upload_chunk(
     let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
     let chunk_path = chunk_file_path(&chunk_dir, chunk_index);
 
-    if let Err(e) = std::fs::create_dir_all(&chunk_dir) {
+    if let Err(e) = tokio::fs::create_dir_all(&chunk_dir).await {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "storage_error",
@@ -326,7 +346,7 @@ pub async fn upload_chunk(
         );
     }
 
-    if let Err(e) = std::fs::write(&chunk_path, &body) {
+    if let Err(e) = tokio::fs::write(&chunk_path, &body).await {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "storage_error",

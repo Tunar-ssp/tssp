@@ -31,7 +31,8 @@ pub struct HttpState {
     pub(crate) workspaces: Option<Arc<workspaces::WorkspaceStore>>,
     pub(crate) settings: Arc<DaemonSettings>,
     pub(crate) public_urls: PublicUrlBuilder,
-    pub(crate) corrupt_file_count: u64,
+    /// Number of files whose content blob is missing on disk.
+    pub corrupt_file_count: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) upload_session_manager: Arc<UploadSessionManager>,
     pub(crate) stats_provider: Arc<dyn MetadataStatsProvider>,
     pub(crate) upload_provider: Arc<dyn FileUploadProvider>,
@@ -62,7 +63,7 @@ impl HttpState {
             workspaces: None,
             settings,
             public_urls,
-            corrupt_file_count,
+            corrupt_file_count: Arc::new(std::sync::atomic::AtomicU64::new(corrupt_file_count)),
             upload_session_manager: Arc::new(UploadSessionManager::new()),
             stats_provider: Arc::new(StaticMetadataStatsProvider),
             upload_provider: Arc::new(StaticFileUploadProvider),

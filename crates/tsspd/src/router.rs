@@ -245,6 +245,10 @@ pub fn build_router(state: HttpState) -> Router {
             get(crate::admin::admin_overview).options(options_response),
         )
         .route(
+            "/api/v1/admin/status",
+            get(crate::admin::admin_status).options(options_response),
+        )
+        .route(
             "/api/v1/admin/system",
             get(crate::admin::admin_system).options(options_response),
         )

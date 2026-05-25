@@ -348,8 +348,20 @@ export const api = {
     request<{
       schema_version: number;
       status: string;
-      uptime_seconds: number;
       version: string;
+      uptime_seconds: number;
+      uptime_hours: number;
+      last_restart: string;
+      disk_used: number;
+      disk_total: number;
+      memory_used: number;
+      memory_total: number;
+      cpu_percent: number;
+      load_average: number;
+      total_files: number;
+      total_size: number;
+      db_size: number;
+      db_status: string;
     }>('/admin/status'),
   listAdminConsoleCommands: () =>
     request<{ schema_version: number; commands: Array<{ id: string; name: string; description?: string }> }>(
@@ -398,7 +410,7 @@ export const api = {
   getSharedFile: (shareId: string) =>
     shareRequest<{ schema_version: number; file: FileRecord }>(`/${encodeURIComponent(shareId)}`),
   downloadSharedFile: async (shareId: string) => {
-    const res = await rawRequest(`/api/files/${encodeURIComponent(shareId)}/content`);
+    const res = await rawRequest(`/p/${encodeURIComponent(shareId)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.blob();
   },

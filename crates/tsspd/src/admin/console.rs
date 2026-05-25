@@ -210,7 +210,7 @@ fn run_cleanup_sessions() -> (bool, serde_json::Value) {
 }
 
 fn run_folder_breakdown(state: &HttpState) -> (bool, serde_json::Value) {
-    match state.stats_provider.list_folder_counts() {
+    match state.stats_provider.list_folder_counts(None) {
         Ok(counts) => {
             let folders: Vec<_> = counts
                 .into_iter()
@@ -312,7 +312,7 @@ fn run_integrity_check(state: &HttpState) -> (bool, serde_json::Value) {
 }
 
 fn run_tag_stats(state: &HttpState) -> (bool, serde_json::Value) {
-    match state.stats_provider.list_folder_counts() {
+    match state.stats_provider.list_folder_counts(None) {
         Ok(folder_counts) => {
             let total_folders = folder_counts.len();
             let total_tagged_files: u64 = folder_counts.iter().map(|(_, c)| c).sum();

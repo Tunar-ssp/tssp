@@ -113,44 +113,18 @@ pub async fn list_folders(
     State(state): State<HttpState>,
     auth: AuthContext,
 ) -> Response {
-    // For non-admin users, only show folders from their own files
-    // For admin users, show all folders
-    match state.stats_provider.list_folder_counts() {
+    let owner_id = if auth.is_admin() {
+        None
+    } else {
+        Some(&auth.user_id)
+    };
+
+    match state.stats_provider.list_folder_counts(owner_id) {
         Ok(folders) => {
-            let entries: Vec<FolderEntry> = if auth.is_admin() {
-                folders
-                    .into_iter()
-                    .map(|(path, file_count)| FolderEntry { path, file_count })
-                    .collect()
-            } else {
-                // Non-admin users: get their files and extract unique folder paths
-                let mut query = tssp_ports::ListQuery::default();
-                query.owner_id = Some(auth.user_id.clone());
-                query.limit = 10_000; // Get all files (with reasonable limit)
-
-                match state.stats_provider.list_files(&query) {
-                    Ok(page) => {
-                        let mut folder_counts: std::collections::HashMap<String, u64> =
-                            std::collections::HashMap::new();
-
-                        for file in &page.files {
-                            if !file.folder_path.is_empty() {
-                                *folder_counts
-                                    .entry(file.folder_path.clone())
-                                    .or_insert(0) += 1;
-                            }
-                        }
-
-                        let mut entries: Vec<FolderEntry> = folder_counts
-                            .into_iter()
-                            .map(|(path, file_count)| FolderEntry { path, file_count })
-                            .collect();
-                        entries.sort_by(|a, b| a.path.cmp(&b.path));
-                        entries
-                    }
-                    Err(_) => Vec::new(), // Fall back to empty list on error
-                }
-            };
+            let entries: Vec<FolderEntry> = folders
+                .into_iter()
+                .map(|(path, file_count)| FolderEntry { path, file_count })
+                .collect();
 
             (
                 StatusCode::OK,
