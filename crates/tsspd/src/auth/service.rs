@@ -433,6 +433,36 @@ impl AuthService {
         self.store.as_deref()
     }
 
+    /// List all devices for a user.
+    pub fn list_user_devices(&self, user_id: &UserId) -> Result<Vec<TrustedDevice>, AuthError> {
+        self.devices
+            .as_ref()
+            .ok_or_else(|| AuthError::NotConfigured)?
+            .list_devices(Some(user_id))
+            .map_err(|e| AuthError::Store(e.to_string()))
+    }
+
+    /// Get a device by token (including expired devices).
+    /// Note: This returns expired devices too; use resolve_device() for validity checking.
+    pub fn get_device(&self, token: &str) -> Result<TrustedDevice, AuthError> {
+        // Get all devices and find the one matching the token
+        // This is a workaround since DeviceStore doesn't expose find_any method
+        let store = self
+            .devices
+            .as_ref()
+            .ok_or_else(|| AuthError::NotConfigured)?;
+
+        // Use a far-future timestamp to get all devices including expired
+        let all_devices = store
+            .list_devices(None)
+            .map_err(|e: DeviceStoreError| AuthError::Store(e.to_string()))?;
+
+        all_devices
+            .into_iter()
+            .find(|d| d.device_token == token)
+            .ok_or_else(|| AuthError::Store("device not found".to_string()))
+    }
+
     /// Cookie max-age for web sessions.
     #[must_use]
     pub const fn web_cookie_max_age() -> Duration {

@@ -233,6 +233,14 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::auth::auth_logout).options(options_response),
         )
         .route(
+            "/api/v1/auth/devices",
+            get(crate::auth::list_user_devices).options(options_response),
+        )
+        .route(
+            "/api/v1/auth/devices/:device_token",
+            axum::routing::delete(crate::auth::revoke_user_device).options(options_response),
+        )
+        .route(
             "/api/v1/admin/overview",
             get(crate::admin::admin_overview).options(options_response),
         )

@@ -19,7 +19,8 @@ use thiserror::Error;
 pub use context::{AuthContext, OptionalAuthContext};
 pub use devices::{DeviceStore, DeviceStoreError, TrustedDevice};
 pub use handlers::{
-    auth_login, auth_logout, auth_me, auth_required, auth_token, LoginRequest, TokenResponse,
+    auth_login, auth_logout, auth_me, auth_required, auth_token, list_user_devices,
+    revoke_user_device, LoginRequest, TokenResponse,
 };
 pub use middleware::auth_middleware;
 pub use service::{AuthError, AuthService, SessionInfo};

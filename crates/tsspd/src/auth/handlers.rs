@@ -396,3 +396,87 @@ pub async fn auth_logout(State(state): State<HttpState>, headers: HeaderMap) -> 
     }
     response
 }
+
+/// Device info for listing
+#[derive(Debug, serde::Serialize)]
+pub struct DeviceInfo {
+    pub token: String,
+    pub name: String,
+    pub created_at: i64,
+    pub last_seen_at: i64,
+    pub last_ip: Option<String>,
+}
+
+/// List user's own trusted devices
+pub async fn list_user_devices(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+) -> impl IntoResponse {
+    match state.auth.list_user_devices(&auth.user_id) {
+        Ok(devices) => {
+            let device_infos: Vec<DeviceInfo> = devices
+                .into_iter()
+                .map(|d| DeviceInfo {
+                    token: d.device_token,
+                    name: d.device_name,
+                    created_at: d.created_at,
+                    last_seen_at: d.last_seen_at,
+                    last_ip: d.last_ip,
+                })
+                .collect();
+            (StatusCode::OK, Json(device_infos)).into_response()
+        }
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "failed_to_list_devices",
+                "message": error.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Revoke a trusted device (user can only revoke their own)
+pub async fn revoke_user_device(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    axum::extract::Path(device_token): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    // Verify the device belongs to the current user
+    match state.auth.get_device(&device_token) {
+        Ok(device) => {
+            if device.user_id != auth.user_id {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({
+                        "error": "forbidden",
+                        "message": "You can only revoke your own devices"
+                    })),
+                )
+                    .into_response();
+            }
+
+            // Revoke the device
+            match state.auth.revoke_device(&device_token) {
+                Ok(_) => StatusCode::NO_CONTENT.into_response(),
+                Err(error) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "failed_to_revoke_device",
+                        "message": error.to_string()
+                    })),
+                )
+                    .into_response(),
+            }
+        }
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "device_not_found",
+                "message": "Device not found"
+            })),
+        )
+            .into_response(),
+    }
+}
