@@ -19,8 +19,61 @@ const CACHE_ASSETS = [
   '/app-v2/index.html',
   '/api/v1/status',
 ];
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', () => self.clients.claim());
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then((cache) => {
+      return cache.addAll(CACHE_ASSETS);
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((name) => name !== CACHE_VERSION)
+          .map((name) => caches.delete(name))
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const cache = caches.open(CACHE_VERSION);
+            cache.then((c) => c.put(request, response.clone()));
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(request);
+        })
+    );
+    return;
+  }
+
+  if (request.method === 'GET') {
+    event.respondWith(
+      caches
+        .match(request)
+        .then((cached) => cached || fetch(request))
+        .catch(() => {
+          return caches.match('/app-v2/index.html');
+        })
+    );
+  }
+});
 "#;
 
 pub(crate) const HTML_CSP: &str =
