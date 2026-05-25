@@ -559,6 +559,7 @@ fn pin_file_sets_position_and_returns_changed() {
             owner_id: None,
             visibility: tssp_domain::Visibility::Private,
             public_token: None,
+            public_expires_at: None,
         })
         .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -804,6 +805,7 @@ fn new_file(id: &str, tags: &[&str], uploaded_at: i64) -> NewFileRecord {
         owner_id: None,
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
+        public_expires_at: None,
     }
 }
 

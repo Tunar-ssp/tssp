@@ -196,6 +196,7 @@ mod tests {
             owner_id: None,
             visibility: Visibility::Private,
             public_token: None,
+            public_expires_at: None,
         };
 
         let repo = MockRepo {

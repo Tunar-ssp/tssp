@@ -203,6 +203,7 @@ mod tests {
                 owner_id: None,
                 visibility: Visibility::Public,
                 public_token: Some("tok123".to_owned()),
+                public_expires_at: None,
             }))
         }
 

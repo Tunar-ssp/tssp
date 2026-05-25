@@ -323,6 +323,7 @@ pub fn test_record(request: &HttpUploadRequest) -> FileRecord {
         owner_id: None,
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
+            public_expires_at: None,
     }
 }
 
@@ -341,6 +342,7 @@ pub fn single_record() -> FileRecord {
         owner_id: None,
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
+            public_expires_at: None,
     }
 }
 

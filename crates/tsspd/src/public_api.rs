@@ -5,7 +5,8 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use tssp_domain::Visibility;
-use tssp_ports::ListQuery;
+use tssp_ports::{Clock, ListQuery};
+use tssp_adapter_system::SystemClock;
 
 use crate::content::{self, DispositionMode};
 use crate::upload::FileRecordResponse;
@@ -69,6 +70,22 @@ pub async fn public_download(
             }),
         )
             .into_response();
+    }
+
+    if let Some(expires_at) = file.public_expires_at {
+        let now = SystemClock.now().seconds();
+        if now >= expires_at {
+            return (
+                axum::http::StatusCode::GONE,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "link_expired",
+                        message: "this public link has expired".to_owned(),
+                    },
+                }),
+            )
+                .into_response();
+        }
     }
 
     let blob = match content::open_blob(state, file.storage_handle.clone()).await {

@@ -38,8 +38,8 @@ pub(crate) fn insert_file_row(
     transaction
         .execute(
             "INSERT INTO files
-             (id, name, storage_component, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             (id, name, storage_component, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 new_file.id.as_str(),
                 new_file.name.original(),
@@ -57,6 +57,7 @@ pub(crate) fn insert_file_row(
                     .map(tssp_domain::UserId::as_str),
                 new_file.visibility.as_str(),
                 new_file.public_token,
+                new_file.public_expires_at,
             ],
         )
         .map(|_rows| ())
@@ -86,7 +87,7 @@ pub(crate) fn find_file_in_transaction(
 ) -> Result<Option<FileRecord>, RepositoryError> {
     let mut statement = transaction
         .prepare(
-            "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
+            "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
              FROM files
              WHERE id = ?1 AND deleted_at IS NULL",
         )
@@ -203,6 +204,7 @@ pub(crate) fn map_file_row(row: &Row<'_>) -> Result<FileRecord, RepositoryError>
     let owner_id_raw: Option<String> = row.get(9).map_err(map_rusqlite_repository_error)?;
     let visibility_raw: String = row.get(10).map_err(map_rusqlite_repository_error)?;
     let public_token: Option<String> = row.get(11).map_err(map_rusqlite_repository_error)?;
+    let public_expires_at: Option<i64> = row.get(12).map_err(map_rusqlite_repository_error)?;
     let owner_id = owner_id_raw
         .map(|value| UserId::new(value).map_err(|error| map_domain_repository_error(&error)))
         .transpose()?;
@@ -226,6 +228,7 @@ pub(crate) fn map_file_row(row: &Row<'_>) -> Result<FileRecord, RepositoryError>
         owner_id,
         visibility,
         public_token,
+        public_expires_at,
     })
 }
 

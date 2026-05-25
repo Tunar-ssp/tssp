@@ -97,7 +97,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_soft_delete_columns(connection)?;
     migrate_audit_events_table(connection)?;
     migrate_workspace_files_table(connection)?;
-    migrate_session_creator_column(connection)
+    migrate_session_creator_column(connection)?;
+    migrate_public_link_expiry(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -400,6 +401,29 @@ pub(crate) fn migrate_session_creator_column(
         .map_err(SqliteRepositoryError::Migration)?;
 
     record_migration(connection, 16)?;
+    Ok(())
+}
+
+/// Adds expiration support for public links (schema v17).
+pub(crate) fn migrate_public_link_expiry(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 17)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE files ADD COLUMN public_expires_at INTEGER;
+            CREATE INDEX IF NOT EXISTS idx_files_public_expires_at
+                ON files(public_expires_at)
+                WHERE public_expires_at IS NOT NULL;
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 17)?;
     Ok(())
 }
 

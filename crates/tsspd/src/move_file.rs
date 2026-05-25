@@ -246,6 +246,7 @@ mod tests {
             owner_id: owner_id.map(|value| UserId::new(value).expect("owner id")),
             visibility: Visibility::Private,
             public_token: None,
+            public_expires_at: None,
         }
     }
 

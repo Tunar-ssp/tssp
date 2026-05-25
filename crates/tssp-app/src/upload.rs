@@ -91,6 +91,7 @@ where
             owner_id: request.owner_id.clone(),
             visibility: request.visibility,
             public_token: request.public_token.clone(),
+            public_expires_at: None,
         };
 
         match self.repository.insert_file(new_file) {

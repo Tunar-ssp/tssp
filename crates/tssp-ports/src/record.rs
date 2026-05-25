@@ -34,6 +34,8 @@ pub struct NewFileRecord {
     pub visibility: Visibility,
     /// Optional public link token when visibility is public.
     pub public_token: Option<String>,
+    /// Optional expiration time for public links.
+    pub public_expires_at: Option<i64>,
 }
 
 /// Result of a metadata delete transaction.

@@ -218,6 +218,8 @@ pub struct FileRecord {
     pub visibility: crate::Visibility,
     /// Unguessable token for public download when visibility is public.
     pub public_token: Option<String>,
+    /// Expiration time for public links in UTC seconds, None if never expires.
+    pub public_expires_at: Option<i64>,
 }
 
 impl FileRecord {
@@ -515,6 +517,7 @@ mod tests {
             owner_id: None,
             visibility: crate::Visibility::Private,
             public_token: None,
+            public_expires_at: None,
         };
 
         assert!(!record.is_pinned());
