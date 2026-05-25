@@ -487,13 +487,22 @@ export const api = {
       body: JSON.stringify({ filename, total_size: totalSize, folder_path: folder || '' }),
     }),
   uploadChunk: (sessionId: string, index: number, chunk: Blob) =>
-    request<{ session_id: string; chunk_index: number }>(
-      `/files/upload/${encodeURIComponent(sessionId)}/chunk/${index}`,
-      {
-        method: 'POST',
-        body: chunk,
+    fetch(BASE + `/files/upload/${encodeURIComponent(sessionId)}/chunk/${index}`, {
+      credentials: 'same-origin',
+      method: 'POST',
+      body: chunk,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          err?.error?.message || err?.error || `HTTP ${res.status}`
+        );
       }
-    ),
+      return res.json() as Promise<{ session_id: string; chunk_index: number }>;
+    }),
   completeUpload: (sessionId: string, files: Array<{ name: string; mime_type: string }>) =>
     request<{ schema_version: number; files: FileRecord[] }>(
       `/files/upload/${encodeURIComponent(sessionId)}`,
