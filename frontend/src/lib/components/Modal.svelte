@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { ModalProps } from './primitives.svelte';
 
   interface $$Props extends ModalProps {
@@ -26,6 +27,22 @@
       onClose();
     }
   }
+
+  onMount(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && onClose) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeydown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeydown);
+    };
+  });
 </script>
 
 {#if isOpen}
