@@ -63,9 +63,19 @@
 
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
+    // Increased from 900ms to 5000ms to reduce SD card thrashing on Orange Pi
+    // Combined with blur-on-save, this provides good UX while protecting hardware
     saveTimer = setTimeout(() => {
       void handleSaveNote(false);
-    }, 900);
+    }, 5000);
+  }
+
+  async function handleFieldBlur() {
+    // Immediately save when user leaves the editor (don't wait for debounce)
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      await handleSaveNote(false);
+    }
   }
 
   async function handleSaveNote(showToast = true) {
@@ -236,6 +246,7 @@
           bind:value={titleDraft}
           oninput={scheduleSave}
           onchange={() => handleSaveNote()}
+          on:blur={handleFieldBlur}
           class="editor-title"
           placeholder="Note title..."
         />

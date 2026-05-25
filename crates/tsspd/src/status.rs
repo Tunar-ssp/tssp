@@ -340,6 +340,11 @@ pub async fn get_cached_storage_usage(state: &HttpState, data_root: &Path) -> u6
     let now = state.started_at.elapsed().as_secs();
     let last_check = LAST_SIZE_CHECK.load(Ordering::Relaxed);
 
+    // Cache storage size calculation every 5 minutes
+    // TODO: Replace disk walk with SUM(size_bytes) query from files table
+    // Currently: calculate_directory_size recursively walks entire data/ on each refresh
+    // Better: Add storage_bytes_used counter to database, update on upload/delete, query counter on status
+    // This would eliminate disk I/O and improve latency from 30s+ to <1ms
     if now > last_check + 300 || last_check == 0 {
         let root = data_root.to_path_buf();
         let size = tokio::task::spawn_blocking(move || calculate_directory_size(&root))
