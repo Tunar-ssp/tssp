@@ -40,12 +40,36 @@ pub trait FileRepository {
         content_hash: &ContentHash,
     ) -> Result<Option<FileRecord>, RepositoryError>;
 
-    /// Deletes one logical file record and reports remaining blob references.
+    /// Soft-deletes one logical file record and reports remaining blob references.
+    ///
+    /// Sets deleted_at timestamp without removing the record. The file becomes invisible to normal queries
+    /// but can be restored later.
     ///
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the delete transaction cannot complete.
     fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError>;
+
+    /// Restores a soft-deleted file by clearing its deleted_at timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the restore cannot be committed, or when the file does not exist.
+    fn restore_file(&self, id: &FileId) -> Result<Option<FileRecord>, RepositoryError>;
+
+    /// Returns soft-deleted files older than the given timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query fails.
+    fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError>;
+
+    /// Permanently deletes a soft-deleted file record.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the delete cannot be committed.
+    fn purge_deleted_file(&self, id: &FileId) -> Result<bool, RepositoryError>;
 
     /// Returns filtered and paginated files according to the supplied query.
     ///
@@ -351,6 +375,18 @@ where
 
     fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError> {
         self.as_ref().delete_file(id)
+    }
+
+    fn restore_file(&self, id: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
+        self.as_ref().restore_file(id)
+    }
+
+    fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+        self.as_ref().list_deleted_files(older_than)
+    }
+
+    fn purge_deleted_file(&self, id: &FileId) -> Result<bool, RepositoryError> {
+        self.as_ref().purge_deleted_file(id)
     }
 
     fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {

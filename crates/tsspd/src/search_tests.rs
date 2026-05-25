@@ -120,6 +120,24 @@ impl FileRepository for MockRepo {
     ) -> Result<Option<tssp_ports::DeletedFileRecord>, tssp_ports::RepositoryError> {
         unimplemented!()
     }
+    fn restore_file(
+        &self,
+        _id: &tssp_domain::FileId,
+    ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn list_deleted_files(
+        &self,
+        _older_than: tssp_domain::UnixTimestamp,
+    ) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn purge_deleted_file(
+        &self,
+        _id: &tssp_domain::FileId,
+    ) -> Result<bool, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
     fn list_files(
         &self,
         _query: &tssp_ports::ListQuery,
@@ -367,6 +385,24 @@ impl FileRepository for FailingMockRepo {
         &self,
         _id: &tssp_domain::FileId,
     ) -> Result<Option<tssp_ports::DeletedFileRecord>, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn restore_file(
+        &self,
+        _id: &tssp_domain::FileId,
+    ) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn list_deleted_files(
+        &self,
+        _older_than: tssp_domain::UnixTimestamp,
+    ) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn purge_deleted_file(
+        &self,
+        _id: &tssp_domain::FileId,
+    ) -> Result<bool, tssp_ports::RepositoryError> {
         unimplemented!()
     }
     fn list_files(

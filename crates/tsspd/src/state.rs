@@ -9,7 +9,7 @@ use tssp_ports::{BlobReader, FileRepository};
 use crate::auth::AuthService;
 use crate::chunked_upload::UploadSessionManager;
 use crate::content::StaticBlobReader;
-use crate::delete::{FileDeleteProvider, StaticFileDeleteProvider};
+use crate::delete::{FileDeleteProvider, StaticFileDeleteProvider, FileRestoreProvider, StaticFileRestoreProvider};
 use crate::notes::{NoteProvider, StaticNoteProvider};
 use crate::pins::{FilePinProvider, StaticFilePinProvider};
 use crate::rate_limit::RateLimiter;
@@ -42,6 +42,7 @@ pub struct HttpState {
     pub(crate) stats_provider: Arc<dyn MetadataStatsProvider>,
     pub(crate) upload_provider: Arc<dyn FileUploadProvider>,
     pub(crate) delete_provider: Arc<dyn FileDeleteProvider>,
+    pub(crate) restore_provider: Arc<dyn FileRestoreProvider>,
     pub(crate) tag_provider: Arc<dyn FileTagProvider>,
     pub(crate) pin_provider: Arc<dyn FilePinProvider>,
     pub(crate) session_provider: Arc<dyn SessionProvider>,
@@ -76,6 +77,7 @@ impl HttpState {
             stats_provider: Arc::new(StaticMetadataStatsProvider),
             upload_provider: Arc::new(StaticFileUploadProvider),
             delete_provider: Arc::new(StaticFileDeleteProvider),
+            restore_provider: Arc::new(StaticFileRestoreProvider),
             tag_provider: Arc::new(StaticFileTagProvider),
             pin_provider: Arc::new(StaticFilePinProvider),
             session_provider: Arc::new(StaticSessionProvider),
@@ -110,6 +112,13 @@ impl HttpState {
     #[must_use]
     pub fn with_delete_provider(mut self, provider: Arc<dyn FileDeleteProvider>) -> Self {
         self.delete_provider = provider;
+        self
+    }
+
+    /// Attaches the restore provider.
+    #[must_use]
+    pub fn with_restore_provider(mut self, provider: Arc<dyn FileRestoreProvider>) -> Self {
+        self.restore_provider = provider;
         self
     }
 
@@ -233,6 +242,7 @@ impl Clone for HttpState {
             stats_provider: self.stats_provider.clone(),
             upload_provider: self.upload_provider.clone(),
             delete_provider: self.delete_provider.clone(),
+            restore_provider: self.restore_provider.clone(),
             tag_provider: self.tag_provider.clone(),
             pin_provider: self.pin_provider.clone(),
             session_provider: self.session_provider.clone(),
@@ -267,6 +277,24 @@ impl FileRepository for StaticFileRepository {
     }
 
     fn delete_file(&self, _id: &tssp_domain::FileId) -> Result<Option<tssp_ports::DeletedFileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn restore_file(&self, _id: &tssp_domain::FileId) -> Result<Option<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn list_deleted_files(&self, _older_than: tssp_domain::UnixTimestamp) -> Result<Vec<tssp_domain::FileRecord>, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "static repository is not configured".to_owned(),
+        })
+    }
+
+    fn purge_deleted_file(&self, _id: &tssp_domain::FileId) -> Result<bool, tssp_ports::RepositoryError> {
         Err(tssp_ports::RepositoryError::OperationFailed {
             message: "static repository is not configured".to_owned(),
         })

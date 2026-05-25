@@ -72,6 +72,15 @@ mod tests {
                 Ok(None)
             }
         }
+        fn restore_file(&self, _: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
+            unimplemented!()
+        }
+        fn list_deleted_files(&self, _: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+            unimplemented!()
+        }
+        fn purge_deleted_file(&self, _: &FileId) -> Result<bool, RepositoryError> {
+            unimplemented!()
+        }
         fn list_files(&self, _: &ListQuery) -> Result<PagedFiles, RepositoryError> {
             unimplemented!()
         }
@@ -173,7 +182,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_concurrent_delete_blob_cleanup() {
+    async fn test_concurrent_delete_is_safe() {
         let cleanup_count = Arc::new(Mutex::new(0));
         let blob_store = MockBlobStore {
             cleanup_count: cleanup_count.clone(),
@@ -220,6 +229,6 @@ mod tests {
 
         let final_count = *cleanup_count.lock().expect("lock poisoned");
         println!("Final cleanup count: {final_count}");
-        assert_eq!(final_count, 1, "Only one cleanup should be scheduled");
+        assert_eq!(final_count, 0, "Blob cleanup is now deferred to background job");
     }
 }

@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use tssp_app::{DeleteFileError, DeleteFileService};
+use tssp_app::{DeleteFileError, DeleteFileService, RestoreFileError, RestoreFileService};
 use tssp_domain::FileId;
 use tssp_ports::{BlobStore, FileRepository, RepositoryError};
 
@@ -216,6 +216,159 @@ fn map_delete_error(error: DeleteFileError) -> HttpDeleteError {
             message: error.to_string(),
         },
     }
+}
+
+/// Handles HTTP restore requests through the application layer.
+pub trait FileRestoreProvider: Send + Sync {
+    /// Restores a soft-deleted file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpRestoreError`] when restoration fails.
+    fn restore(&self, id: FileId) -> Result<HttpRestoreOutcome, HttpRestoreError>;
+}
+
+#[derive(Debug)]
+pub(crate) struct StaticFileRestoreProvider;
+
+impl FileRestoreProvider for StaticFileRestoreProvider {
+    fn restore(&self, _id: FileId) -> Result<HttpRestoreOutcome, HttpRestoreError> {
+        Err(HttpRestoreError::Unavailable {
+            message: "restore service is not configured".to_owned(),
+        })
+    }
+}
+
+/// Successful HTTP restore outcome.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct HttpRestoreOutcome {
+    /// True when a soft-deleted file was restored.
+    pub existed: bool,
+}
+
+/// Restore failure mapped to HTTP error responses.
+#[derive(Debug)]
+pub enum HttpRestoreError {
+    /// Metadata store is busy.
+    Busy {
+        message: String,
+    },
+    /// Restore service is unavailable.
+    Unavailable {
+        message: String,
+    },
+    /// Unexpected server-side failure.
+    Internal {
+        message: String,
+    },
+}
+
+impl HttpRestoreError {
+    pub(crate) fn response(&self) -> Response {
+        let (status, code, message) = match self {
+            Self::Busy { message } => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metadata_busy",
+                message.clone(),
+            ),
+            Self::Unavailable { message } => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "restore_unavailable",
+                message.clone(),
+            ),
+            Self::Internal { message } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                message.clone(),
+            ),
+        };
+
+        (
+            status,
+            Json(ErrorResponse {
+                error: ErrorBody { code, message },
+            }),
+        )
+            .into_response()
+    }
+}
+
+/// Restore provider backed by the core application restore service.
+#[allow(dead_code)]
+pub struct ApplicationFileRestoreProvider<R> {
+    service: RestoreFileService<R>,
+}
+
+impl<R> ApplicationFileRestoreProvider<R> {
+    /// Creates a provider from a restore service.
+    #[must_use]
+    #[allow(dead_code)]
+    pub const fn new(service: RestoreFileService<R>) -> Self {
+        Self { service }
+    }
+}
+
+impl<R> FileRestoreProvider for ApplicationFileRestoreProvider<R>
+where
+    R: FileRepository + Send + Sync,
+{
+    fn restore(&self, id: FileId) -> Result<HttpRestoreOutcome, HttpRestoreError> {
+        self.service
+            .restore(&id)
+            .map(|outcome| HttpRestoreOutcome {
+                existed: outcome.existed,
+            })
+            .map_err(map_restore_error)
+    }
+}
+
+pub(crate) async fn restore_file(
+    State(state): State<HttpState>,
+    _auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    let file_id = match FileId::new(id) {
+        Ok(value) => value,
+        Err(error) => return invalid_file_id_response(error.to_string()),
+    };
+
+    let restore_provider = state.restore_provider.clone();
+    let _mutation_guard = state.storage_mutation_lock.lock().await;
+    match tokio::task::spawn_blocking(move || restore_provider.restore(file_id)).await {
+        Ok(Ok(outcome)) => restore_success_response(outcome),
+        Ok(Err(error)) => error.response(),
+        Err(error) => HttpRestoreError::Internal {
+            message: format!("restore worker failed: {error}"),
+        }
+        .response(),
+    }
+}
+
+#[allow(dead_code)]
+fn map_restore_error(error: RestoreFileError) -> HttpRestoreError {
+    match error {
+        RestoreFileError::Repository(RepositoryError::Busy) => HttpRestoreError::Busy {
+            message: "metadata store is busy; retry the restore".to_owned(),
+        },
+        RestoreFileError::Repository(error) => HttpRestoreError::Internal {
+            message: error.to_string(),
+        },
+    }
+}
+
+fn restore_success_response(outcome: HttpRestoreOutcome) -> Response {
+    let mut response = StatusCode::OK.into_response();
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("application/json"),
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "restored": outcome.existed
+        })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

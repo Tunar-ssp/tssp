@@ -102,6 +102,10 @@ pub fn build_router(state: HttpState) -> Router {
                 .options(options_response),
         )
         .route(
+            "/api/v1/files/{id}/restore",
+            post(crate::delete::restore_file).options(options_response),
+        )
+        .route(
             "/api/v1/files/{id}/pin",
             axum::routing::put({
                 tracing::error!("PUT PIN ROUTE HIT");

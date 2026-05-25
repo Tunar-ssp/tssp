@@ -10,6 +10,7 @@ use tssp_ports::{BlobStore, BlobStoreError, FileRepository, RepositoryError};
 
 /// Coordinates metadata deletion and safe content-addressed blob cleanup.
 pub struct DeleteFileService<B, R> {
+    #[allow(dead_code)]
     blob_store: B,
     repository: R,
 }
@@ -30,32 +31,25 @@ where
     B: BlobStore,
     R: FileRepository,
 {
-    /// Deletes one logical file id.
+    /// Soft-deletes one logical file id by marking it deleted_at.
+    ///
+    /// The physical blob is NOT deleted. A background reaper job will clean up
+    /// blobs from files deleted more than the configured retention period.
     ///
     /// # Errors
     ///
-    /// Returns [`DeleteFileError`] when metadata deletion fails or last-reference
-    /// blob cleanup cannot complete.
+    /// Returns [`DeleteFileError`] when metadata deletion fails.
     pub fn delete(&self, id: &FileId) -> Result<DeleteFileResult, DeleteFileError> {
-        let Some(deleted) = self.repository.delete_file(id)? else {
+        let Some(_deleted) = self.repository.delete_file(id)? else {
             return Ok(DeleteFileResult {
                 existed: false,
                 blob_cleaned: false,
             });
         };
 
-        if deleted.remaining_content_references > 0 {
-            return Ok(DeleteFileResult {
-                existed: true,
-                blob_cleaned: false,
-            });
-        }
-
-        self.blob_store
-            .cleanup_unreferenced(&deleted.record.storage_handle)?;
         Ok(DeleteFileResult {
             existed: true,
-            blob_cleaned: true,
+            blob_cleaned: false,
         })
     }
 }
@@ -77,6 +71,125 @@ pub enum DeleteFileError {
     Repository(#[from] RepositoryError),
 
     /// Last-reference blob cleanup failed after metadata deletion.
+    #[error(transparent)]
+    BlobCleanup(#[from] BlobStoreError),
+}
+
+/// Coordinates restoration of soft-deleted files.
+#[allow(dead_code)]
+pub struct RestoreFileService<R> {
+    repository: R,
+}
+
+impl<R> RestoreFileService<R> {
+    /// Creates a restore service from a repository.
+    #[must_use]
+    #[allow(dead_code)]
+    pub const fn new(repository: R) -> Self {
+        Self { repository }
+    }
+}
+
+impl<R> RestoreFileService<R>
+where
+    R: FileRepository,
+{
+    /// Restores a soft-deleted file by clearing its deleted_at timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RestoreFileError`] when restoration fails.
+    #[allow(dead_code)]
+    pub fn restore(&self, id: &FileId) -> Result<RestoreFileResult, RestoreFileError> {
+        match self.repository.restore_file(id)? {
+            Some(_) => Ok(RestoreFileResult { existed: true }),
+            None => Ok(RestoreFileResult { existed: false }),
+        }
+    }
+}
+
+/// Successful restore outcome.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
+pub struct RestoreFileResult {
+    /// True when a soft-deleted file record was restored.
+    pub existed: bool,
+}
+
+/// Restore use-case failure.
+#[derive(Debug, Error)]
+#[allow(dead_code)]
+pub enum RestoreFileError {
+    /// Metadata restore transaction failed.
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+/// Coordinates background purging of deleted files after retention period.
+#[allow(dead_code)]
+pub struct PurgeDeletedFilesService<B, R> {
+    blob_store: B,
+    repository: R,
+}
+
+impl<B, R> PurgeDeletedFilesService<B, R> {
+    /// Creates a purge service from infrastructure ports.
+    #[must_use]
+    #[allow(dead_code)]
+    pub const fn new(blob_store: B, repository: R) -> Self {
+        Self {
+            blob_store,
+            repository,
+        }
+    }
+}
+
+impl<B, R> PurgeDeletedFilesService<B, R>
+where
+    B: BlobStore,
+    R: FileRepository,
+{
+    /// Permanently deletes soft-deleted files older than the retention period and removes their blobs.
+    ///
+    /// Returns the count of files permanently purged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PurgeError`] when metadata or blob operations fail.
+    #[allow(dead_code)]
+    pub fn purge(&self, older_than: tssp_domain::UnixTimestamp) -> Result<u64, PurgeError> {
+        let deleted_files = self.repository.list_deleted_files(older_than)?;
+        let mut purged_count = 0;
+
+        for file in deleted_files {
+            if self.repository.purge_deleted_file(&file.id)? {
+                match self.blob_store.cleanup_unreferenced(&file.storage_handle) {
+                    Ok(()) => {
+                        purged_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "warning: failed to clean blob for {}: {}",
+                            file.id, e
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(purged_count)
+    }
+}
+
+/// Purge use-case failure.
+#[derive(Debug, Error)]
+#[allow(dead_code)]
+pub enum PurgeError {
+    /// Metadata operation failed.
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+
+    /// Blob cleanup failed.
     #[error(transparent)]
     BlobCleanup(#[from] BlobStoreError),
 }
@@ -159,6 +272,18 @@ mod tests {
                 Some(error) => Err(clone_repository_error(error)),
                 None => Ok(self.deleted.clone()),
             }
+        }
+
+        fn restore_file(&self, _id: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
+        }
+
+        fn list_deleted_files(&self, _older_than: tssp_domain::UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn purge_deleted_file(&self, _id: &FileId) -> Result<bool, RepositoryError> {
+            Ok(false)
         }
 
         fn list_files(
@@ -351,9 +476,8 @@ mod tests {
     }
 
     #[test]
-    fn delete_last_reference_cleans_blob() {
+    fn delete_with_zero_references_defers_blob_cleanup() {
         let store = fake_store(None);
-        let expected_handle = storage_handle();
         let service = DeleteFileService::new(
             store,
             FakeRepository {
@@ -367,11 +491,8 @@ mod tests {
             .unwrap_or_else(|error| panic!("delete failed: {error}"));
 
         assert!(result.existed);
-        assert!(result.blob_cleaned);
-        assert_eq!(
-            service.blob_store.cleanup_calls.borrow().as_slice(),
-            &[expected_handle]
-        );
+        assert!(!result.blob_cleaned);
+        assert!(service.blob_store.cleanup_calls.borrow().is_empty());
     }
 
     #[test]
@@ -393,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_reports_cleanup_failure_after_metadata_delete() {
+    fn delete_succeeds_even_with_blob_store_error() {
         let service = DeleteFileService::new(
             fake_store(Some(BlobStoreError::CleanupFailed {
                 handle: storage_handle(),
@@ -407,7 +528,8 @@ mod tests {
 
         let result = service.delete(&file_id("file-1"));
 
-        assert!(matches!(result, Err(DeleteFileError::BlobCleanup(_))));
+        assert!(result.is_ok());
+        assert!(!result.unwrap().blob_cleaned);
     }
 
     fn fake_store(cleanup_error: Option<BlobStoreError>) -> FakeBlobStore {

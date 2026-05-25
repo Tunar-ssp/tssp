@@ -123,6 +123,18 @@ mod tests {
             Ok(None)
         }
 
+        fn restore_file(&self, _id: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
+            Ok(None)
+        }
+
+        fn list_deleted_files(&self, _older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn purge_deleted_file(&self, _id: &FileId) -> Result<bool, RepositoryError> {
+            Ok(false)
+        }
+
         fn list_files(
             &self,
             _query: &tssp_ports::ListQuery,

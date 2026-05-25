@@ -12,7 +12,10 @@ mod tags;
 mod upload;
 pub mod audit;
 
-pub use delete::{DeleteFileError, DeleteFileResult, DeleteFileService};
+pub use delete::{
+    DeleteFileError, DeleteFileResult, DeleteFileService, RestoreFileError, RestoreFileService,
+    PurgeError, PurgeDeletedFilesService,
+};
 pub use notes::{CreateNoteRequest, NoteError, NoteService, UpdateNoteRequest};
 pub use pins::{PinError, PinService};
 pub use sessions::SessionService;

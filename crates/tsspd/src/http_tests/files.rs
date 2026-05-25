@@ -140,7 +140,7 @@ async fn delete_endpoint_removes_metadata_and_is_idempotent() {
             .headers()
             .get("x-tssp-blob-cleaned")
             .and_then(|value| value.to_str().ok()),
-        Some("true")
+        Some("false")
     );
 
     let found = app

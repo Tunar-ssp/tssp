@@ -218,6 +218,78 @@ impl FileRepository for SqliteFileRepository {
         }))
     }
 
+    fn restore_file(&self, id: &FileId) -> Result<Option<FileRecord>, RepositoryError> {
+        let mut connection = self.connect()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+
+        let Some(record) = find_file_in_transaction(&transaction, id)? else {
+            transaction
+                .commit()
+                .map_err(map_rusqlite_repository_error)?;
+            return Ok(None);
+        };
+
+        transaction
+            .execute(
+                "UPDATE files SET deleted_at = NULL WHERE id = ?1",
+                params![id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        let tags = load_tags(&transaction, id)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut restored = record;
+        restored.tags = tags;
+        Ok(Some(restored))
+    }
+
+    fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+        let connection = self.connect()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
+                 FROM files WHERE deleted_at IS NOT NULL AND deleted_at < ?1 ORDER BY deleted_at ASC"
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut rows = statement
+            .query(params![older_than.seconds()])
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            records.push(map_file_row(row)?);
+        }
+
+        Ok(records)
+    }
+
+    fn purge_deleted_file(&self, id: &FileId) -> Result<bool, RepositoryError> {
+        let mut connection = self.connect()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+
+        let count = transaction
+            .execute(
+                "DELETE FROM files WHERE id = ?1 AND deleted_at IS NOT NULL",
+                params![id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+
+        cleanup_orphaned_tags(&transaction)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+
+        Ok(count > 0)
+    }
+
     fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {
         let page_limit = validate_list_limit(query.limit)?;
 
