@@ -406,3 +406,68 @@ async fn upload_body_unlimited_when_max_upload_bytes_is_zero() {
         .unwrap_or_else(|e| panic!("request failed: {e}"));
     assert_ne!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
+
+#[tokio::test]
+async fn concurrent_uploads_succeed_without_global_lock() {
+    let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
+    let repository = Arc::new(
+        SqliteFileRepository::open(temp.path().join("metadata.sqlite3"))
+            .unwrap_or_else(|e| panic!("repository open failed: {e}")),
+    );
+    let storage = Arc::new(
+        FilesystemBlobStore::new(temp.path().join("storage"))
+            .unwrap_or_else(|e| panic!("blob store open failed: {e}")),
+    );
+
+    // Build shared upload infrastructure
+    let stats_provider = Arc::new(RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock));
+    let upload_service_1 = UploadService::new(
+        storage.clone(),
+        repository.clone(),
+        UuidV7FileIdGenerator,
+        SystemClock,
+    );
+    let upload_service_2 = UploadService::new(
+        storage.clone(),
+        repository.clone(),
+        UuidV7FileIdGenerator,
+        SystemClock,
+    );
+
+    let app1 = build_router(
+        HttpState::test_http_state(temp.path().join("upload-tmp-1"))
+            .with_repository(repository.clone())
+            .with_stats_provider(stats_provider.clone())
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service_1)))
+            .with_blob_reader(storage.clone()),
+    );
+
+    let app2 = build_router(
+        HttpState::test_http_state(temp.path().join("upload-tmp-2"))
+            .with_repository(repository)
+            .with_stats_provider(stats_provider)
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service_2)))
+            .with_blob_reader(storage),
+    );
+
+    // Run both uploads concurrently
+    let (result1, result2) = tokio::join!(
+        app1.oneshot(multipart_request(REAL_UPLOAD_BODY)),
+        app2.oneshot(multipart_request(SECOND_UPLOAD_BODY))
+    );
+
+    let response1 = result1.unwrap_or_else(|error| panic!("first upload failed: {error}"));
+    let response2 = result2.unwrap_or_else(|error| panic!("second upload failed: {error}"));
+
+    assert_eq!(response1.status(), StatusCode::CREATED, "first upload should succeed");
+    assert_eq!(response2.status(), StatusCode::CREATED, "second upload should succeed");
+
+    let body1 = response_json(response1).await;
+    let body2 = response_json(response2).await;
+
+    assert_ne!(
+        body1["id"],
+        body2["id"],
+        "concurrent uploads should create different files"
+    );
+}
