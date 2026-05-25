@@ -8,10 +8,10 @@
   import FindWidget from '$lib/components/FindWidget.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
 
-  let contextMenu = { visible: false, x: 0, y: 0, workspace: null as any };
-  let isLoading = true;
+  let contextMenu = $state({ visible: false, x: 0, y: 0, workspace: null as any });
+  let isLoading = $state(true);
   let bodyDraft = $state('');
   let nameDraft = $state('');
   let selectedLanguage = $state('');
@@ -23,6 +23,7 @@
 
   let openTabs: any[] = $state([]);
   let activeTabId: string | null = $state(null);
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const languages = [
     { id: 'javascript', label: 'JavaScript', ext: '.js' },
@@ -43,6 +44,10 @@
   onMount(async () => {
     await loadWorkspaces();
     isLoading = false;
+  });
+
+  onDestroy(() => {
+    if (saveTimer) clearTimeout(saveTimer);
   });
 
   $effect(() => {
@@ -86,6 +91,14 @@
     bodyDraft = newValue;
     isModified = true;
     updateTabs();
+    scheduleWorkspaceSave();
+  }
+
+  function scheduleWorkspaceSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      void handleSaveWorkspace(false);
+    }, 900);
   }
 
   function updateTabs() {
@@ -94,7 +107,7 @@
     );
   }
 
-  async function handleSaveWorkspace() {
+  async function handleSaveWorkspace(showToast = true) {
     if (!$activeWorkspace) return;
     try {
       await updateActiveWorkspace({
@@ -104,16 +117,16 @@
       });
       isModified = false;
       updateTabs();
-      success('Workspace saved');
+      if (showToast) success('Workspace Saved', 'Changes were written to TSSP');
     } catch (err) {
-      error('Failed to save workspace');
+      error('Save Failed', err instanceof Error ? err.message : 'Failed to save workspace');
     }
   }
 
   async function handleChangeLanguage(lang: string) {
     selectedLanguage = lang;
     await updateActiveWorkspace({ language: lang });
-    success(`Language changed to ${lang}`);
+    success('Language Updated', `Workspace language is now ${lang}`);
   }
 
   function handleEditorKeydown(e: KeyboardEvent) {
@@ -128,25 +141,23 @@
   }
 
   function handleFind(query: string, options: any) {
-    if (!editorElement) return;
-    const text = bodyDraft.toLowerCase();
+    searchQuery = query;
+    if (!query.trim()) return;
+
+    const text = options.matchCase ? bodyDraft : bodyDraft.toLowerCase();
     const search = options.matchCase ? query : query.toLowerCase();
     const idx = text.indexOf(search);
 
     if (idx >= 0) {
-      editorElement.focus();
-      editorElement.setSelectionRange(idx, idx + query.length);
-      updateCursorPosition();
+      updateCursorPositionFromOffset(idx);
+      success('Match Found', `Line ${cursorLine}, column ${cursorColumn}`);
+    } else {
+      error('No Match', `"${query}" was not found`);
     }
   }
 
-  function handleEditorClick() {
-    updateCursorPosition();
-  }
-
-  function updateCursorPosition() {
-    if (!editorElement) return;
-    const before = bodyDraft.substring(0, editorElement.selectionStart);
+  function updateCursorPositionFromOffset(offset: number) {
+    const before = bodyDraft.substring(0, offset);
     cursorLine = before.split('\n').length;
     cursorColumn = before.split('\n').pop()?.length || 1;
   }
@@ -157,6 +168,7 @@
 
   function showContextMenu(event: MouseEvent, workspace: any) {
     event.preventDefault();
+    event.stopPropagation();
     contextMenu = {
       visible: true,
       x: event.clientX,
@@ -168,7 +180,7 @@
   async function handleDeleteWorkspace(workspace: any) {
     if (confirm(`Delete "${workspace.name}"?`)) {
       await deleteWorkspace(workspace.id);
-      success('Workspace deleted');
+      success('Workspace Deleted', 'The workspace was removed');
     }
   }
 
@@ -181,9 +193,9 @@
   async function handleCreateWorkspace() {
     try {
       await createNewWorkspace();
-      success('New workspace created');
+      success('Workspace Created', 'A new workspace is ready');
     } catch (err) {
-      error('Failed to create workspace');
+      error('Create Failed', err instanceof Error ? err.message : 'Failed to create workspace');
     }
   }
 
@@ -243,7 +255,12 @@
             class="name-input"
             placeholder="Untitled workspace"
             bind:value={nameDraft}
-            onchange={handleSaveWorkspace}
+            oninput={() => {
+              isModified = true;
+              updateTabs();
+              scheduleWorkspaceSave();
+            }}
+            onchange={() => handleSaveWorkspace()}
           />
           <div class="editor-actions">
             <select
@@ -260,25 +277,19 @@
               <span class="saving">Saving...</span>
             {/if}
 
-            <button class="save-btn" onclick={handleSaveWorkspace}>
+            <button type="button" class="save-btn" onclick={() => handleSaveWorkspace()}>
               <Icons.Save size={14} />
               Save
             </button>
           </div>
         </div>
 
-        {#await import('$lib/components/MonacoEditor.svelte') then { default: Monaco }}
-          <svelte:component
-            this={Monaco}
-            value={bodyDraft}
-            language={selectedLanguage}
-            onChange={(newValue) => {
-              handleEditorInput(newValue);
-              handleSaveWorkspace();
-            }}
-            height="calc(100% - 120px)"
-          />
-        {/await}
+        <MonacoEditor
+          value={bodyDraft}
+          language={selectedLanguage}
+          onChange={handleEditorInput}
+          height="calc(100% - 120px)"
+        />
       </div>
 
       <StatusBar
