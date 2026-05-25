@@ -18,6 +18,7 @@
   import SettingsTray from '$lib/components/SettingsTray.svelte';
   import ShortcutsOverlay from '$lib/components/ShortcutsOverlay.svelte';
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
+  import '$lib/responsive.css';
   import HomeView from './views/home/HomeView.svelte';
   import DriveView from './views/drive/DriveView.svelte';
   import NotesViewP4 from './views/notes/NotesViewP4.svelte';
