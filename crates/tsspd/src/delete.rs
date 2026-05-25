@@ -251,14 +251,17 @@ pub struct HttpRestoreOutcome {
 pub enum HttpRestoreError {
     /// Metadata store is busy.
     Busy {
+        /// Short client-facing message.
         message: String,
     },
     /// Restore service is unavailable.
     Unavailable {
+        /// Short client-facing message.
         message: String,
     },
     /// Unexpected server-side failure.
     Internal {
+        /// Short client-facing message.
         message: String,
     },
 }

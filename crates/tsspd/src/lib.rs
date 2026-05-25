@@ -60,7 +60,8 @@ mod http_tests;
 
 pub use config::bind_error_message;
 pub use delete::{
-    ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
+    ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, FileDeleteProvider, FileRestoreProvider,
+    HttpDeleteError, HttpDeleteOutcome, HttpRestoreError, HttpRestoreOutcome,
 };
 pub use garbage_collection::collect_garbage;
 pub use integrity::{run_startup_integrity_scan, spawn_startup_integrity_scan};

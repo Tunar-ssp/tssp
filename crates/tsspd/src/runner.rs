@@ -13,7 +13,7 @@ use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository, SqliteSes
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
 use tssp_app::{
-    DeleteFileService, NoteService, PinService, SessionService, TagService, UploadService,
+    DeleteFileService, RestoreFileService, NoteService, PinService, SessionService, TagService, UploadService,
 };
 use tssp_ports::Clock;
 use tsspd::workspaces::WorkspaceStore;
@@ -23,7 +23,7 @@ use tsspd::{
         UserStore,
     },
     bind_error_message, build_router, collect_garbage, spawn_advertisement,
-    spawn_startup_integrity_scan, ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
+    spawn_startup_integrity_scan, ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
     ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
     CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder, RepositoryFileSearchProvider,
     RepositoryMetadataStatsProvider,
@@ -266,6 +266,7 @@ fn build_http_state(
         SystemClock,
     );
     let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
+    let restore_service = RestoreFileService::new(repository.clone());
     let tag_service = TagService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
     let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
@@ -283,6 +284,7 @@ fn build_http_state(
     .with_stats_provider(Arc::new(stats_provider))
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
     .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
+    .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(restore_service)))
     .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
     .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
     .with_session_provider(Arc::new(ApplicationSessionProvider::new(
