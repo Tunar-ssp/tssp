@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Pure domain model and validation rules for TSSP"
 
 [dependencies]
+serde.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 

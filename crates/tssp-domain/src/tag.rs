@@ -7,7 +7,7 @@ use crate::{text, DomainError};
 const MAX_TAG_CHARS: usize = 64;
 
 /// Normalized tag name attached to a file.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Tag {
     display: String,
     key: TagKey,
@@ -73,7 +73,7 @@ impl fmt::Display for Tag {
 }
 
 /// Case-insensitive tag lookup key.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct TagKey(String);
 
 impl TagKey {

@@ -10,7 +10,7 @@ const MAX_STORAGE_COMPONENT_BYTES: usize = 120;
 const MAX_MIME_LEN: usize = 127;
 
 /// Opaque file identifier exposed to clients.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct FileId(String);
 
 impl FileId {
@@ -40,7 +40,7 @@ impl fmt::Display for FileId {
 }
 
 /// Original filename preserved for display and metadata.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FileName {
     original: String,
     storage_component: String,
@@ -96,7 +96,7 @@ impl fmt::Display for FileName {
 }
 
 /// Byte length of a stored file.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FileSize(u64);
 
 impl FileSize {
@@ -114,7 +114,7 @@ impl FileSize {
 }
 
 /// MIME type recorded for a file.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MimeType(String);
 
 impl MimeType {
@@ -160,7 +160,7 @@ impl fmt::Display for MimeType {
 }
 
 /// Opaque handle used by storage adapters to find blob bytes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct StorageHandle(String);
 
 impl StorageHandle {
@@ -190,7 +190,7 @@ impl fmt::Display for StorageHandle {
 }
 
 /// Complete metadata record for one logical file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FileRecord {
     /// Client-visible id.
     pub id: FileId,

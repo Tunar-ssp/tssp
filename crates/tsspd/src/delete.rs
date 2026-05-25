@@ -374,6 +374,150 @@ fn restore_success_response(outcome: HttpRestoreOutcome) -> Response {
         .into_response()
 }
 
+/// Permanently deletes a specific file from trash.
+pub(crate) async fn permanent_delete(
+    State(state): State<HttpState>,
+    _auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    let file_id = match FileId::new(id) {
+        Ok(value) => value,
+        Err(error) => return invalid_file_id_response(error.to_string()),
+    };
+
+    let _mutation_guard = state.storage_mutation_lock.lock().await;
+    match tokio::task::spawn_blocking(move || {
+        state.repository.purge_deleted_file(&file_id)
+    })
+    .await
+    {
+        Ok(Ok(was_deleted)) => {
+            if was_deleted {
+                StatusCode::NO_CONTENT.into_response()
+            } else {
+                invalid_file_id_response("file not found in trash".to_owned())
+            }
+        }
+        Ok(Err(_)) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "purge_failed",
+            "failed to permanently delete file",
+        ),
+        Err(_) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "purge worker failed",
+        ),
+    }
+}
+
+/// Returns all soft-deleted files (trash).
+pub(crate) async fn list_trash(
+    State(state): State<HttpState>,
+    _auth: crate::auth::AuthContext,
+) -> Response {
+    match tokio::task::spawn_blocking(move || {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let cutoff = now + 1;
+
+        match tssp_domain::UnixTimestamp::new(cutoff as i64) {
+            Ok(cutoff_ts) => {
+                match state.repository.list_deleted_files(cutoff_ts) {
+                    Ok(files) => Ok(files),
+                    Err(e) => Err(format!("failed to list deleted files: {e}"))
+                }
+            }
+            Err(e) => Err(format!("invalid timestamp: {e}"))
+        }
+    })
+    .await
+    {
+        Ok(Ok(files)) => {
+            Json(serde_json::json!({
+                "files": files
+            }))
+            .into_response()
+        }
+        Ok(Err(msg)) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "query_error", msg.as_str()),
+        Err(_) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "worker_error",
+            "list trash worker failed",
+        ),
+    }
+}
+
+/// Empties trash by permanently deleting all files older than retention period.
+pub(crate) async fn empty_trash(
+    State(state): State<HttpState>,
+    _auth: crate::auth::AuthContext,
+) -> Response {
+    let settings = state.settings().clone();
+    let repo = state.repository.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let retention_seconds = settings.trash_retention_days * 86_400;
+        let older_than_secs = now.saturating_sub(retention_seconds) + 1;
+
+        match tssp_domain::UnixTimestamp::new(older_than_secs as i64) {
+            Ok(cutoff) => {
+                match repo.list_deleted_files(cutoff) {
+                    Ok(deleted_files) => {
+                        let mut purged_count = 0;
+                        for file in deleted_files {
+                            if let Ok(was_deleted) = repo.purge_deleted_file(&file.id) {
+                                if was_deleted {
+                                    purged_count += 1;
+                                }
+                            }
+                        }
+                        Ok(purged_count)
+                    }
+                    Err(_) => Err("failed to list deleted files")
+                }
+            }
+            Err(_) => Err("invalid retention period")
+        }
+    })
+    .await;
+
+    match result {
+        Ok(Ok(count)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "purged": count
+            })),
+        )
+            .into_response(),
+        Ok(Err(msg)) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "purge_error", msg),
+        Err(_) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "worker_error",
+            "empty trash worker failed",
+        ),
+    }
+}
+
+fn error_response(status: StatusCode, code: impl Into<String>, message: impl Into<String>) -> Response {
+    (
+        status,
+        Json(serde_json::json!({
+            "error": {
+                "code": code.into(),
+                "message": message.into(),
+            }
+        })),
+    )
+        .into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::to_bytes;

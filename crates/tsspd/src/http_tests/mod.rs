@@ -7,4 +7,5 @@ mod folders;
 mod imports;
 mod pins;
 mod tags;
+mod trash;
 mod upload;

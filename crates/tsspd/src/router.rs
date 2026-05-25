@@ -106,6 +106,18 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::delete::restore_file).options(options_response),
         )
         .route(
+            "/api/v1/files/{id}/purge",
+            axum::routing::delete(crate::delete::permanent_delete).options(options_response),
+        )
+        .route(
+            "/api/v1/trash",
+            get(crate::delete::list_trash).options(options_response),
+        )
+        .route(
+            "/api/v1/trash/empty",
+            post(crate::delete::empty_trash).options(options_response),
+        )
+        .route(
             "/api/v1/files/{id}/pin",
             axum::routing::put({
                 tracing::error!("PUT PIN ROUTE HIT");

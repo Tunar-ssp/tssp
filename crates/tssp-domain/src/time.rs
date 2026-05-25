@@ -6,7 +6,7 @@ const MAX_REASONABLE_UNIX_SECONDS: i64 = 4_102_444_800;
 const MAX_REASONABLE_UNIX_SECONDS_U64: u64 = 4_102_444_800;
 
 /// UTC timestamp represented as whole seconds since the Unix epoch.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct UnixTimestamp(i64);
 
 impl UnixTimestamp {

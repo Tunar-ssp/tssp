@@ -224,28 +224,45 @@ impl FileRepository for SqliteFileRepository {
             .transaction()
             .map_err(map_rusqlite_repository_error)?;
 
-        let Some(record) = find_file_in_transaction(&transaction, id)? else {
-            transaction
-                .commit()
+        let record = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
+                     FROM files WHERE id = ?1",
+                )
                 .map_err(map_rusqlite_repository_error)?;
-            return Ok(None);
+            let mut rows = statement
+                .query([id.as_str()])
+                .map_err(map_rusqlite_repository_error)?;
+            rows.next()
+                .map_err(map_rusqlite_repository_error)?
+                .map(|row| map_file_row(row))
+                .transpose()?
         };
 
-        transaction
-            .execute(
-                "UPDATE files SET deleted_at = NULL WHERE id = ?1",
-                params![id.as_str()],
-            )
-            .map_err(map_rusqlite_repository_error)?;
+        match record {
+            None => {
+                transaction
+                    .commit()
+                    .map_err(map_rusqlite_repository_error)?;
+                Ok(None)
+            }
+            Some(mut record) => {
+                transaction
+                    .execute(
+                        "UPDATE files SET deleted_at = NULL WHERE id = ?1",
+                        params![id.as_str()],
+                    )
+                    .map_err(map_rusqlite_repository_error)?;
 
-        let tags = load_tags(&transaction, id)?;
-        transaction
-            .commit()
-            .map_err(map_rusqlite_repository_error)?;
+                record.tags = load_tags(&transaction, id)?;
+                transaction
+                    .commit()
+                    .map_err(map_rusqlite_repository_error)?;
 
-        let mut restored = record;
-        restored.tags = tags;
-        Ok(Some(restored))
+                Ok(Some(record))
+            }
+        }
     }
 
     fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {

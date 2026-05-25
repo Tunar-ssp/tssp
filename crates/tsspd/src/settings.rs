@@ -33,6 +33,8 @@ pub struct DaemonSettings {
     pub web: bool,
     /// Default session TTL in seconds.
     pub session_ttl_seconds: u64,
+    /// Days to keep deleted files before permanent purge (0 = never auto-purge).
+    pub trash_retention_days: u64,
     /// Minimum free bytes before rejecting uploads (absolute floor).
     pub storage_reserve_bytes: u64,
     /// Minimum free percent of total disk before rejecting uploads.
@@ -56,6 +58,7 @@ impl Default for DaemonSettings {
             metrics: true,
             web: true,
             session_ttl_seconds: 86_400,
+            trash_retention_days: 30,
             storage_reserve_bytes: 500 * 1024 * 1024,
             storage_reserve_percent: 1,
             max_upload_bytes: 100 * 1024 * 1024,

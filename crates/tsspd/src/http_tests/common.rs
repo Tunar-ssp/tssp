@@ -14,7 +14,7 @@ use tower::ServiceExt;
 use tssp_adapter_fs::FilesystemBlobStore;
 use tssp_adapter_sqlite::SqliteFileRepository;
 use tssp_adapter_system::{SystemClock, UuidV7FileIdGenerator};
-use tssp_app::{DeleteFileService, PinService, TagService, UploadService};
+use tssp_app::{DeleteFileService, PinService, RestoreFileService, TagService, UploadService};
 use tssp_domain::{
     ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
     UnixTimestamp,
@@ -22,10 +22,10 @@ use tssp_domain::{
 use tssp_ports::RepositoryStats;
 
 use crate::{
-    build_router, ApplicationFileDeleteProvider, ApplicationFilePinProvider,
-    ApplicationFileTagProvider, ApplicationFileUploadProvider, FileUploadProvider, HttpState,
-    HttpUploadError, HttpUploadOutcome, HttpUploadRequest, MetadataStatsProvider,
-    RepositoryMetadataStatsProvider,
+    build_router, ApplicationFileDeleteProvider, ApplicationFileRestoreProvider,
+    ApplicationFilePinProvider, ApplicationFileTagProvider, ApplicationFileUploadProvider,
+    FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome, HttpUploadRequest,
+    MetadataStatsProvider, RepositoryMetadataStatsProvider,
 };
 
 pub use axum::Router;
@@ -78,6 +78,7 @@ pub fn real_storage_app() -> (tempfile::TempDir, Router) {
         SystemClock,
     );
     let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
+    let restore_service = RestoreFileService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
     let tag_service = TagService::new(repository.clone());
     let app = build_router(
@@ -86,6 +87,7 @@ pub fn real_storage_app() -> (tempfile::TempDir, Router) {
             .with_stats_provider(Arc::new(stats_provider))
             .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
             .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
+            .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(restore_service)))
             .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
             .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
             .with_blob_reader(storage),

@@ -3,7 +3,7 @@
 use std::fmt;
 
 /// Stable user identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct UserId(String);
 
 impl UserId {
@@ -81,7 +81,7 @@ impl UserRole {
 }
 
 /// Resource visibility.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Visibility {
     /// Only owner and admins.
     #[default]
