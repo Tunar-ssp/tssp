@@ -123,6 +123,7 @@ mod tests {
             pinned_count: 2,
             recent_upload_count: 5,
             recent_note_count: 1,
+            storage_bytes_used: 1024,
         };
         assert_eq!(stats.file_count, 10);
         assert_eq!(stats.note_count, 4);

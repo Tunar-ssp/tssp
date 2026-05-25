@@ -168,6 +168,7 @@ mod tests {
                 pinned_count: 0,
                 recent_upload_count: 0,
                 recent_note_count: 0,
+                storage_bytes_used: 0,
             })
         }
 
