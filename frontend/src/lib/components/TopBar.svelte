@@ -1,191 +1,200 @@
 <script lang="ts">
-  import { user } from '$lib/stores/auth';
-  import { commandPaletteOpen } from '$lib/stores/ui';
-  import Button from './Button.svelte';
-  import Pill from './Pill.svelte';
-  import { Search, Bell, Upload } from 'lucide-svelte';
+  import * as Icons from 'lucide-svelte';
+  import { currentView } from '$lib/stores/ui';
 
-  export let context = '';
+  interface $$Props {
+    onCommandPalette?: () => void;
+    onSettings?: () => void;
+    onProfile?: () => void;
+    class?: string;
+  }
+
+  let {
+    onCommandPalette,
+    onSettings,
+    onProfile,
+    class: className,
+  } = $props<$$Props>();
+
+  const nav = [
+    { label: 'Drive', view: 'drive', icon: Icons.HardDrive },
+    { label: 'Notes', view: 'notes', icon: Icons.FileText },
+    { label: 'Workspace', view: 'workspace', icon: Icons.Code2 },
+    { label: 'Operations', view: 'operations', icon: Icons.Settings },
+  ];
 </script>
 
-<header class="topbar">
-  <div class="topbar-start">
-    <div class="logo">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="10" opacity="0.5" />
-        <circle cx="12" cy="12" r="5" />
-      </svg>
-      <span class="brand">tssp</span>
-      {#if context}
-        <span class="sep">/</span>
-        <span class="context">{context}</span>
-      {/if}
+<header class="topbar {className || ''}">
+  <div class="topbar-content">
+    <div class="topbar-logo">
+      <Icons.Zap size={20} />
+      <span>TSSP</span>
     </div>
-  </div>
 
-  <div class="topbar-center">
-    <div class="search-bar">
-      <Search size={14} />
-      <input type="text" placeholder="Search files, notes, workspaces…" />
-      <kbd>⌘K</kbd>
+    <nav class="topbar-nav">
+      {#each nav as item (item.view)}
+        <button
+          class="nav-item"
+          class:active={$currentView === item.view}
+          on:click={() => currentView.set(item.view)}
+        >
+          <svelte:component this={item.icon} size={16} />
+          <span>{item.label}</span>
+        </button>
+      {/each}
+    </nav>
+
+    <div class="topbar-actions">
+      <button
+        class="topbar-btn"
+        on:click={onCommandPalette}
+        title="Command Palette (Ctrl+K)"
+      >
+        <Icons.Search size={16} />
+        <span class="hidden-xs">Search</span>
+      </button>
+
+      <button
+        class="topbar-btn"
+        on:click={onSettings}
+        title="Settings"
+      >
+        <Icons.Settings size={16} />
+        <span class="hidden-xs">Settings</span>
+      </button>
+
+      <button
+        class="topbar-btn profile-btn"
+        on:click={onProfile}
+        title="Profile"
+      >
+        <Icons.User size={16} />
+        <span class="hidden-xs">Profile</span>
+      </button>
     </div>
-  </div>
-
-  <div class="topbar-end">
-    <Button kind="solid" size="sm" icon={Upload}>Upload</Button>
-    <button class="icon-btn">
-      <Bell size={14} />
-      <span class="notify-dot"></span>
-    </button>
-    {#if $user}
-      <div class="user-pill">
-        <div class="avatar"></div>
-        <span>{$user.name}</span>
-      </div>
-    {/if}
   </div>
 </header>
 
 <style>
   .topbar {
-    height: 52px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    background-color: rgba(20, 22, 29, 0.8);
+  }
+
+  .topbar-content {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--hairline);
-    background: linear-gradient(180deg, rgba(20,22,29,.85) 0%, rgba(14,15,18,.7) 100%);
-    backdrop-filter: blur(20px);
-    position: relative;
-    z-index: 5;
+    justify-content: space-between;
+    height: 56px;
+    padding: 0 var(--s-6);
+    gap: var(--s-6);
+    max-width: 100%;
   }
 
-  .topbar-start {
+  .topbar-logo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-width: 220px;
-  }
-
-  .topbar-center {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-  }
-
-  .topbar-end {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 220px;
-    justify-content: flex-end;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-  }
-
-  .brand {
-    font-size: 22px;
-    font-weight: 700;
+    gap: var(--s-2);
+    font-size: var(--fs-16);
+    font-weight: 600;
     color: var(--text);
+    text-decoration: none;
+    flex-shrink: 0;
   }
 
-  .sep {
-    color: var(--faint);
-    font-size: 12px;
+  .topbar-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    flex: 1;
+    margin: 0 var(--s-6);
+    padding: 0;
+    list-style: none;
   }
 
-  .context {
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-4);
+    font-size: var(--fs-13);
     color: var(--text-2);
+    border: none;
+    background: transparent;
+    border-radius: var(--r-2);
+    cursor: pointer;
+    transition: all var(--duration-quick) var(--ease-smooth);
+    white-space: nowrap;
+    font-family: var(--ff-sans);
     font-weight: 500;
   }
 
-  .search-bar {
-    width: 460px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 10px 0 12px;
-    border-radius: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 13px;
+  .nav-item:hover {
+    background: var(--surface-2);
+    color: var(--text);
   }
 
-  .search-bar input {
-    flex: 1;
-    background: none;
+  .nav-item.active {
+    background: var(--blue-subtle);
+    color: var(--blue);
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    flex-shrink: 0;
+  }
+
+  .topbar-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
     border: none;
-    color: var(--text);
-    outline: none;
-    font-family: inherit;
-  }
-
-  .search-bar input::placeholder {
-    color: var(--muted);
-  }
-
-  .search-bar kbd {
-    font-size: 11px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 1px 6px;
+    background: transparent;
     color: var(--text-2);
-  }
-
-  .icon-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
+    font-size: var(--fs-13);
     cursor: pointer;
-    transition: all 0.15s;
+    border-radius: var(--r-2);
+    transition: all var(--duration-quick) var(--ease-smooth);
+    white-space: nowrap;
   }
 
-  .icon-btn:hover {
+  .topbar-btn:hover {
     background: var(--surface-2);
     color: var(--text);
   }
 
-  .notify-dot {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 6px;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--pink);
+  .topbar-btn:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
   }
 
-  .user-pill {
+  .profile-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px 4px 4px;
-    border-radius: 999px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--text-2);
+    gap: var(--s-2);
+    padding: var(--s-1) var(--s-3);
+    background: var(--surface-2);
   }
 
-  .avatar {
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, var(--green), var(--pink));
+  .profile-btn:hover {
+    background: var(--surface-3);
+  }
+
+  .hidden-xs {
+    display: none;
+  }
+
+  @media (min-width: 640px) {
+    .hidden-xs {
+      display: inline;
+    }
   }
 </style>

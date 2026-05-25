@@ -1,5 +1,10 @@
+/* TSSP Design Tokens v2 */
+/* Complete token system: dark/light themes, spacing, typography, elevation */
+
 :root {
-  /* Colors from design */
+  /* ===== DARK THEME (default) ===== */
+
+  /* Neutrals */
   --bg-deep:    #06070a;
   --bg:         #0b0c10;
   --bg-1:       #101218;
@@ -7,32 +12,42 @@
   --surface-2:  #1a1d26;
   --surface-3:  #232732;
   --surface-hi: #2a2f3c;
-  --hairline:   #1f222b;
-  --border:     #262a35;
-  --border-2:   #323744;
 
+  /* Text & UI */
   --text:       #e7e9ee;
   --text-2:     #b9bdc7;
   --muted:      #7c8190;
   --dim:        #535766;
   --faint:      #393d49;
 
-  /* Brand accents */
+  /* Borders & dividers */
+  --border:     #262a35;
+  --border-2:   #323744;
+  --hairline:   #1f222b;
+
+  /* Brand Accent (Green) */
   --green:      #5be39a;
-  --green-soft: #1f3a2c;
+  --green-subtle: rgba(91, 227, 154, 0.1);
+
+  /* Functional Colors */
   --pink:       #ff5fa2;
-  --pink-soft:  #3a1c2c;
+  --pink-subtle: rgba(255, 95, 162, 0.1);
   --orange:     #ff8a3d;
-  --orange-soft:#3a2418;
+  --orange-subtle: rgba(255, 138, 61, 0.1);
   --blue:       #6ea8ff;
-  --blue-soft:  #16243f;
+  --blue-subtle: rgba(110, 168, 255, 0.1);
   --cyan:       #58d6e0;
+  --cyan-subtle: rgba(88, 214, 224, 0.1);
   --violet:     #a394ff;
+  --violet-subtle: rgba(163, 148, 255, 0.1);
+
+  /* Status Colors */
   --success:    #34d399;
   --warning:    #fbbf24;
   --danger:     #ff6b6b;
+  --info:       #6ea8ff;
 
-  /* Glass & dock */
+  /* Glass & Elevation */
   --dock-glass: rgba(20,22,29,0.62);
   --dock-edge:  rgba(255,255,255,0.06);
   --dock-hi:    rgba(255,255,255,0.08);
@@ -40,23 +55,65 @@
   --shadow-card: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.32);
   --shadow-modal: 0 30px 80px rgba(0,0,0,.6), 0 2px 0 rgba(255,255,255,.04) inset;
 
-  /* Spacing */
-  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
-  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px;
+  /* Spacing Scale (4pt base) */
+  --s-1:  4px;   --s-2:  8px;   --s-3: 12px;  --s-4: 16px;
+  --s-5: 20px;   --s-6: 24px;   --s-7: 32px;  --s-8: 40px;
+  --s-9: 48px;  --s-10: 64px;
 
-  /* Radius */
-  --r-1: 4px; --r-2: 6px; --r-3: 8px; --r-4: 10px;
-  --r-5: 14px; --r-6: 18px; --r-7: 22px; --r-full: 9999px;
+  /* Radii */
+  --r-1: 4px;  --r-2: 6px;   --r-3: 8px;   --r-4: 10px;
+  --r-5: 14px; --r-6: 18px;  --r-7: 22px;  --r-full: 9999px;
 
   /* Typography */
   --ff-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --ff-mono: "JetBrains Mono", ui-monospace, monospace;
   --ff-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --ff-hand: "Caveat", cursive; /* Logo wordmark only */
 
+  /* Font Sizes */
   --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px;
   --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-24: 24px;
+  --fs-32: 32px; --fs-40: 40px; --fs-56: 56px;
+
+  /* Line Heights */
+  --lh-tight: 1.2;
+  --lh-normal: 1.45;
+  --lh-relaxed: 1.6;
+
+  /* Motion */
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-quick: 80ms;
+  --duration-normal: 200ms;
+  --duration-page: 350ms;
 }
 
+/* Light Theme */
+html[data-theme="light"] {
+  --bg-deep:    #f9f9fa;
+  --bg:         #fafbfc;
+  --bg-1:       #f5f6f8;
+  --surface:    #e8eaee;
+  --surface-2:  #dfe2e8;
+  --surface-3:  #d0d3db;
+  --surface-hi: #c1c4cf;
+
+  --text:       #1a1c22;
+  --text-2:     #46484f;
+  --muted:      #7c8190;
+  --dim:        #a8adb6;
+  --faint:      #c5cad3;
+
+  --border:     #d9dce4;
+  --border-2:   #cdd0d9;
+  --hairline:   #e5e7ed;
+
+  --dock-glass: rgba(250,251,252,0.72);
+  --dock-edge:  rgba(0,0,0,0.08);
+  --shadow-card: 0 1px 0 rgba(0,0,0,.02) inset, 0 8px 24px rgba(0,0,0,.08);
+  --shadow-modal: 0 30px 80px rgba(0,0,0,.15), 0 2px 0 rgba(255,255,255,0.8) inset;
+}
+
+/* Reset */
 * {
   box-sizing: border-box;
 }
@@ -73,25 +130,31 @@ body {
   color: var(--text);
   background: var(--bg);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: var(--lh-normal);
   -webkit-font-smoothing: antialiased;
   font-smooth: antialiased;
 }
 
+/* Smooth theme transitions */
+body {
+  transition: background-color 0s, color 0s;
+}
+
+/* Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1f2330;
+  background: var(--surface-2);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2a2f3c;
+  background: var(--surface-3);
   background-clip: padding-box;
 }
 
@@ -99,6 +162,33 @@ body {
   background: transparent;
 }
 
+/* Selection */
 ::selection {
-  background: rgba(110, 168, 255, 0.32);
+  background: var(--blue-subtle);
+}
+
+/* Focus Ring (accessible) */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(110, 168, 255, 0.2);
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
 }

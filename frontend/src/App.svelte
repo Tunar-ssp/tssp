@@ -1,10 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { probeAuth } from '$lib/stores/auth';
-  import { currentView, banner } from '$lib/stores/ui';
+  import {
+    currentView,
+    banner,
+    commandPaletteOpen,
+    settingsTrayOpen,
+    shortcutsOverlayOpen,
+    toggleCommandPalette,
+    toggleSettingsTray,
+    toggleShortcutsOverlay,
+  } from '$lib/stores/ui';
+  import * as Icons from 'lucide-svelte';
   import TopBar from '$lib/components/TopBar.svelte';
   import Dock from '$lib/components/Dock.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import SettingsTray from '$lib/components/SettingsTray.svelte';
+  import ShortcutsOverlay from '$lib/components/ShortcutsOverlay.svelte';
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
   import HomeView from './views/home/HomeView.svelte';
   import DriveView from './views/drive/DriveView.svelte';
@@ -14,6 +26,20 @@
 
   onMount(() => {
     probeAuth();
+
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        toggleCommandPalette();
+      }
+      if (e.ctrlKey && e.key === '?') {
+        e.preventDefault();
+        toggleShortcutsOverlay();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeydown);
+    return () => document.removeEventListener('keydown', handleKeydown);
   });
 
   const viewMap = {
@@ -25,10 +51,65 @@
   };
 
   $: CurrentView = viewMap[$currentView as keyof typeof viewMap] || HomeView;
+
+  const dockItems = [
+    { id: 'drive', label: 'Drive', icon: Icons.HardDrive, action: () => currentView.set('drive') },
+    { id: 'notes', label: 'Notes', icon: Icons.FileText, action: () => currentView.set('notes') },
+    { id: 'workspace', label: 'Workspace', icon: Icons.Code2, action: () => currentView.set('workspace') },
+    { id: 'ops', label: 'Operations', icon: Icons.Settings, action: () => currentView.set('operations') },
+  ];
+
+  const commands = [
+    {
+      id: 'drive',
+      label: 'Go to Drive',
+      description: 'Access your cloud drive',
+      icon: Icons.HardDrive,
+      action: () => currentView.set('drive'),
+      shortcut: 'Ctrl+D',
+    },
+    {
+      id: 'notes',
+      label: 'Go to Notes',
+      description: 'Access your notes',
+      icon: Icons.FileText,
+      action: () => currentView.set('notes'),
+      shortcut: 'Ctrl+N',
+    },
+    {
+      id: 'workspace',
+      label: 'Go to Workspace',
+      description: 'Access your workspace',
+      icon: Icons.Code2,
+      action: () => currentView.set('workspace'),
+      shortcut: 'Ctrl+E',
+    },
+    {
+      id: 'operations',
+      label: 'Go to Operations',
+      description: 'System operations and admin',
+      icon: Icons.Settings,
+      action: () => currentView.set('operations'),
+      shortcut: 'Ctrl+O',
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      description: 'Open settings',
+      icon: Icons.Settings,
+      action: () => toggleSettingsTray(),
+      shortcut: 'Ctrl+,',
+    },
+  ];
 </script>
 
 <div class="app">
-  <TopBar context={$currentView} />
+  <TopBar
+    currentView={$currentView}
+    onCommandPalette={toggleCommandPalette}
+    onSettings={toggleSettingsTray}
+    onProfile={() => null}
+  />
 
   <div class="shell">
     <main class="main">
@@ -41,8 +122,20 @@
     </main>
   </div>
 
-  <Dock />
-  <CommandPalette />
+  <Dock items={dockItems} />
+  <CommandPalette
+    {commands}
+    isOpen={$commandPaletteOpen}
+    onClose={() => commandPaletteOpen.set(false)}
+  />
+  <SettingsTray
+    isOpen={$settingsTrayOpen}
+    onClose={() => settingsTrayOpen.set(false)}
+  />
+  <ShortcutsOverlay
+    isOpen={$shortcutsOverlayOpen}
+    onClose={() => shortcutsOverlayOpen.set(false)}
+  />
   <NotificationCenter />
 </div>
 

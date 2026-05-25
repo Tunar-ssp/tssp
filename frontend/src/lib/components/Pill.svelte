@@ -1,22 +1,30 @@
 <script lang="ts">
-  export let tone: 'neutral' | 'green' | 'pink' | 'blue' | 'orange' | 'violet' | 'warn' | 'danger' =
-    'neutral';
+  import type { PillProps } from './primitives.svelte';
 
-  const tones = {
-    neutral: { bg: 'rgba(255,255,255,.05)', fg: 'var(--text-2)', bd: 'var(--border)' },
-    green: { bg: 'rgba(91,227,154,.10)', fg: 'var(--green)', bd: 'rgba(91,227,154,.25)' },
-    pink: { bg: 'rgba(255,95,162,.10)', fg: 'var(--pink)', bd: 'rgba(255,95,162,.25)' },
-    blue: { bg: 'rgba(110,168,255,.10)', fg: 'var(--blue)', bd: 'rgba(110,168,255,.25)' },
-    orange: { bg: 'rgba(255,138,61,.10)', fg: 'var(--orange)', bd: 'rgba(255,138,61,.25)' },
-    violet: { bg: 'rgba(163,148,255,.10)', fg: 'var(--violet)', bd: 'rgba(163,148,255,.25)' },
-    warn: { bg: 'rgba(251,191,36,.10)', fg: 'var(--warning)', bd: 'rgba(251,191,36,.25)' },
-    danger: { bg: 'rgba(255,107,107,.10)', fg: 'var(--danger)', bd: 'rgba(255,107,107,.25)' },
+  interface $$Props extends PillProps {
+    class?: string;
+  }
+
+  let {
+    tone = 'neutral',
+    class: className,
+    children,
+    ...rest
+  } = $props<$$Props>();
+
+  const toneClasses = {
+    green: 'pill-green',
+    pink: 'pill-pink',
+    blue: 'pill-blue',
+    orange: 'pill-orange',
+    violet: 'pill-violet',
+    warn: 'pill-warn',
+    danger: 'pill-danger',
+    neutral: 'pill-neutral',
   };
-
-  const theme = tones[tone];
 </script>
 
-<span style:background={theme.bg} style:color={theme.fg} style:border-color={theme.bd} class="pill">
+<span class="pill {toneClasses[tone]} {className || ''}" {...rest}>
   <slot />
 </span>
 
@@ -24,12 +32,60 @@
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 11px;
+    justify-content: center;
+    padding: var(--s-1) var(--s-3);
+    font-size: var(--fs-12);
     font-weight: 500;
-    padding: 2px 8px;
     border-radius: var(--r-full);
-    border: 1px solid;
-    line-height: 1.4;
+    white-space: nowrap;
+    font-family: var(--ff-sans);
+  }
+
+  .pill-green {
+    background: var(--green-subtle);
+    color: var(--green);
+    border: 1px solid rgba(91, 227, 154, 0.2);
+  }
+
+  .pill-pink {
+    background: var(--pink-subtle);
+    color: var(--pink);
+    border: 1px solid rgba(255, 95, 162, 0.2);
+  }
+
+  .pill-blue {
+    background: var(--blue-subtle);
+    color: var(--blue);
+    border: 1px solid rgba(110, 168, 255, 0.2);
+  }
+
+  .pill-orange {
+    background: var(--orange-subtle);
+    color: var(--orange);
+    border: 1px solid rgba(255, 138, 61, 0.2);
+  }
+
+  .pill-violet {
+    background: var(--violet-subtle);
+    color: var(--violet);
+    border: 1px solid rgba(163, 148, 255, 0.2);
+  }
+
+  .pill-warn {
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--warning);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+  }
+
+  .pill-danger {
+    background: rgba(255, 107, 107, 0.1);
+    color: var(--danger);
+    border: 1px solid rgba(255, 107, 107, 0.2);
+  }
+
+  .pill-neutral {
+    background: var(--surface-2);
+    color: var(--text-2);
+    border: 1px solid var(--border);
   }
 </style>

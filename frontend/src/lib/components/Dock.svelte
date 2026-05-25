@@ -1,114 +1,121 @@
 <script lang="ts">
-  import { currentView } from '$lib/stores/ui';
-  import { Cloud, FileText, SquareTerminal, Shield, Home } from 'lucide-svelte';
-
-  const apps = [
-    { id: 'home', label: 'Launcher', icon: Home },
-    { id: 'drive', label: 'Cloud Drive', icon: Cloud },
-    { id: 'notes', label: 'Notes', icon: FileText },
-    { id: 'workspace', label: 'Workspace', icon: SquareTerminal },
-    { id: 'operations', label: 'Operations', icon: Shield },
-  ];
-
-  function selectApp(id: string) {
-    currentView.set(id);
+  interface DockItem {
+    id: string;
+    label: string;
+    icon: any;
+    action: () => void;
+    badge?: number;
   }
+
+  interface $$Props {
+    items?: DockItem[];
+    class?: string;
+  }
+
+  let {
+    items = [],
+    class: className,
+  } = $props<$$Props>();
+
+  let hoveredId = $state<string | null>(null);
 </script>
 
-<div class="dock">
-  <div class="dock-inner">
-    {#each apps as app (app.id)}
+<nav class="dock {className || ''}">
+  <div class="dock-container">
+    {#each items as item (item.id)}
       <button
-        class="dock-item {$currentView === app.id ? 'active' : ''}"
-        on:click={() => selectApp(app.id)}
-        title={app.label}
+        class="dock-item"
+        class:hovered={hoveredId === item.id}
+        on:mouseenter={() => (hoveredId = item.id)}
+        on:mouseleave={() => (hoveredId = null)}
+        on:click={item.action}
+        title={item.label}
       >
         <div class="dock-icon">
-          <svelte:component this={app.icon} size={28} />
+          <svelte:component this={item.icon} size={24} />
         </div>
-        {#if $currentView === app.id}
-          <div class="dock-label">{app.label}</div>
+        {#if item.badge}
+          <div class="dock-badge">{item.badge}</div>
         {/if}
-        <div class="dock-indicator {$currentView === app.id ? 'active' : ''}"></div>
       </button>
     {/each}
   </div>
-</div>
+</nav>
 
 <style>
   .dock {
     position: fixed;
-    bottom: 18px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 30;
+    z-index: 99;
+    pointer-events: none;
   }
 
-  .dock-inner {
+  .dock-container {
     display: flex;
     align-items: flex-end;
-    gap: 12px;
-    padding: 10px;
-    border-radius: 22px;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
     background: var(--dock-glass);
     border: 1px solid var(--dock-edge);
+    border-radius: var(--r-full);
+    backdrop-filter: blur(20px);
     box-shadow: var(--shadow-dock);
-    backdrop-filter: blur(28px) saturate(1.4);
+    pointer-events: all;
   }
 
   .dock-item {
-    position: relative;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
     padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    border-radius: var(--r-3);
+    cursor: pointer;
+    position: relative;
+    transition: all var(--duration-quick) var(--ease-smooth);
   }
 
-  .dock-item.active .dock-icon {
-    transform: translateY(-6px) scale(1.06);
-    filter: none;
+  .dock-item:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+    transform: scale(1.1);
   }
 
-  .dock-item:not(.active) .dock-icon {
-    filter: saturate(0.92);
+  .dock-item.hovered {
+    color: var(--blue);
+    background: rgba(110, 168, 255, 0.1);
   }
 
   .dock-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text);
-    transition: all 0.2s;
+    width: 100%;
+    height: 100%;
   }
 
-  .dock-label {
+  .dock-badge {
     position: absolute;
-    top: -28px;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text);
-    white-space: nowrap;
-  }
-
-  .dock-indicator {
-    width: 4px;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.22);
-    transition: all 0.2s;
-  }
-
-  .dock-indicator.active {
-    width: 16px;
-    background: var(--text);
+    top: -2px;
+    right: -2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--danger);
+    color: white;
+    border-radius: var(--r-full);
+    font-size: var(--fs-11);
+    font-weight: 600;
+    border: 2px solid var(--surface);
   }
 </style>
