@@ -31,7 +31,7 @@ impl<R, C, G> NoteService<R, C, G> {
 pub struct CreateNoteRequest {
     /// Optional explicit title.
     pub title: Option<String>,
-    /// Markdown body.
+    /// Note body (format determined by client: HTML, Markdown, etc).
     pub body: String,
     /// Initial tags.
     pub tags: Vec<String>,
@@ -46,7 +46,7 @@ pub struct CreateNoteRequest {
 pub struct UpdateNoteRequest {
     /// Optional new title.
     pub title: Option<String>,
-    /// Replacement Markdown body.
+    /// Replacement note body (format determined by client: HTML, Markdown, etc).
     pub body: String,
 }
 

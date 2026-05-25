@@ -101,7 +101,7 @@ impl NoteBody {
         Ok(Self(value.to_owned()))
     }
 
-    /// Returns the Markdown body.
+    /// Returns the note body (format determined by client).
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
