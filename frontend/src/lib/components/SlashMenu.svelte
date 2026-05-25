@@ -69,7 +69,7 @@
       id: 'quote',
       label: 'Quote',
       description: 'Block quote',
-      icon: Icons.Quote2,
+      icon: Icons.Quote,
       action: () => insertText('> '),
     },
     {
@@ -118,20 +118,25 @@
   <div
     class="slash-menu {className || ''}"
     style="left: {x}px; top: {y}px"
-    on:keydown={handleKeydown}
+    role="menu"
+    tabindex="-1"
+    onkeydown={handleKeydown}
   >
     <div class="menu-items">
       {#each menuItems as item, idx (item.id)}
+        {@const Icon = item.icon}
         <button
+          type="button"
+          role="menuitem"
           class="menu-item"
           class:selected={idx === selectedIndex}
-          on:click={() => {
+          onclick={() => {
             item.action();
             if (onClose) onClose();
           }}
         >
           <div class="item-icon">
-            <svelte:component this={item.icon} size={16} />
+            <Icon size={16} />
           </div>
           <div class="item-text">
             <div class="item-label">{item.label}</div>

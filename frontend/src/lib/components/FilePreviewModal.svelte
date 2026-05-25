@@ -17,23 +17,53 @@
     class: className,
   } = $props<$$Props>();
 
-  function canPreview(mimeType: string) {
-    return (
-      mimeType.startsWith('image/') ||
-      mimeType.startsWith('text/') ||
-      mimeType === 'application/json' ||
-      mimeType === 'application/pdf'
-    );
-  }
-
   function getPreviewLens() {
     if (!file) return 'details';
     if (file.mime_type.startsWith('image/')) return 'image';
-    if (file.mime_type.startsWith('text/')) return 'text';
+    if (isTextPreviewable(file)) return 'text';
     return 'details';
   }
 
-  let previewLens = $derived(getPreviewLens());
+  let previewLens = $state<'image' | 'text' | 'details'>('details');
+  let textPreview = $state('');
+  let textLoading = $state(false);
+  let textError = $state('');
+
+  $effect(() => {
+    if (isOpen && file) {
+      previewLens = getPreviewLens() as 'image' | 'text' | 'details';
+    }
+  });
+
+  $effect(() => {
+    if (isOpen && file && previewLens === 'text' && isTextPreviewable(file)) {
+      void loadTextPreview();
+    }
+  });
+
+  function isTextPreviewable(target: any) {
+    return target?.mime_type?.startsWith('text/') || target?.mime_type === 'application/json';
+  }
+
+  async function loadTextPreview() {
+    if (!file) return;
+    textLoading = true;
+    textError = '';
+    try {
+      const response = await fetch(`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`, {
+        credentials: 'same-origin',
+        headers: { Range: 'bytes=0-65535' },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const body = await response.text();
+      textPreview = response.headers.has('content-range') ? `${body}\n\n... preview truncated at 64 KiB` : body;
+    } catch (e) {
+      textError = e instanceof Error ? e.message : 'Could not load preview';
+      textPreview = '';
+    } finally {
+      textLoading = false;
+    }
+  }
 
   function handleBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget && onClose) {
@@ -59,12 +89,20 @@
 </script>
 
 {#if isOpen && file}
-  <div class="preview-backdrop" on:click={handleBackdropClick}>
-    <div class="preview-modal {className || ''}">
+  <div
+    class="preview-backdrop"
+    role="presentation"
+    tabindex="-1"
+    onclick={handleBackdropClick}
+    onkeydown={(e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    }}
+  >
+    <div class="preview-modal {className || ''}" role="dialog" aria-modal="true">
       <div class="preview-header">
         <h2 class="preview-title">{file.name}</h2>
         {#if onClose}
-          <button class="preview-close" on:click={onClose} aria-label="Close">
+          <button type="button" class="preview-close" onclick={onClose} aria-label="Close">
             <Icons.X size={20} />
           </button>
         {/if}
@@ -72,25 +110,30 @@
 
       <div class="preview-lenses">
         <button
+          type="button"
           class="lens-tab"
           class:active={previewLens === 'image'}
-          on:click={() => (previewLens = 'image')}
+          disabled={!file.mime_type.startsWith('image/')}
+          onclick={() => (previewLens = 'image')}
         >
           <Icons.Image size={16} />
           Image
         </button>
         <button
+          type="button"
           class="lens-tab"
           class:active={previewLens === 'text'}
-          on:click={() => (previewLens = 'text')}
+          disabled={!isTextPreviewable(file)}
+          onclick={() => (previewLens = 'text')}
         >
           <Icons.FileText size={16} />
           Text
         </button>
         <button
+          type="button"
           class="lens-tab"
           class:active={previewLens === 'details'}
-          on:click={() => (previewLens = 'details')}
+          onclick={() => (previewLens = 'details')}
         >
           <Icons.Info size={16} />
           Details
@@ -101,16 +144,22 @@
         {#if previewLens === 'image' && file.mime_type.startsWith('image/')}
           <div class="preview-image">
             <img
-              src={`/api/files/${file.id}/content`}
+              src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
               alt={file.name}
-              on:error={(e) => {
+              onerror={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
           </div>
-        {:else if previewLens === 'text' && file.mime_type.startsWith('text/')}
+        {:else if previewLens === 'text' && isTextPreviewable(file)}
           <div class="preview-text">
-            <pre>{`Loading preview...`}</pre>
+            {#if textLoading}
+              <pre>Loading preview...</pre>
+            {:else if textError}
+              <pre>Preview failed: {textError}</pre>
+            {:else}
+              <pre>{textPreview}</pre>
+            {/if}
           </div>
         {:else}
           <div class="preview-details">
@@ -159,8 +208,9 @@
       <div class="preview-footer">
         {#if onDownload}
           <button
+            type="button"
             class="preview-action primary"
-            on:click={() => onDownload(file.id)}
+            onclick={() => onDownload(file.id)}
           >
             <Icons.Download size={16} />
             Download
@@ -287,6 +337,17 @@
   .lens-tab:hover {
     background: var(--surface-2);
     color: var(--text);
+  }
+
+  .lens-tab:disabled {
+    cursor: not-allowed;
+    color: var(--dim);
+    opacity: 0.45;
+  }
+
+  .lens-tab:disabled:hover {
+    background: transparent;
+    color: var(--dim);
   }
 
   .lens-tab.active {

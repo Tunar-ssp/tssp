@@ -26,19 +26,21 @@
 
 <header class="topbar {className || ''}">
   <div class="topbar-content">
-    <div class="topbar-logo">
+    <button type="button" class="topbar-logo" onclick={() => currentView.set('home')} aria-label="Open TSSP home">
       <Icons.Zap size={20} />
       <span>TSSP</span>
-    </div>
+    </button>
 
     <nav class="topbar-nav">
       {#each nav as item (item.view)}
+        {@const Icon = item.icon}
         <button
+          type="button"
           class="nav-item"
           class:active={$currentView === item.view}
-          on:click={() => currentView.set(item.view)}
+          onclick={() => currentView.set(item.view)}
         >
-          <svelte:component this={item.icon} size={16} />
+          <Icon size={16} />
           <span>{item.label}</span>
         </button>
       {/each}
@@ -46,8 +48,9 @@
 
     <div class="topbar-actions">
       <button
+        type="button"
         class="topbar-btn"
-        on:click={onCommandPalette}
+        onclick={onCommandPalette}
         title="Command Palette (Ctrl+K)"
       >
         <Icons.Search size={16} />
@@ -55,8 +58,9 @@
       </button>
 
       <button
+        type="button"
         class="topbar-btn"
-        on:click={onSettings}
+        onclick={onSettings}
         title="Settings"
       >
         <Icons.Settings size={16} />
@@ -64,8 +68,9 @@
       </button>
 
       <button
+        type="button"
         class="topbar-btn profile-btn"
-        on:click={onProfile}
+        onclick={onProfile}
         title="Profile"
       >
         <Icons.User size={16} />
@@ -100,11 +105,20 @@
     display: flex;
     align-items: center;
     gap: var(--s-2);
+    padding: var(--s-2);
+    border: none;
+    background: transparent;
     font-size: var(--fs-16);
     font-weight: 600;
     color: var(--text);
-    text-decoration: none;
     flex-shrink: 0;
+    cursor: pointer;
+    border-radius: var(--r-2);
+    transition: background var(--duration-quick) var(--ease-smooth);
+  }
+
+  .topbar-logo:hover {
+    background: var(--surface-2);
   }
 
   .topbar-nav {

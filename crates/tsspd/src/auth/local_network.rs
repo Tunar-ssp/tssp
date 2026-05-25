@@ -24,14 +24,32 @@ fn is_link_local_ipv6(addr: Ipv6Addr) -> bool {
 }
 
 /// Resolves the client IP from the TCP peer and optional `X-Forwarded-For`.
+///
+/// SECURITY: Only trusts X-Forwarded-For if the peer IP is in the trusted proxy list.
+/// This prevents header spoofing from arbitrary clients.
 #[must_use]
-pub fn client_ip(peer: IpAddr, forwarded_for: Option<&str>, trust_forwarded: bool) -> IpAddr {
+pub fn client_ip(
+    peer: IpAddr,
+    forwarded_for: Option<&str>,
+    trust_forwarded: bool,
+    trusted_proxies: &[IpAddr],
+) -> IpAddr {
+    // Only trust X-Forwarded-For if:
+    // 1. trust_forwarded is enabled AND
+    // 2. peer IP is in the trusted proxy list
     if !trust_forwarded {
         return peer;
     }
+
+    // If peer is not a trusted proxy, ignore the header completely
+    if !trusted_proxies.is_empty() && !trusted_proxies.contains(&peer) {
+        return peer;
+    }
+
     let Some(header) = forwarded_for else {
         return peer;
     };
+
     parse_forwarded_for(header).unwrap_or(peer)
 }
 
@@ -69,16 +87,35 @@ mod tests {
     }
 
     #[test]
-    fn forwarded_for_used_when_trusted() {
-        let peer = IpAddr::V4(Ipv4Addr::LOCALHOST);
-        let ip = client_ip(peer, Some("203.0.113.5, 192.168.1.1"), true);
+    fn forwarded_for_used_when_peer_is_trusted_proxy() {
+        let peer = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let trusted = vec![peer];
+        let ip = client_ip(peer, Some("203.0.113.5, 192.168.1.1"), true, &trusted);
         assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5)));
     }
 
     #[test]
-    fn forwarded_for_ignored_when_untrusted() {
-        let peer = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 2));
-        let ip = client_ip(peer, Some("203.0.113.5"), false);
+    fn forwarded_for_ignored_when_peer_not_trusted_proxy() {
+        let peer = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)); // Untrusted IP
+        let trusted = vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]; // Only localhost trusted
+        let ip = client_ip(peer, Some("203.0.113.5"), true, &trusted);
+        // Should return peer, not the forwarded IP
         assert_eq!(ip, peer);
+    }
+
+    #[test]
+    fn forwarded_for_ignored_when_flag_disabled() {
+        let peer = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        let trusted = vec![peer];
+        let ip = client_ip(peer, Some("203.0.113.5"), false, &trusted);
+        assert_eq!(ip, peer);
+    }
+
+    #[test]
+    fn empty_trusted_proxy_list_allows_all() {
+        let peer = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1));
+        let ip = client_ip(peer, Some("203.0.113.5"), true, &[]);
+        // Empty trusted list means all peers are allowed (backward compat)
+        assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5)));
     }
 }

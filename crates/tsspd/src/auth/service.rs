@@ -78,6 +78,8 @@ pub struct AuthService {
     trust_forwarded: bool,
     /// When true, every client must authenticate (public/global domain mode).
     global_auth_required: bool,
+    /// Trusted proxy IPs that are allowed to send X-Forwarded-For headers.
+    trusted_proxies: Arc<Vec<IpAddr>>,
 }
 
 impl AuthService {
@@ -90,6 +92,7 @@ impl AuthService {
             devices: None,
             trust_forwarded: false,
             global_auth_required: false,
+            trusted_proxies: Arc::new(Vec::new()),
         }
     }
 
@@ -108,7 +111,15 @@ impl AuthService {
             devices: Some(devices),
             trust_forwarded,
             global_auth_required,
+            trusted_proxies: Arc::new(Vec::new()),
         }
+    }
+
+    /// Sets trusted proxy IPs for X-Forwarded-For validation.
+    #[must_use]
+    pub fn with_trusted_proxies(mut self, proxies: Vec<IpAddr>) -> Self {
+        self.trusted_proxies = Arc::new(proxies);
+        self
     }
 
     /// Whether multi-user auth is active.
@@ -152,9 +163,16 @@ impl AuthService {
     }
 
     /// Resolves the effective client IP.
+    ///
+    /// SECURITY: Only trusts X-Forwarded-For if peer is in the trusted proxy list.
     #[must_use]
     pub fn resolve_client(&self, peer: IpAddr, forwarded_for: Option<&str>) -> IpAddr {
-        client_ip(peer, forwarded_for, self.trust_forwarded)
+        client_ip(
+            peer,
+            forwarded_for,
+            self.trust_forwarded,
+            &self.trusted_proxies,
+        )
     }
 
     /// Legacy single-password login (used when no users exist).

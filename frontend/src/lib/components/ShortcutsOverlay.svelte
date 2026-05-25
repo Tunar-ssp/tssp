@@ -60,12 +60,20 @@
 </script>
 
 {#if isOpen}
-  <div class="shortcuts-backdrop" on:click={handleBackdropClick}>
+  <div
+    class="shortcuts-backdrop"
+    role="presentation"
+    tabindex="-1"
+    onclick={handleBackdropClick}
+    onkeydown={(e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    }}
+  >
     <div class="shortcuts-modal {className || ''}">
       <div class="shortcuts-header">
         <h2 class="shortcuts-title">Keyboard Shortcuts</h2>
         {#if onClose}
-          <button class="shortcuts-close" on:click={onClose} aria-label="Close">
+          <button type="button" class="shortcuts-close" onclick={onClose} aria-label="Close">
             <Icons.X size={20} />
           </button>
         {/if}

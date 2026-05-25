@@ -38,12 +38,20 @@
 </script>
 
 {#if isOpen}
-  <div class="tray-backdrop" on:click={handleBackdropClick}>
+  <div
+    class="tray-backdrop"
+    role="presentation"
+    tabindex="-1"
+    onclick={handleBackdropClick}
+    onkeydown={(e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    }}
+  >
     <div class="tray {className || ''}">
       <div class="tray-header">
         <h3 class="tray-title">Settings</h3>
         {#if onClose}
-          <button class="tray-close" on:click={onClose} aria-label="Close">
+          <button type="button" class="tray-close" onclick={onClose} aria-label="Close">
             <Icons.X size={18} />
           </button>
         {/if}
@@ -57,8 +65,9 @@
               <div class="setting-desc">Dark • Light</div>
             </div>
             <button
+              type="button"
               class="theme-toggle"
-              on:click={toggleTheme}
+              onclick={toggleTheme}
               title="Toggle theme"
             >
               {#if theme === 'dark'}
@@ -109,10 +118,10 @@
       </div>
 
       <div class="tray-footer">
-        <a href="/settings" class="tray-link">
+        <span class="tray-link muted" aria-label="Advanced settings are not available yet">
           <Icons.Settings size={14} />
-          Advanced Settings
-        </a>
+          Local settings only
+        </span>
       </div>
     </div>
   </div>
@@ -288,15 +297,10 @@
     align-items: center;
     gap: var(--s-2);
     padding: var(--s-3);
-    color: var(--blue);
+    color: var(--muted);
     text-decoration: none;
     font-size: var(--fs-13);
     border-radius: var(--r-2);
-    transition: all var(--duration-quick) var(--ease-smooth);
-  }
-
-  .tray-link:hover {
-    background: var(--surface-2);
   }
 
   .device-section {

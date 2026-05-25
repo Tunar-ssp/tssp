@@ -27,7 +27,7 @@
 
   let searchQuery = $state('');
   let selectedIndex = $state(0);
-  let inputRef: HTMLInputElement;
+  let inputRef: HTMLInputElement | null = $state(null);
 
   $effect(() => {
     if (isOpen && inputRef) {
@@ -86,7 +86,15 @@
 </script>
 
 {#if isOpen}
-  <div class="palette-backdrop" on:click={handleBackdropClick}>
+  <div
+    class="palette-backdrop"
+    role="presentation"
+    tabindex="-1"
+    onclick={handleBackdropClick}
+    onkeydown={(e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    }}
+  >
     <div class="palette {className || ''}">
       <div class="palette-search">
         <Icons.Search size={20} />
@@ -107,18 +115,20 @@
           </div>
         {:else}
           {#each filteredCommands as cmd, idx (cmd.id)}
+            {@const Icon = cmd.icon}
             <button
+              type="button"
               class="palette-item"
               class:selected={idx === selectedIndex}
-              on:click={() => {
+              onclick={() => {
                 cmd.action();
                 if (onClose) onClose();
               }}
             >
               <div class="item-content">
-                {#if cmd.icon}
+                {#if Icon}
                   <div class="item-icon">
-                    <svelte:component this={cmd.icon} size={16} />
+                    <Icon size={16} />
                   </div>
                 {/if}
                 <div class="item-text">

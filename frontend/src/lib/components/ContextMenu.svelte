@@ -12,19 +12,27 @@
 </script>
 
 {#if visible}
-  <div class="context-overlay" on:click={handleClickOutside} />
-  <div class="context-menu" style="left: {x}px; top: {y}px">
+  <button
+    type="button"
+    class="context-overlay"
+    aria-label="Close context menu"
+    onclick={handleClickOutside}
+  ></button>
+  <div class="context-menu" role="menu" style="left: {x}px; top: {y}px">
     {#each items as item (item.label)}
+      {@const Icon = item.icon}
       <button
+        type="button"
+        role="menuitem"
         class="context-item {item.danger ? 'danger' : ''}"
-        on:click={() => {
+        onclick={() => {
           item.action();
           visible = false;
         }}
       >
-        {#if item.icon}
+        {#if Icon}
           <div class="item-icon">
-            <svelte:component this={item.icon} size={16} />
+            <Icon size={16} />
           </div>
         {/if}
         <span>{item.label}</span>
@@ -41,6 +49,9 @@
     right: 0;
     bottom: 0;
     z-index: 999;
+    padding: 0;
+    border: none;
+    background: transparent;
   }
 
   .context-menu {
