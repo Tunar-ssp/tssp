@@ -948,7 +948,7 @@ mod tests {
     #[test]
     fn folder_entry_empty_path() {
         let entry = FolderEntry {
-            path: "".to_owned(),
+            path: String::new(),
             file_count: 0,
         };
         assert_eq!(entry.path, "");

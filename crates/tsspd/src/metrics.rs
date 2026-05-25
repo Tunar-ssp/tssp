@@ -205,13 +205,13 @@ mod tests {
     #[test]
     fn prometheus_format_has_help_comments() {
         let help_line = "# HELP tssp_files_total Total number of files stored";
-        assert!(help_line.starts_with("#"));
+        assert!(help_line.starts_with('#'));
     }
 
     #[test]
     fn prometheus_format_has_type_comments() {
         let type_line = "# TYPE tssp_files_total gauge";
-        assert!(type_line.starts_with("#"));
+        assert!(type_line.starts_with('#'));
     }
 
     #[test]
@@ -289,8 +289,8 @@ mod tests {
     fn metric_formatting_consistency() {
         let val1 = 42u64;
         let val2 = 42u64;
-        let formatted1 = format!("value: {}", val1);
-        let formatted2 = format!("value: {}", val2);
+        let formatted1 = format!("value: {val1}");
+        let formatted2 = format!("value: {val2}");
         assert_eq!(formatted1, formatted2);
     }
 }

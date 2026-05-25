@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn forwarded_for_used_when_peer_is_trusted_proxy() {
-        let peer = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let peer = IpAddr::V4(Ipv4Addr::LOCALHOST);
         let trusted = vec![peer];
         let ip = client_ip(peer, Some("203.0.113.5, 192.168.1.1"), true, &trusted);
         assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5)));
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn forwarded_for_ignored_when_peer_not_trusted_proxy() {
         let peer = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)); // Untrusted IP
-        let trusted = vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]; // Only localhost trusted
+        let trusted = vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]; // Only localhost trusted
         let ip = client_ip(peer, Some("203.0.113.5"), true, &trusted);
         // Should return peer, not the forwarded IP
         assert_eq!(ip, peer);

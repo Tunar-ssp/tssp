@@ -54,7 +54,7 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         .unwrap_or_else(|| panic!("second uploaded id is missing"))
         .to_owned();
 
-    let url = format!("/api/v1/files/{}/pin", first_id);
+    let url = format!("/api/v1/files/{first_id}/pin");
     let mut req = Request::builder()
         .method("PUT")
         .uri(url)

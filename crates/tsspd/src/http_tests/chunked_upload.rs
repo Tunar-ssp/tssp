@@ -51,7 +51,7 @@ async fn upload_chunk_rejects_invalid_session_id_format() {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/api/v1/files/upload/{}/chunk/0", invalid_id))
+                    .uri(format!("/api/v1/files/upload/{invalid_id}/chunk/0"))
                     .body(Body::from("chunk data"))
                     .expect("should succeed"),
             )
@@ -99,7 +99,7 @@ async fn upload_chunk_rejects_oversized_chunks() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}/chunk/0", session_id))
+                .uri(format!("/api/v1/files/upload/{session_id}/chunk/0"))
                 .body(Body::from(oversized_chunk))
                 .expect("should succeed"),
         )
@@ -142,7 +142,7 @@ async fn upload_chunk_rejects_out_of_range_index() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}/chunk/5", session_id))
+                .uri(format!("/api/v1/files/upload/{session_id}/chunk/5"))
                 .body(Body::from(vec![0u8; 1000]))
                 .expect("should succeed"),
         )
@@ -207,7 +207,7 @@ async fn complete_upload_rejects_incomplete_chunks() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}", session_id))
+                .uri(format!("/api/v1/files/upload/{session_id}"))
                 .body(Body::empty())
                 .expect("should succeed"),
         )
@@ -230,7 +230,7 @@ async fn session_not_found_returns_404() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}/chunk/0", fake_session))
+                .uri(format!("/api/v1/files/upload/{fake_session}/chunk/0"))
                 .body(Body::from(vec![0u8; 100]))
                 .expect("should succeed"),
         )
@@ -281,7 +281,7 @@ async fn cancel_upload_cleans_up_resources() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}/chunk/0", session_id))
+                .uri(format!("/api/v1/files/upload/{session_id}/chunk/0"))
                 .body(Body::from(vec![0u8; 100_000]))
                 .expect("should succeed"),
         )
@@ -294,7 +294,7 @@ async fn cancel_upload_cleans_up_resources() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(format!("/api/v1/files/upload/{}", session_id))
+                .uri(format!("/api/v1/files/upload/{session_id}"))
                 .body(Body::empty())
                 .expect("should succeed"),
         )
@@ -309,7 +309,7 @@ async fn cancel_upload_cleans_up_resources() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}/chunk/1", session_id))
+                .uri(format!("/api/v1/files/upload/{session_id}/chunk/1"))
                 .body(Body::from(vec![0u8; 100_000]))
                 .expect("should succeed"),
         )

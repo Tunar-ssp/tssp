@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn service_type_starts_with_underscore() {
-        assert!(SERVICE_TYPE.starts_with("_"));
+        assert!(SERVICE_TYPE.starts_with('_'));
     }
 
     #[test]
