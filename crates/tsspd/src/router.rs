@@ -121,14 +121,8 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/files/{id}/pin",
-            axum::routing::put({
-                tracing::error!("PUT PIN ROUTE HIT");
-                crate::pins::pin
-            })
-                .delete({
-                    tracing::error!("DELETE PIN ROUTE HIT");
-                    crate::pins::unpin
-                })
+            axum::routing::put(crate::pins::pin)
+                .delete(crate::pins::unpin)
                 .options(options_response),
         )
         .route(
@@ -403,10 +397,7 @@ pub fn build_router(state: HttpState) -> Router {
         .route("/app-v2/", get(crate::web::serve_web_v2_index))
         .route("/app-v2/{*path}", get(crate::web::serve_web_v2_path))
         .route("/assets/{*path}", get(crate::web::serve_asset))
-        .fallback({
-            tracing::error!("FALLBACK ROUTE HIT");
-            crate::web::web_fallback
-        })
+        .fallback(crate::web::web_fallback)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::auth_middleware,
