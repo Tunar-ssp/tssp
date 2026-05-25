@@ -32,6 +32,8 @@
     totalUploadingCount: 0,
   });
 
+  let isMinimized = $state(false);
+
   const unsubscribe = uploadQueue.subscribe((value) => {
     queueState = value;
   });
@@ -71,15 +73,30 @@
 </script>
 
 {#if queueUploads.length > 0}
-  <div class="upload-queue {className || ''}">
+  <div class="upload-queue {className || ''}" class:minimized={isMinimized}>
     <div class="queue-header">
       <h3>
         <Icons.Upload size={16} />
         Uploads
       </h3>
-      <span class="queue-count">{queueUploads.length}</span>
+      <div class="header-actions">
+        <span class="queue-count">{queueUploads.length}</span>
+        <button
+          class="minimize-btn"
+          onclick={() => (isMinimized = !isMinimized)}
+          title={isMinimized ? 'Show uploads' : 'Hide uploads'}
+          aria-label={isMinimized ? 'Show uploads' : 'Hide uploads'}
+        >
+          {#if isMinimized}
+            <Icons.ChevronUp size={16} />
+          {:else}
+            <Icons.ChevronDown size={16} />
+          {/if}
+        </button>
+      </div>
     </div>
 
+    {#if !isMinimized}
     <div class="queue-items">
       {#each queueUploads as upload (upload.id)}
         <div class="upload-item" class:error={upload.status === 'error'}>
@@ -132,6 +149,7 @@
         {/if}
       {/each}
     </div>
+    {/if}
   </div>
 {/if}
 
@@ -159,6 +177,10 @@
     background: var(--surface-2);
   }
 
+  .upload-queue.minimized .queue-header {
+    border-bottom: none;
+  }
+
   .queue-header h3 {
     margin: 0;
     display: flex;
@@ -169,6 +191,12 @@
     color: var(--text);
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+  }
+
   .queue-count {
     padding: 2px 8px;
     background: var(--blue);
@@ -176,6 +204,26 @@
     border-radius: var(--r-1);
     font-size: var(--fs-11);
     font-weight: 600;
+  }
+
+  .minimize-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    border-radius: var(--r-1);
+    transition: all var(--duration-quick) var(--ease-smooth);
+  }
+
+  .minimize-btn:hover {
+    background: var(--surface);
+    color: var(--text);
   }
 
   .queue-items {
