@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use tssp_app::{DeleteFileError, DeleteFileService, RestoreFileError, RestoreFileService};
+use tssp_app::{AuditAction, DeleteFileError, DeleteFileService, RestoreFileError, RestoreFileService, log_audit_event};
 use tssp_domain::FileId;
 use tssp_ports::{BlobStore, FileRepository, RepositoryError};
 
@@ -144,18 +144,64 @@ pub(crate) async fn delete_file(
 
     if let Ok(Some(file)) = state.stats_provider.find_file(&file_id) {
         if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileDelete,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "denied",
+                Some("unauthorized"),
+            );
             return forbidden_response();
         }
     }
 
     let delete_provider = state.delete_provider.clone();
+    let file_id_str = file_id.as_str().to_string();
+    let audit_user_id = auth.user_id.clone();
+    let repository = state.repository.clone();
+
     match tokio::task::spawn_blocking(move || delete_provider.delete(file_id)).await {
-        Ok(Ok(outcome)) => delete_success_response(outcome),
-        Ok(Err(error)) => error.response(),
-        Err(error) => HttpDeleteError::Internal {
-            message: format!("delete worker failed: {error}"),
-        }
-        .response(),
+        Ok(Ok(outcome)) => {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileDelete,
+                Some(&audit_user_id),
+                Some("file"),
+                Some(&file_id_str),
+                "success",
+                None,
+            );
+            delete_success_response(outcome)
+        },
+        Ok(Err(error)) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileDelete,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id_str.as_str()),
+                "failed",
+                Some("delete operation failed"),
+            );
+            error.response()
+        },
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileDelete,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id_str.as_str()),
+                "failed",
+                Some("worker failed"),
+            );
+            HttpDeleteError::Internal {
+                message: format!("delete worker failed: {error}"),
+            }
+            .response()
+        },
     }
 }
 
@@ -326,7 +372,7 @@ where
 
 pub(crate) async fn restore_file(
     State(state): State<HttpState>,
-    _auth: crate::auth::AuthContext,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
 ) -> Response {
     let file_id = match FileId::new(id) {
@@ -335,13 +381,50 @@ pub(crate) async fn restore_file(
     };
 
     let restore_provider = state.restore_provider.clone();
+    let file_id_str = file_id.as_str().to_string();
+    let audit_user_id = auth.user_id.clone();
+    let repository = state.repository.clone();
+
     match tokio::task::spawn_blocking(move || restore_provider.restore(file_id)).await {
-        Ok(Ok(outcome)) => restore_success_response(outcome),
-        Ok(Err(error)) => error.response(),
-        Err(error) => HttpRestoreError::Internal {
-            message: format!("restore worker failed: {error}"),
-        }
-        .response(),
+        Ok(Ok(outcome)) => {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileRestore,
+                Some(&audit_user_id),
+                Some("file"),
+                Some(&file_id_str),
+                "success",
+                None,
+            );
+            restore_success_response(outcome)
+        },
+        Ok(Err(error)) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileRestore,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id_str.as_str()),
+                "failed",
+                Some("restore operation failed"),
+            );
+            error.response()
+        },
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileRestore,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id_str.as_str()),
+                "failed",
+                Some("worker failed"),
+            );
+            HttpRestoreError::Internal {
+                message: format!("restore worker failed: {error}"),
+            }
+            .response()
+        },
     }
 }
 
@@ -375,7 +458,7 @@ fn restore_success_response(outcome: HttpRestoreOutcome) -> Response {
 /// Permanently deletes a specific file from trash.
 pub(crate) async fn permanent_delete(
     State(state): State<HttpState>,
-    _auth: crate::auth::AuthContext,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
 ) -> Response {
     let file_id = match FileId::new(id) {
@@ -383,28 +466,73 @@ pub(crate) async fn permanent_delete(
         Err(error) => return invalid_file_id_response(error.to_string()),
     };
 
+    let file_id_str = file_id.as_str().to_string();
+    let audit_user_id = auth.user_id.clone();
+    let repository = state.repository.clone();
+    let repository_for_audit = state.repository.clone();
+
     match tokio::task::spawn_blocking(move || {
-        state.repository.purge_deleted_file(&file_id)
+        repository.purge_deleted_file(&file_id)
     })
     .await
     {
         Ok(Ok(was_deleted)) => {
             if was_deleted {
+                log_audit_event(
+                    repository_for_audit.as_ref(),
+                    AuditAction::FileDelete,
+                    Some(&audit_user_id),
+                    Some("file"),
+                    Some(&file_id_str),
+                    "success",
+                    Some("permanently deleted from trash"),
+                );
                 StatusCode::NO_CONTENT.into_response()
             } else {
+                log_audit_event(
+                    repository_for_audit.as_ref(),
+                    AuditAction::FileDelete,
+                    Some(&audit_user_id),
+                    Some("file"),
+                    Some(&file_id_str),
+                    "failed",
+                    Some("not found in trash"),
+                );
                 invalid_file_id_response("file not found in trash".to_owned())
             }
         }
-        Ok(Err(_)) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "purge_failed",
-            "failed to permanently delete file",
-        ),
-        Err(_) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "purge worker failed",
-        ),
+        Ok(Err(_)) => {
+            log_audit_event(
+                repository_for_audit.as_ref(),
+                AuditAction::FileDelete,
+                Some(&audit_user_id),
+                Some("file"),
+                Some(file_id_str.as_str()),
+                "failed",
+                Some("purge operation failed"),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "purge_failed",
+                "failed to permanently delete file",
+            )
+        },
+        Err(_) => {
+            log_audit_event(
+                repository_for_audit.as_ref(),
+                AuditAction::FileDelete,
+                Some(&audit_user_id),
+                Some("file"),
+                Some(file_id_str.as_str()),
+                "failed",
+                Some("worker failed"),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "purge worker failed",
+            )
+        }
     }
 }
 
