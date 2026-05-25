@@ -658,19 +658,21 @@
         {/if}
       </div>
 
-      <DriveDetailsPanel
-        file={selectedFile}
-        onToggleVisibility={handleToggleVisibility}
-        onShare={() => {
-          if (selectedFile) shareFile = selectedFile;
-        }}
-        onMove={() => {
-          if (selectedFile) {
-            moveDialogFile = selectedFile;
-            isMoveDialogOpen = true;
-          }
-        }}
-      />
+      {#if selectedFile}
+        <DriveDetailsPanel
+          file={selectedFile}
+          onToggleVisibility={handleToggleVisibility}
+          onShare={() => {
+            if (selectedFile) shareFile = selectedFile;
+          }}
+          onMove={() => {
+            if (selectedFile) {
+              moveDialogFile = selectedFile;
+              isMoveDialogOpen = true;
+            }
+          }}
+        />
+      {/if}
     </div>
   </section>
 </div>
