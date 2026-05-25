@@ -206,11 +206,25 @@ where
     }
 }
 
-pub(crate) async fn list_pins(State(state): State<HttpState>) -> Response {
+pub(crate) async fn list_pins(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+) -> Response {
     let provider = state.pin_provider.clone();
+    let user_id = auth.user_id.clone();
+    let is_admin = auth.is_admin();
     match tokio::task::spawn_blocking(move || provider.list_pins()).await {
         Ok(Ok(files)) => {
-            (StatusCode::OK, Json(PinListResponse::from_records(&files))).into_response()
+            // Filter pins by owner: non-admin users only see their own pins
+            let filtered = if is_admin {
+                files
+            } else {
+                files
+                    .into_iter()
+                    .filter(|f| f.owner_id.as_ref() == Some(&user_id))
+                    .collect()
+            };
+            (StatusCode::OK, Json(PinListResponse::from_records(&filtered))).into_response()
         }
         Ok(Err(error)) => error.response(),
         Err(error) => HttpPinError::Internal {
@@ -639,6 +653,7 @@ mod tests {
     #[tokio::test]
     async fn list_pins_endpoint_returns_error_from_provider() {
         use crate::HttpState;
+        use crate::auth::AuthContext;
         use axum::extract::State;
         use std::sync::Arc;
 
@@ -646,7 +661,7 @@ mod tests {
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_pin_provider(provider);
 
-        let response = super::list_pins(State(state)).await;
+        let response = super::list_pins(State(state), AuthContext::open_access()).await;
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
