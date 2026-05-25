@@ -3,126 +3,134 @@
 
   interface Tab {
     id: string;
-    name: string;
+    label: string;
     isDirty?: boolean;
-    icon?: any;
+    language?: string;
   }
 
   interface $$Props {
     tabs?: Tab[];
-    activeTabId?: string;
-    onSelectTab?: (tabId: string) => void;
-    onCloseTab?: (tabId: string) => void;
-    class?: string;
+    activeTabId?: string | null;
+    onSelectTab?: (id: string) => void;
+    onCloseTab?: (id: string) => void;
   }
 
   let {
     tabs = [],
-    activeTabId,
-    onSelectTab,
-    onCloseTab,
-    class: className,
+    activeTabId = null,
+    onSelectTab = () => {},
+    onCloseTab = () => {},
   } = $props<$$Props>();
 
-  let scrollContainer: HTMLElement;
+  let tabsContainer: HTMLDivElement;
 
-  function scrollToTab(tabId: string) {
-    const tab = scrollContainer?.querySelector(`[data-tab-id="${tabId}"]`) as HTMLElement;
-    if (tab && scrollContainer) {
-      tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  function scrollToActiveTab() {
+    if (tabsContainer && activeTabId) {
+      const activeTabEl = tabsContainer.querySelector(`[data-tab-id="${activeTabId}"]`);
+      if (activeTabEl) {
+        activeTabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
     }
   }
 
   $effect(() => {
-    if (activeTabId) {
-      scrollToTab(activeTabId);
-    }
+    scrollToActiveTab();
   });
 </script>
 
-<div class="tab-bar {className || ''}">
-  <div class="tabs-container" bind:this={scrollContainer}>
-    {#each tabs as tab (tab.id)}
-      <button
-        class="tab"
-        class:active={activeTabId === tab.id}
-        data-tab-id={tab.id}
-        on:click={() => onSelectTab?.(tab.id)}
-      >
-        {#if tab.icon}
-          <svelte:component this={tab.icon} size={14} />
-        {/if}
-        <span class="tab-name">{tab.name}</span>
-        {#if tab.isDirty}
-          <span class="dirty-indicator" title="Unsaved changes">●</span>
-        {/if}
+<div class="tab-bar">
+  <div class="tabs-scroll" bind:this={tabsContainer}>
+    <div class="tabs-list">
+      {#each tabs as tab (tab.id)}
         <button
-          class="close-btn"
-          on:click|stopPropagation={() => onCloseTab?.(tab.id)}
-          title="Close"
+          class="tab"
+          class:active={activeTabId === tab.id}
+          data-tab-id={tab.id}
+          onclick={() => onSelectTab(tab.id)}
         >
-          <Icons.X size={12} />
+          <span class="tab-label">{tab.label}</span>
+          {#if tab.isDirty}
+            <span class="tab-dirty" title="Unsaved changes">●</span>
+          {/if}
+          <div
+            class="tab-close"
+            role="button"
+            tabindex="0"
+            onclick={(e) => {
+              e.stopPropagation();
+              onCloseTab(tab.id);
+            }}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                onCloseTab(tab.id);
+              }
+            }}
+            title="Close tab"
+          >
+            <Icons.X size={14} />
+          </div>
         </button>
-      </button>
-    {/each}
+      {/each}
+    </div>
   </div>
-
-  {#if tabs.length > 0}
-    <button class="tab-menu" title="Tab options">
-      <Icons.ChevronDown size={14} />
-    </button>
-  {/if}
 </div>
 
 <style>
   .tab-bar {
     display: flex;
-    align-items: center;
-    height: 40px;
-    background: var(--surface);
     border-bottom: 1px solid var(--border);
-    gap: var(--s-1);
+    background: var(--surface);
+    height: 40px;
     flex-shrink: 0;
   }
 
-  .tabs-container {
+  .tabs-scroll {
     flex: 1;
-    display: flex;
-    gap: 0;
     overflow-x: auto;
+    overflow-y: hidden;
     scroll-behavior: smooth;
-    scrollbar-width: thin;
-    scrollbar-color: var(--surface-2) transparent;
   }
 
-  .tabs-container::-webkit-scrollbar {
-    height: 4px;
+  .tabs-scroll::-webkit-scrollbar {
+    height: 6px;
   }
 
-  .tabs-container::-webkit-scrollbar-track {
+  .tabs-scroll::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  .tabs-container::-webkit-scrollbar-thumb {
-    background: var(--surface-2);
-    border-radius: 2px;
+  .tabs-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  .tabs-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+
+  .tabs-list {
+    display: flex;
+    gap: 0;
+    padding: 0 4px;
   }
 
   .tab {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
-    padding: 0 var(--s-3);
-    height: 100%;
+    gap: 6px;
+    padding: 8px 12px;
+    min-width: 120px;
+    max-width: 200px;
     border: none;
+    border-right: 1px solid var(--hairline);
     background: transparent;
     color: var(--text-2);
     font-size: var(--fs-12);
+    font-weight: 500;
     cursor: pointer;
-    white-space: nowrap;
-    border-right: 1px solid var(--hairline);
     transition: all var(--duration-quick) var(--ease-smooth);
-    font-family: var(--ff-sans);
+    white-space: nowrap;
   }
 
   .tab:hover {
@@ -131,66 +139,34 @@
   }
 
   .tab.active {
-    background: var(--surface-2);
-    color: var(--blue);
+    background: var(--bg);
+    color: var(--text);
     border-bottom: 2px solid var(--blue);
-    padding-bottom: -2px;
   }
 
-  .tab-name {
+  .tab-label {
     flex: 1;
-    min-width: 100px;
-    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .dirty-indicator {
-    font-size: 8px;
+  .tab-dirty {
+    font-size: 10px;
     color: var(--orange);
     animation: pulse 1s ease-in-out infinite;
   }
 
   @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
 
-  .close-btn {
+  .tab-close {
     width: 20px;
     height: 20px;
     padding: 0;
     border: none;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     border-radius: var(--r-1);
-    opacity: 0;
-    transition: all var(--duration-quick) var(--ease-smooth);
-  }
-
-  .tab:hover .close-btn {
-    opacity: 1;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 107, 107, 0.2);
-    color: var(--danger);
-  }
-
-  .tab-menu {
-    width: 32px;
-    height: 100%;
-    padding: 0 var(--s-2);
-    border: none;
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
@@ -198,10 +174,10 @@
     align-items: center;
     justify-content: center;
     transition: all var(--duration-quick) var(--ease-smooth);
-    border-left: 1px solid var(--border);
+    flex-shrink: 0;
   }
 
-  .tab-menu:hover {
+  .tab-close:hover {
     background: var(--surface-2);
     color: var(--text);
   }

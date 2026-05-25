@@ -1,98 +1,82 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import Kbd from './Kbd.svelte';
 
   interface $$Props {
     isOpen?: boolean;
     onClose?: () => void;
-    onFind?: (query: string, caseSensitive: boolean, wholeWord: boolean) => void;
-    class?: string;
+    onFind?: (query: string, options: { matchCase: boolean; wholeWord: boolean }) => void;
   }
 
   let {
     isOpen = false,
-    onClose,
-    onFind,
-    class: className,
+    onClose = () => {},
+    onFind = () => {},
   } = $props<$$Props>();
 
   let searchQuery = $state('');
-  let caseSensitive = $state(false);
+  let matchCase = $state(false);
   let wholeWord = $state(false);
-  let searchInput: HTMLInputElement;
-
-  $effect(() => {
-    if (isOpen && searchInput) {
-      searchInput.focus();
-    }
-  });
+  let findInput: HTMLInputElement;
 
   function handleSearch() {
-    if (onFind) {
-      onFind(searchQuery, caseSensitive, wholeWord);
-    }
+    onFind(searchQuery, { matchCase, wholeWord });
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      if (onClose) onClose();
-    } else if (e.key === 'Enter') {
+    if (e.key === 'Enter') {
       handleSearch();
+    } else if (e.key === 'Escape') {
+      onClose();
     }
   }
+
+  $effect(() => {
+    if (isOpen && findInput) {
+      findInput.focus();
+    }
+  });
 </script>
 
 {#if isOpen}
-  <div class="find-widget {className || ''}">
-    <div class="find-controls">
+  <div class="find-widget">
+    <div class="find-input-group">
+      <Icons.Search size={16} />
       <input
-        bind:this={searchInput}
+        bind:this={findInput}
         type="text"
-        placeholder="Find..."
-        bind:value={searchQuery}
-        on:keydown={handleKeydown}
-        on:input={handleSearch}
         class="find-input"
+        placeholder="Find in file..."
+        bind:value={searchQuery}
+        onkeydown={handleKeydown}
       />
+    </div>
 
-      <div class="find-toggles">
-        <button
-          class="toggle-btn"
-          class:active={caseSensitive}
-          on:click={() => (caseSensitive = !caseSensitive)}
-          title="Match case"
-        >
-          <Icons.CaseSensitive size={14} />
-        </button>
-        <button
-          class="toggle-btn"
-          class:active={wholeWord}
-          on:click={() => (wholeWord = !wholeWord)}
-          title="Match whole word"
-        >
-          <Icons.ALargeSmall size={14} />
-        </button>
-      </div>
-
-      <div class="find-shortcuts">
-        <span class="shortcut">
-          <Kbd>Enter</Kbd>
-          <span>Next</span>
-        </span>
-        <span class="shortcut">
-          <Kbd>Esc</Kbd>
-          <span>Close</span>
-        </span>
-      </div>
-
+    <div class="find-options">
       <button
-        class="close-btn"
-        on:click={onClose}
-        title="Close (Esc)"
+        class="find-option"
+        class:active={matchCase}
+        onclick={() => matchCase = !matchCase}
+        title="Match case"
       >
-        <Icons.X size={16} />
+        <Icons.CaseSensitive size={14} />
+      </button>
+      <button
+        class="find-option"
+        class:active={wholeWord}
+        onclick={() => wholeWord = !wholeWord}
+        title="Match whole word"
+      >
+        <Icons.Type size={14} />
       </button>
     </div>
+
+    <button
+      class="find-close"
+      onclick={onClose}
+      title="Close (Escape)"
+    >
+      <Icons.X size={16} />
+    </button>
   </div>
 {/if}
 
@@ -100,52 +84,51 @@
   .find-widget {
     display: flex;
     align-items: center;
-    height: 40px;
-    padding: 0 var(--s-3);
-    background: var(--surface-2);
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
     border-bottom: 1px solid var(--border);
-    gap: var(--s-3);
+    background: var(--surface);
     flex-shrink: 0;
   }
 
-  .find-controls {
+  .find-input-group {
+    flex: 1;
     display: flex;
     align-items: center;
-    gap: var(--s-3);
-    width: 100%;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    background: var(--bg);
+    color: var(--muted);
   }
 
   .find-input {
     flex: 1;
-    max-width: 300px;
-    padding: var(--s-1) var(--s-2);
-    border: 1px solid var(--border);
-    background: var(--surface);
+    border: none;
+    background: transparent;
     color: var(--text);
-    border-radius: var(--r-1);
     font-size: var(--fs-12);
-    font-family: var(--ff-sans);
-  }
-
-  .find-input:focus {
     outline: none;
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px rgba(110, 168, 255, 0.1);
   }
 
-  .find-toggles {
+  .find-input::placeholder {
+    color: var(--muted);
+  }
+
+  .find-options {
     display: flex;
     gap: var(--s-1);
   }
 
-  .toggle-btn {
+  .find-option {
     width: 28px;
     height: 28px;
     padding: 0;
     border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-2);
     border-radius: var(--r-1);
+    background: transparent;
+    color: var(--text-2);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -153,48 +136,34 @@
     transition: all var(--duration-quick) var(--ease-smooth);
   }
 
-  .toggle-btn:hover {
+  .find-option:hover {
     background: var(--surface-2);
     color: var(--text);
   }
 
-  .toggle-btn.active {
+  .find-option.active {
     background: var(--blue-subtle);
-    color: var(--blue);
     border-color: var(--blue);
+    color: var(--blue);
   }
 
-  .find-shortcuts {
-    display: flex;
-    gap: var(--s-4);
-    margin-left: auto;
-  }
-
-  .shortcut {
-    display: flex;
-    align-items: center;
-    gap: var(--s-1);
-    font-size: var(--fs-11);
-    color: var(--muted);
-  }
-
-  .close-btn {
+  .find-close {
     width: 28px;
     height: 28px;
     padding: 0;
     border: none;
+    border-radius: var(--r-1);
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
-    border-radius: var(--r-1);
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all var(--duration-quick) var(--ease-smooth);
   }
 
-  .close-btn:hover {
-    background: var(--surface);
+  .find-close:hover {
+    background: var(--surface-2);
     color: var(--text);
   }
 </style>

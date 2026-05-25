@@ -21,7 +21,7 @@
   import HomeView from './views/home/HomeView.svelte';
   import DriveView from './views/drive/DriveView.svelte';
   import NotesViewP4 from './views/notes/NotesViewP4.svelte';
-  import WorkspaceView from './views/workspace/WorkspaceView.svelte';
+  import WorkspaceViewP5 from './views/workspace/WorkspaceViewP5.svelte';
   import OperationsView from './views/operations/OperationsView.svelte';
 
   onMount(() => {
@@ -46,7 +46,7 @@
     home: HomeView,
     drive: DriveView,
     notes: NotesViewP4,
-    workspace: WorkspaceView,
+    workspace: WorkspaceViewP5,
     operations: OperationsView,
   };
 
