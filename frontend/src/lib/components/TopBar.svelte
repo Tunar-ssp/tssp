@@ -100,8 +100,9 @@
     display: grid;
     grid-template-columns: auto minmax(280px, 1fr) auto;
     align-items: center;
-    gap: var(--s-5);
-    padding: 20px 24px 18px;
+    gap: var(--s-4);
+    padding: 12px 20px;
+    height: 64px;
     background:
       linear-gradient(180deg, rgba(10, 11, 16, 0.96), rgba(10, 11, 16, 0.92)),
       radial-gradient(circle at 18% 0%, rgba(91, 227, 154, 0.08), transparent 38%),
@@ -130,24 +131,26 @@
   }
 
   .brand-mark {
-    width: 74px;
-    height: 74px;
+    width: 48px;
+    height: 48px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    border-radius: 18px;
+    gap: 4px;
+    border-radius: 12px;
     color: var(--green);
     box-shadow: var(--shadow-card);
+    flex-shrink: 0;
   }
 
   .brand-wordmark {
     border: none;
     background: transparent;
     font-family: var(--ff-hand);
-    font-size: 44px;
+    font-size: 28px;
     line-height: 1;
     padding: 0;
+    min-width: 0;
   }
 
   .crumbs {
@@ -173,11 +176,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     width: 100%;
-    min-height: 70px;
-    padding: 0 22px;
-    border-radius: 26px;
+    height: 48px;
+    padding: 0 16px;
+    border-radius: 20px;
     text-align: left;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
@@ -185,10 +188,10 @@
   .search-copy {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     min-width: 0;
     color: var(--muted);
-    font-size: clamp(18px, 1.4vw, 24px);
+    font-size: clamp(14px, 1.2vw, 16px);
   }
 
   .search-copy span {
@@ -202,39 +205,39 @@
   .action-btn,
   .icon-btn,
   .profile-chip {
-    border-radius: 22px;
+    border-radius: 18px;
+    height: 40px;
   }
 
   .shortcut-pill {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 66px;
-    padding: 12px 18px;
+    min-width: 56px;
+    padding: 8px 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-2);
     font-family: var(--ff-mono);
-    font-size: 18px;
+    font-size: 13px;
   }
 
   .topbar-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 12px;
+    gap: 8px;
   }
 
   .status-pill {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    min-height: 64px;
-    padding: 0 20px;
+    gap: 8px;
+    padding: 0 14px;
     background: rgba(91, 227, 154, 0.1);
     border: 1px solid rgba(91, 227, 154, 0.24);
     color: var(--green);
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 600;
   }
 
@@ -248,44 +251,44 @@
 
   .action-btn,
   .icon-btn {
-    min-height: 64px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 0 22px;
+    gap: 8px;
+    padding: 0 14px;
     box-shadow: var(--shadow-card);
   }
 
   .upload-btn {
     background: linear-gradient(135deg, rgba(110, 168, 255, 0.18), rgba(255, 255, 255, 0.04));
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 600;
   }
 
   .icon-btn {
-    width: 64px;
+    width: 40px;
     padding: 0;
   }
 
   .profile-chip {
     display: inline-flex;
     align-items: center;
-    gap: 14px;
-    min-height: 64px;
-    padding: 8px 18px 8px 10px;
+    gap: 10px;
+    padding: 4px 12px 4px 8px;
     box-shadow: var(--shadow-card);
   }
 
   .avatar-orb {
-    width: 44px;
-    height: 44px;
+    width: 32px;
+    height: 32px;
     border-radius: 999px;
     display: grid;
     place-items: center;
     background: linear-gradient(135deg, rgba(91, 227, 154, 0.75), rgba(255, 95, 162, 0.72));
     color: #08110d;
     font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
   }
 
   .profile-copy {
@@ -303,12 +306,12 @@
   }
 
   .profile-copy strong {
-    font-size: 18px;
+    font-size: 13px;
   }
 
   .profile-copy span {
     color: var(--muted);
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .brand-mark:hover,
@@ -348,29 +351,30 @@
 
   @media (max-width: 900px) {
     .topbar {
-      gap: 16px;
-      padding: 16px;
+      gap: 10px;
+      padding: 10px 16px;
+      height: 56px;
     }
 
     .brand-mark {
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
     }
 
     .brand-wordmark {
-      font-size: 36px;
+      font-size: 22px;
     }
 
     .search-surface {
-      min-height: 58px;
-      padding: 0 18px;
-      border-radius: 20px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 18px;
     }
 
     .search-copy {
-      font-size: 16px;
-      gap: 12px;
+      font-size: 13px;
+      gap: 8px;
     }
 
     .shortcut-pill,
@@ -378,8 +382,7 @@
     .action-btn,
     .icon-btn,
     .profile-chip {
-      min-height: 52px;
-      border-radius: 18px;
+      height: 36px;
     }
 
     .status-pill,
@@ -390,12 +393,18 @@
 
     .action-btn,
     .icon-btn {
-      width: 52px;
+      width: 36px;
       padding: 0;
     }
 
     .profile-chip {
-      padding: 4px;
+      padding: 2px;
+    }
+
+    .avatar-orb {
+      width: 28px;
+      height: 28px;
+      font-size: 12px;
     }
   }
 </style>
