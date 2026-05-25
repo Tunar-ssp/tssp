@@ -536,21 +536,6 @@
       </div>
 
       <div class="toolbar-right">
-        {#if !isTrashView}
-          <div class="filter-pills">
-            {#each libraryFilters.filter((filter) => filter.id !== 'trash') as filter (filter.id)}
-              <button
-                type="button"
-                class="pill-btn"
-                class:active={activeLens === filter.id}
-                onclick={() => setLens(filter.id)}
-              >
-                {filter.label}
-              </button>
-            {/each}
-          </div>
-        {/if}
-
         <div class="view-toggle">
           <button type="button" class:active={viewMode === 'grid'} onclick={() => setViewMode('grid')}>
             <Icons.Grid2x2 size={15} />
