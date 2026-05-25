@@ -8,47 +8,54 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_ATTEMPTS: u32 = 5;
 const LOCKOUT_SECONDS: u64 = 1800; // 30 minutes
-const BUCKET_DECAY_SECONDS: u64 = 30; // Refill bucket every 30s
 
 /// Rate limiter state for a single IP.
 #[derive(Debug, Clone)]
 struct BucketState {
     failed_attempts: u32,
-    last_reset: u64,
+    first_failure_time: u64,
 }
 
 impl BucketState {
     fn new() -> Self {
         Self {
             failed_attempts: 0,
-            last_reset: now_seconds(),
+            first_failure_time: 0,
         }
-    }
-
-    /// Check if enough time has passed to reset the bucket.
-    fn should_reset(&self) -> bool {
-        now_seconds().saturating_sub(self.last_reset) >= BUCKET_DECAY_SECONDS
     }
 
     /// Check if this IP is currently locked out.
     fn is_locked_out(&self) -> bool {
-        self.failed_attempts >= MAX_ATTEMPTS
-            && now_seconds().saturating_sub(self.last_reset) < LOCKOUT_SECONDS
+        if self.failed_attempts < MAX_ATTEMPTS {
+            return false;
+        }
+        let elapsed = now_seconds().saturating_sub(self.first_failure_time);
+        elapsed < LOCKOUT_SECONDS
+    }
+
+    /// Check if this entry is expired (lockout period passed).
+    #[allow(dead_code)]
+    fn is_expired(&self) -> bool {
+        if self.failed_attempts < MAX_ATTEMPTS {
+            return false;
+        }
+        let elapsed = now_seconds().saturating_sub(self.first_failure_time);
+        elapsed >= LOCKOUT_SECONDS
     }
 
     /// Record a failed attempt.
     fn record_failure(&mut self) {
-        if self.should_reset() {
-            self.failed_attempts = 0;
-            self.last_reset = now_seconds();
+        if self.failed_attempts == 0 {
+            self.first_failure_time = now_seconds();
         }
         self.failed_attempts += 1;
     }
 
     /// Reset on successful login.
+    #[allow(dead_code)]
     fn reset(&mut self) {
         self.failed_attempts = 0;
-        self.last_reset = now_seconds();
+        self.first_failure_time = 0;
     }
 }
 
@@ -80,11 +87,6 @@ impl RateLimiter {
             .entry(ip)
             .or_insert_with(BucketState::new);
 
-        if bucket.should_reset() {
-            bucket.failed_attempts = 0;
-            bucket.last_reset = now_seconds();
-        }
-
         if bucket.is_locked_out() {
             return false;
         }
@@ -104,22 +106,31 @@ impl RateLimiter {
     /// Clear the failed attempts on successful login.
     pub async fn record_success(&self, ip: IpAddr) {
         let mut buckets = self.buckets.write().await;
-        if let Some(bucket) = buckets.get_mut(&ip) {
-            bucket.reset();
-        }
+        buckets.remove(&ip);
     }
 
     /// Get remaining attempts for diagnostics (None if locked out).
     #[allow(dead_code)]
     pub async fn remaining_attempts(&self, ip: IpAddr) -> Option<u32> {
         let buckets = self.buckets.read().await;
-        buckets.get(&ip).and_then(|bucket| {
-            if bucket.is_locked_out() {
-                None
-            } else {
-                Some(MAX_ATTEMPTS.saturating_sub(bucket.failed_attempts))
+        match buckets.get(&ip) {
+            Some(bucket) => {
+                if bucket.is_locked_out() {
+                    None
+                } else {
+                    Some(MAX_ATTEMPTS.saturating_sub(bucket.failed_attempts))
+                }
             }
-        })
+            None => Some(MAX_ATTEMPTS),
+        }
+    }
+
+    /// Clean up expired entries to prevent memory leak.
+    /// Should be called periodically (e.g., every hour).
+    #[allow(dead_code)]
+    pub async fn cleanup_expired(&self) {
+        let mut buckets = self.buckets.write().await;
+        buckets.retain(|_, bucket| !bucket.is_expired());
     }
 }
 
