@@ -478,11 +478,18 @@ async fn pin_with_position(
 }
 
 /// `GET /api/v1/notes/export` — download all notes as newline-delimited JSON.
-pub(crate) async fn export_notes(State(state): State<HttpState>) -> Response {
-    let query = tssp_ports::NoteListQuery {
+pub(crate) async fn export_notes(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+) -> Response {
+    let mut query = tssp_ports::NoteListQuery {
         limit: 10_000,
         ..tssp_ports::NoteListQuery::default()
     };
+    // Non-admin users only export their own notes
+    if !auth.is_admin() {
+        query.owner_id = Some(auth.user_id.clone());
+    }
     let provider = state.note_provider.clone();
     match run_blocking(provider, move |provider| provider.list_notes(query)).await {
         Ok(page) => {
