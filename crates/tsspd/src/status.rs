@@ -347,7 +347,17 @@ pub async fn get_storage_usage_from_stats(stats: &RepositoryStats) -> u64 {
 }
 
 pub(crate) async fn status(State(state): State<HttpState>) -> Response {
-    match state.stats_provider.stats() {
+    let repository_stats = if let Some(cached) = state.stats_cache.get().await {
+        Ok(cached)
+    } else {
+        let result = state.stats_provider.stats();
+        if let Ok(stats) = &result {
+            state.stats_cache.store(stats.clone()).await;
+        }
+        result
+    };
+
+    match repository_stats {
         Ok(repository_stats) => {
             let public_url = state.public_urls().base().to_owned();
             let corrupt_file_count = state

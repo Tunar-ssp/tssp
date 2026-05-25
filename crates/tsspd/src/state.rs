@@ -16,6 +16,7 @@ use crate::rate_limit::RateLimiter;
 use crate::search::{FileSearchProvider, StaticFileSearchProvider};
 use crate::sessions::{SessionProvider, StaticSessionProvider};
 use crate::settings::DaemonSettings;
+use crate::stats_cache::StatsCache;
 use crate::status::{MetadataStatsProvider, StaticMetadataStatsProvider};
 use crate::tags::{FileTagProvider, StaticFileTagProvider};
 use crate::upload::{FileUploadProvider, StaticFileUploadProvider};
@@ -30,6 +31,7 @@ pub struct HttpState {
     pub(crate) storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(crate) auth: AuthService,
     pub(crate) rate_limiter: RateLimiter,
+    pub(crate) stats_cache: StatsCache,
     pub(crate) workspaces: Option<Arc<workspaces::WorkspaceStore>>,
     pub(crate) settings: Arc<DaemonSettings>,
     pub(crate) public_urls: PublicUrlBuilder,
@@ -63,6 +65,7 @@ impl HttpState {
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
             auth: AuthService::disabled(),
             rate_limiter: RateLimiter::new(),
+            stats_cache: StatsCache::new(),
             workspaces: None,
             settings,
             public_urls,

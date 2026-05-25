@@ -44,6 +44,7 @@ mod settings;
 mod share;
 mod startup;
 mod state;
+mod stats_cache;
 mod status;
 mod tags;
 pub mod temp_cleanup;
