@@ -140,7 +140,7 @@ impl FileRepository for SqliteFileRepository {
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
-                 WHERE id = ?1",
+                 WHERE id = ?1 AND deleted_at IS NULL",
             )
             .map_err(map_rusqlite_repository_error)?;
         let mut rows = statement
@@ -164,7 +164,7 @@ impl FileRepository for SqliteFileRepository {
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
-                 WHERE content_hash = ?1
+                 WHERE content_hash = ?1 AND deleted_at IS NULL
                  ORDER BY uploaded_at ASC, id ASC
                  LIMIT 1",
             )
@@ -197,12 +197,15 @@ impl FileRepository for SqliteFileRepository {
         record.tags = load_tags(&transaction, id)?;
 
         transaction
-            .execute("DELETE FROM files WHERE id = ?1", params![id.as_str()])
+            .execute(
+                "UPDATE files SET deleted_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = ?1",
+                params![id.as_str()],
+            )
             .map_err(map_rusqlite_repository_error)?;
         cleanup_orphaned_tags(&transaction)?;
         let remaining_content_references = count(
             &transaction,
-            "SELECT COUNT(*) FROM files WHERE content_hash = ?1",
+            "SELECT COUNT(*) FROM files WHERE content_hash = ?1 AND deleted_at IS NULL",
             params![record.content_hash.as_str()],
         )?;
         transaction
@@ -225,6 +228,8 @@ impl FileRepository for SqliteFileRepository {
         );
         let mut where_clauses = Vec::new();
         let mut parameters = Vec::<Value>::new();
+
+        where_clauses.push("f.deleted_at IS NULL".to_owned());
 
         for (index, tag) in query.tags.iter().enumerate() {
             where_clauses.push(format!(
@@ -465,28 +470,28 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let storage_bytes_used: u64 = connection
             .query_row(
-                "SELECT COALESCE(SUM(size_bytes), 0) FROM files",
+                "SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE deleted_at IS NULL",
                 [],
                 |row| row.get(0),
             )
             .map_err(map_rusqlite_repository_error)?;
         Ok(RepositoryStats {
-            file_count: count(&connection, "SELECT COUNT(*) FROM files", [])?,
-            note_count: count(&connection, "SELECT COUNT(*) FROM notes", [])?,
+            file_count: count(&connection, "SELECT COUNT(*) FROM files WHERE deleted_at IS NULL", [])?,
+            note_count: count(&connection, "SELECT COUNT(*) FROM notes WHERE deleted_at IS NULL", [])?,
             tag_count: count(&connection, "SELECT COUNT(*) FROM tags", [])?,
             pinned_count: count(
                 &connection,
-                "SELECT COUNT(*) FROM files WHERE pinned_at IS NOT NULL",
+                "SELECT COUNT(*) FROM files WHERE pinned_at IS NOT NULL AND deleted_at IS NULL",
                 [],
             )?,
             recent_upload_count: count(
                 &connection,
-                "SELECT COUNT(*) FROM files WHERE uploaded_at >= ?1",
+                "SELECT COUNT(*) FROM files WHERE uploaded_at >= ?1 AND deleted_at IS NULL",
                 params![recent_since.seconds()],
             )?,
             recent_note_count: count(
                 &connection,
-                "SELECT COUNT(*) FROM notes WHERE updated_at >= ?1",
+                "SELECT COUNT(*) FROM notes WHERE updated_at >= ?1 AND deleted_at IS NULL",
                 params![recent_since.seconds()],
             )?,
             storage_bytes_used,
@@ -633,7 +638,7 @@ impl FileRepository for SqliteFileRepository {
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
-                 WHERE pinned_at IS NOT NULL
+                 WHERE pinned_at IS NOT NULL AND deleted_at IS NULL
                  ORDER BY pinned_at ASC, id ASC",
             )
             .map_err(map_rusqlite_repository_error)?;
@@ -682,7 +687,7 @@ impl FileRepository for SqliteFileRepository {
                 "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
                  FROM file_search s
                  JOIN files f ON f.id = s.file_id
-                 WHERE file_search MATCH ?1
+                 WHERE file_search MATCH ?1 AND f.deleted_at IS NULL
                  ORDER BY rank
                  LIMIT 100",
             )
@@ -737,12 +742,13 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut sql = String::from(
             "SELECT folder_path, COUNT(*)
-             FROM files",
+             FROM files
+             WHERE deleted_at IS NULL",
         );
         let mut parameters = Vec::<Value>::new();
 
         if let Some(owner) = owner_id {
-            sql.push_str(" WHERE owner_id = ?");
+            sql.push_str(" AND owner_id = ?");
             parameters.push(Value::from(owner.as_str().to_owned()));
         }
 
@@ -794,7 +800,7 @@ impl FileRepository for SqliteFileRepository {
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
                  FROM files
-                 WHERE public_token = ?1 AND visibility = 'public'
+                 WHERE public_token = ?1 AND visibility = 'public' AND deleted_at IS NULL
                  LIMIT 1",
             )
             .map_err(map_rusqlite_repository_error)?;

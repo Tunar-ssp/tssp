@@ -128,10 +128,14 @@ pub(crate) fn cleanup_orphaned_tags(
         .execute(
             "DELETE FROM tags
              WHERE NOT EXISTS (
-                 SELECT 1 FROM file_tags WHERE file_tags.tag_key = tags.key
+                 SELECT 1 FROM file_tags
+                 JOIN files ON files.id = file_tags.file_id
+                 WHERE file_tags.tag_key = tags.key AND files.deleted_at IS NULL
              )
              AND NOT EXISTS (
-                 SELECT 1 FROM note_tags WHERE note_tags.tag_key = tags.key
+                 SELECT 1 FROM note_tags
+                 JOIN notes ON notes.id = note_tags.note_id
+                 WHERE note_tags.tag_key = tags.key AND notes.deleted_at IS NULL
              )",
             [],
         )
