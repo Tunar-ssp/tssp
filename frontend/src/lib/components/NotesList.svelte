@@ -6,8 +6,8 @@
   export let notes: Note[] = [];
   export let onSelectNote: (id: string) => void = () => {};
 
-  function formatDate(dateStr: string): string {
-    const date = new Date(dateStr);
+  function formatDate(timestamp: number): string {
+    const date = new Date(timestamp * 1000);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const hours = diff / (1000 * 60 * 60);

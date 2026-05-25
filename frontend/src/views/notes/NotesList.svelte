@@ -60,7 +60,7 @@
       <p>No notes yet</p>
     </div>
   {:else}
-    {#each notes as note (note.id)}
+    {#each notes as note (String(note.id))}
       <button
         class="note-item"
         class:active={activeNoteId === note.id}

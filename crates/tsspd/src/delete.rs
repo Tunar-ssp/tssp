@@ -548,7 +548,7 @@ pub(crate) async fn list_trash(
             .unwrap_or(0);
         let cutoff = now + 1;
 
-        match tssp_domain::UnixTimestamp::new(cutoff as i64) {
+        match tssp_domain::UnixTimestamp::new(i64::try_from(cutoff).unwrap_or(i64::MAX)) {
             Ok(cutoff_ts) => {
                 match state.repository.list_deleted_files(cutoff_ts) {
                     Ok(files) => Ok(files),
@@ -591,7 +591,7 @@ pub(crate) async fn empty_trash(
         let retention_seconds = settings.trash_retention_days * 86_400;
         let older_than_secs = now.saturating_sub(retention_seconds) + 1;
 
-        match tssp_domain::UnixTimestamp::new(older_than_secs as i64) {
+        match tssp_domain::UnixTimestamp::new(i64::try_from(older_than_secs).unwrap_or(i64::MAX)) {
             Ok(cutoff) => {
                 match repo.list_deleted_files(cutoff) {
                     Ok(deleted_files) => {

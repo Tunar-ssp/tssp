@@ -448,6 +448,10 @@ impl AuthService {
 
     /// Get a device by token (including expired devices).
     /// Note: This returns expired devices too; use `resolve_device()` for validity checking.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the device store is not configured or the device is not found.
     pub fn get_device(&self, token: &str) -> Result<TrustedDevice, AuthError> {
         // Get all devices and find the one matching the token
         // This is a workaround since DeviceStore doesn't expose find_any method

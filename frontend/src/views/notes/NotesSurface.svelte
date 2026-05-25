@@ -15,12 +15,16 @@
     isSaving,
   } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
-  import TiptapEditor from '$lib/components/TiptapEditor.svelte';
-  import Outline from '$lib/components/Outline.svelte';
   import SlashMenu from '$lib/components/SlashMenu.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { estimateBlockCount, renderMarkdownLite } from '$lib/utils/markdown';
+  import NotesEditor from './NotesEditor.svelte';
+  import NotesList from './NotesList.svelte';
+  import NotesSearch from './NotesSearch.svelte';
+  import NotesOutline from './NotesOutline.svelte';
+  import NotesMeta from './NotesMeta.svelte';
+  import NotesHome from './NotesHome.svelte';
 
   type CollectionFilter = 'all' | 'pinned' | 'recent';
   type InspectorTab = 'preview' | 'outline' | 'meta';
@@ -242,39 +246,6 @@
       minute: '2-digit',
     });
   }
-
-  function formatRelative(timestamp: number) {
-    const delta = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-    if (delta < 60) return 'just now';
-    if (delta < 3_600) return `${Math.floor(delta / 60)}m`;
-    if (delta < 86_400) return `${Math.floor(delta / 3_600)}h`;
-    if (delta < 604_800) return `${Math.floor(delta / 86_400)}d`;
-    return `${Math.floor(delta / 604_800)}w`;
-  }
-
-  function getWordCount(text: string) {
-    return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
-  }
-
-  function noteSummary(text: string) {
-    return text
-      .replace(/^#{1,6}\s+/gm, '')
-      .replace(/^[-*]\s+\[[ x]\]\s+/gim, '')
-      .replace(/^[-*]\s+/gm, '')
-      .replace(/^>\s+/gm, '')
-      .replace(/`{1,3}/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function noteAccent(note: any) {
-    if (note.pinned_at) return 'var(--pink)';
-    const seed = (note.tags[0] || note.id || '').toLowerCase();
-    if (seed.includes('ops') || seed.includes('infra') || seed.includes('server')) return 'var(--green)';
-    if (seed.includes('roadmap') || seed.includes('work')) return 'var(--orange)';
-    if (seed.includes('personal') || seed.includes('home')) return 'var(--pink)';
-    return 'var(--blue)';
-  }
 </script>
 
 <div class:editor-mode={!!$activeNote} class:home-mode={!$activeNote} class="notes-view">
@@ -345,167 +316,34 @@
   </aside>
 
   {#if !$activeNote}
-    <section class="notes-home">
-      <header class="home-header">
-        <div>
-          <h1>{searchQuery.trim() ? 'Search notes' : 'All notes'}</h1>
-          <p>
-            {$sortedNotes.length} total · {$sortedNotes.filter((note) => note.pinned_at).length} pinned
-            {#if activeTag}
-              · tag: {activeTag}
-            {/if}
-          </p>
-        </div>
-
-        <div class="home-actions">
-          <label class="search-field">
-            <Icons.Search size={16} />
-            <input bind:value={searchQuery} placeholder="Search notes..." />
-          </label>
-
-          <div class="layout-toggle">
-            <button type="button" class:active={homeLayout === 'grid'} onclick={() => (homeLayout = 'grid')}>
-              <Icons.LayoutGrid size={15} />
-            </button>
-            <button type="button" class:active={homeLayout === 'list'} onclick={() => (homeLayout = 'list')}>
-              <Icons.List size={15} />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {#if isLoading}
-        <div class="state-panel">
-          <div class="spinner"></div>
-          <strong>Loading notes</strong>
-          <p>Syncing local pages from the TSSP backend.</p>
-        </div>
-      {:else if filteredNotes.length === 0}
-        <div class="state-panel">
-          <Icons.StickyNote size={32} />
-          <strong>No notes yet</strong>
-          <p>Create the first page, or clear your search/tag filters.</p>
-          <button type="button" class="inline-action" onclick={handleCreateNote}>Create note</button>
-        </div>
-      {:else}
-        {#if pinnedNotes.length > 0}
-          <section class="home-section">
-            <div class="section-head">
-              <span class="section-label"><Icons.Pin size={14} /> Pinned</span>
-            </div>
-            <div class:card-grid={homeLayout === 'grid'} class:list-grid={homeLayout === 'list'}>
-              {#each pinnedNotes.slice(0, homeLayout === 'grid' ? 4 : 8) as note (note.id)}
-                <button
-                  type="button"
-                  class="note-card"
-                  onclick={() => handleSelectNote(note.id)}
-                  oncontextmenu={(event) => showContextMenu(event, note)}
-                  style="--accent: {noteAccent(note)}"
-                >
-                  <div class="card-accent"></div>
-                  <div class="card-head">
-                    <strong>{note.title || 'Untitled note'}</strong>
-                    <Icons.Pin size={14} />
-                  </div>
-                  <p>{noteSummary(note.body).slice(0, 180) || 'Open this note to start writing.'}</p>
-                  <div class="card-foot">
-                    <div class="card-tags">
-                      {#each note.tags.slice(0, 3) as tag}
-                        <span>{tag}</span>
-                      {/each}
-                    </div>
-                    <small>{formatRelative(note.updated_at)}</small>
-                  </div>
-                </button>
-              {/each}
-            </div>
-          </section>
-        {/if}
-
-        <section class="home-section">
-          <div class="section-head">
-            <span class="section-label">{searchQuery.trim() ? 'Matches' : 'Recent notes'}</span>
-            <button type="button" class="ghost-link" onclick={() => (searchQuery = '')}>Clear</button>
-          </div>
-          <div class:card-grid={homeLayout === 'grid'} class:list-grid={homeLayout === 'list'}>
-            {#each recentNotes as note (note.id)}
-              <button
-                type="button"
-                class="note-card"
-                onclick={() => handleSelectNote(note.id)}
-                oncontextmenu={(event) => showContextMenu(event, note)}
-                style="--accent: {noteAccent(note)}"
-              >
-                <div class="card-accent"></div>
-                <div class="card-head">
-                  <strong>{note.title || 'Untitled note'}</strong>
-                  {#if note.pinned_at}
-                    <Icons.Pin size={14} />
-                  {/if}
-                </div>
-                <p>{noteSummary(note.body).slice(0, 180) || 'Open this note to start writing.'}</p>
-                <div class="card-foot">
-                  <div class="card-tags">
-                    {#each note.tags.slice(0, 3) as tag}
-                      <span>{tag}</span>
-                    {/each}
-                  </div>
-                  <small>{formatRelative(note.updated_at)}</small>
-                </div>
-              </button>
-            {/each}
-          </div>
-        </section>
-      {/if}
-    </section>
+    <NotesHome
+      notes={filteredNotes}
+      {isLoading}
+      layout={homeLayout}
+      {searchQuery}
+      {activeTag}
+      onSelectNote={handleSelectNote}
+      onContextMenu={showContextMenu}
+      onCreateNote={handleCreateNote}
+    />
   {:else}
     <section class="notes-rail">
-      <div class="rail-search">
-        <label class="search-field">
-          <Icons.Search size={16} />
-          <input bind:value={searchQuery} placeholder="Search notes..." />
-        </label>
-        {#if activeTag}
-          <button type="button" class="active-tag-chip" onclick={() => (activeTag = null)}>
-            {activeTag}
-            <Icons.X size={12} />
-          </button>
-        {/if}
-      </div>
+      <NotesSearch
+        {searchQuery}
+        {activeTag}
+        onSearchChange={(query) => (searchQuery = query)}
+        onTagClear={() => (activeTag = null)}
+      />
 
       <div class="rail-list">
-        {#if filteredNotes.length === 0}
-          <div class="state-panel compact">
-            <Icons.SearchX size={20} />
-            <strong>No matching notes</strong>
-            <p>Try a different search or clear the active tag filter.</p>
-          </div>
-        {:else}
-          {#each filteredNotes as note (note.id)}
-            <button
-              type="button"
-              class="rail-note"
-              class:active={$activeNote?.id === note.id}
-              onclick={() => handleSelectNote(note.id)}
-              oncontextmenu={(event) => showContextMenu(event, note)}
-            >
-              <div class="rail-note-accent" style="background: {noteAccent(note)}"></div>
-              <div class="rail-note-body">
-                <div class="rail-note-head">
-                  <strong>{note.title || 'Untitled note'}</strong>
-                  {#if note.pinned_at}
-                    <Icons.Pin size={12} />
-                  {/if}
-                </div>
-                <p>{noteSummary(note.body).slice(0, 96) || 'No content yet'}</p>
-                <div class="rail-note-meta">
-                  <span>{formatRelative(note.updated_at)}</span>
-                  <span>{getWordCount(note.body)} words</span>
-                </div>
-              </div>
-            </button>
-          {/each}
-        {/if}
+        <NotesList
+          notes={filteredNotes}
+          activeNoteId={$activeNote?.id}
+          onSelectNote={handleSelectNote}
+          onDeleteNote={handleDeleteNote}
+          onPinNote={handlePinNote}
+          onContextMenu={showContextMenu}
+        />
       </div>
     </section>
 
@@ -546,22 +384,20 @@
 
       <div class="stage-body">
         <article class="note-canvas">
-          <div class="canvas-head">
-            <input
-              type="text"
-              bind:value={titleDraft}
-              oninput={scheduleSave}
-              onchange={() => handleSaveNote()}
-              onblur={handleFieldBlur}
-              class="editor-title"
-              placeholder="Note title..."
-            />
-            <div class="canvas-meta">
-              <span><Icons.History size={14} /> Edited {formatDate($activeNote.updated_at || $activeNote.created_at)}</span>
-              <span>{totalWords} words</span>
-              <span>{blockCount} blocks</span>
-            </div>
-          </div>
+          <NotesEditor
+            note={$activeNote}
+            {titleDraft}
+            {bodyDraft}
+            isSaving={$isSaving}
+            onTitleChange={(title) => {
+              titleDraft = title;
+              scheduleSave();
+            }}
+            onBodyChange={(body) => {
+              bodyDraft = body;
+              scheduleSave();
+            }}
+          />
 
           <div class="tag-strip">
             <div class="tag-list" aria-label="Note tags">
@@ -589,15 +425,9 @@
             </form>
           </div>
 
-          <div class="editor-shell">
-            <TiptapEditor
-              content={bodyDraft}
-              onChange={(nextContent) => {
-                bodyDraft = nextContent;
-                scheduleSave();
-              }}
-            />
-          </div>
+          <button class="slash-menu-button" onclick={openSlashMenu} title="Insert slash command">
+            <Icons.Sparkles size={16} />
+          </button>
         </article>
 
         <aside class="note-inspector">
@@ -621,33 +451,14 @@
               {/if}
             </div>
           {:else if inspectorTab === 'outline'}
-            <div class="outline-pane">
-              <Outline content={bodyDraft} onSelectItem={() => {}} />
-            </div>
+            <NotesOutline content={bodyDraft} onSelectItem={() => {}} />
           {:else}
-            <div class="meta-pane">
-              <div class="meta-card">
-                <span class="meta-label">Created</span>
-                <strong>{formatDate($activeNote.created_at)}</strong>
-              </div>
-              <div class="meta-card">
-                <span class="meta-label">Updated</span>
-                <strong>{formatDate($activeNote.updated_at)}</strong>
-              </div>
-              <div class="meta-card">
-                <span class="meta-label">Words</span>
-                <strong>{totalWords}</strong>
-              </div>
-              <div class="meta-card">
-                <span class="meta-label">Blocks</span>
-                <strong>{blockCount}</strong>
-              </div>
-
-              <div class="meta-note">
-                <Icons.Info size={16} />
-                <p>Note sharing and linked references are not available from the backend yet, so this editor only exposes real storage-backed actions.</p>
-              </div>
-            </div>
+            <NotesMeta
+              createdAt={$activeNote.created_at}
+              updatedAt={$activeNote.updated_at}
+              wordCount={totalWords}
+              blockCount={blockCount}
+            />
           {/if}
         </aside>
       </div>

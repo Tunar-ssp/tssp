@@ -252,9 +252,11 @@ pub(crate) async fn list_tags(
     }
 
     // Non-admin: get user's files and extract unique tags
-    let mut query = tssp_ports::ListQuery::default();
-    query.owner_id = Some(auth.user_id.clone());
-    query.limit = 10_000;
+    let query = tssp_ports::ListQuery {
+        owner_id: Some(auth.user_id.clone()),
+        limit: 10_000,
+        ..Default::default()
+    };
 
     match tokio::task::spawn_blocking(move || state.stats_provider.list_files(&query)).await {
         Ok(Ok(page)) => {

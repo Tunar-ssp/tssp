@@ -30,71 +30,17 @@ pub async fn rename_file(
     Path(id): Path<String>,
     Json(request): Json<RenameRequest>,
 ) -> Result<(StatusCode, Json<RenameResponse>), (StatusCode, Json<Value>)> {
-    let file_id = tssp_domain::FileId::new(&id).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "schema_version": 1,
-                "error": {
-                    "code": "invalid_request",
-                    "message": "invalid file id"
-                }
-            })),
-        )
-    })?;
-
-    let new_name = FileName::new(&request.name).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "schema_version": 1,
-                "error": {
-                    "code": "invalid_request",
-                    "message": "invalid filename"
-                }
-            })),
-        )
-    })?;
+    let file_id = tssp_domain::FileId::new(&id).map_err(|_| rename_error(StatusCode::BAD_REQUEST, "invalid_request", "invalid file id"))?;
+    let new_name = FileName::new(&request.name).map_err(|_| rename_error(StatusCode::BAD_REQUEST, "invalid_request", "invalid filename"))?;
 
     let existing = match state.stats_provider.find_file(&file_id) {
         Ok(Some(f)) => f,
-        Ok(None) => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "schema_version": 1,
-                    "error": {
-                        "code": "not_found",
-                        "message": "file not found"
-                    }
-                })),
-            ))
-        }
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "schema_version": 1,
-                    "error": {
-                        "code": "internal_error",
-                        "message": e
-                    }
-                })),
-            ))
-        }
+        Ok(None) => return Err(rename_error(StatusCode::NOT_FOUND, "not_found", "file not found")),
+        Err(e) => return Err(rename_error(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", &e)),
     };
 
     if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "schema_version": 1,
-                "error": {
-                    "code": "forbidden",
-                    "message": "you do not have permission to rename this file"
-                }
-            })),
-        ));
+        return Err(rename_error(StatusCode::FORBIDDEN, "forbidden", "you do not have permission to rename this file"));
     }
 
     let repository = state.repository.clone();
@@ -109,47 +55,41 @@ pub async fn rename_file(
                 "success",
                 Some(&format!("renamed to {}", record.name.original())),
             );
-            let file_json = json!({
-                "id": record.id.as_str(),
-                "name": record.name.original(),
-                "size": record.size.bytes(),
-                "mime": record.mime_type.as_str(),
-                "tags": record.tags.iter().map(Tag::display).collect::<Vec<_>>(),
-                "uploaded": record.uploaded_at.seconds(),
-                "pinned": record.pinned_at.is_some(),
-            });
-
             Ok((
                 StatusCode::OK,
                 Json(RenameResponse {
                     schema_version: 1,
                     id: id.clone(),
-                    file: file_json,
+                    file: json!({
+                        "id": record.id.as_str(),
+                        "name": record.name.original(),
+                        "size": record.size.bytes(),
+                        "mime": record.mime_type.as_str(),
+                        "tags": record.tags.iter().map(Tag::display).collect::<Vec<_>>(),
+                        "uploaded": record.uploaded_at.seconds(),
+                        "pinned": record.pinned_at.is_some(),
+                    }),
                 }),
             ))
         }
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "schema_version": 1,
-                "error": {
-                    "code": "not_found",
-                    "message": "file not found"
-                }
-            })),
-        )),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "schema_version": 1,
-                "error": {
-                    "code": "internal_error",
-                    "message": "rename failed"
-                }
-            })),
-        )),
+        Ok(None) => Err(rename_error(StatusCode::NOT_FOUND, "not_found", "file not found")),
+        Err(_) => Err(rename_error(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "rename failed")),
     }
 }
+
+fn rename_error(status: StatusCode, code: &'static str, message: &str) -> (StatusCode, Json<Value>) {
+    (
+        status,
+        Json(json!({
+            "schema_version": 1,
+            "error": {
+                "code": code,
+                "message": message
+            }
+        })),
+    )
+}
+
 
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::match_wild_err_arm)]

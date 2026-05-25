@@ -73,36 +73,8 @@ pub(crate) async fn get_file(
     };
 
     // Check authorization: public files accessible to all, private files only to owner/admin
-    if record.visibility != Visibility::Public {
-        match &auth {
-            Some(auth) if auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id) => {
-                // Admin or owner can access private files
-            }
-            Some(_) => {
-                return (
-                    StatusCode::FORBIDDEN,
-                    Json(ErrorResponse {
-                        error: ErrorBody {
-                            code: "access_denied",
-                            message: "you do not have permission to access this file".to_owned(),
-                        },
-                    }),
-                )
-                    .into_response();
-            }
-            None => {
-                return (
-                    StatusCode::UNAUTHORIZED,
-                    Json(ErrorResponse {
-                        error: ErrorBody {
-                            code: "authentication_required",
-                            message: "authentication is required to access this file".to_owned(),
-                        },
-                    }),
-                )
-                    .into_response();
-            }
-        }
+    if let Err(resp) = authorize_file_access(&record, auth.as_ref()) {
+        return resp;
     }
 
     (
@@ -188,36 +160,8 @@ pub(crate) async fn get_file_thumbnail(
     };
 
     // Check authorization: public files accessible to all, private files only to owner/admin
-    if record.visibility != Visibility::Public {
-        match &auth {
-            Some(auth) if auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id) => {
-                // Admin or owner can access private files
-            }
-            Some(_) => {
-                return (
-                    StatusCode::FORBIDDEN,
-                    Json(ErrorResponse {
-                        error: ErrorBody {
-                            code: "access_denied",
-                            message: "you do not have permission to access this file".to_owned(),
-                        },
-                    }),
-                )
-                    .into_response();
-            }
-            None => {
-                return (
-                    StatusCode::UNAUTHORIZED,
-                    Json(ErrorResponse {
-                        error: ErrorBody {
-                            code: "authentication_required",
-                            message: "authentication is required to access this file".to_owned(),
-                        },
-                    }),
-                )
-                    .into_response();
-            }
-        }
+    if let Err(resp) = authorize_file_access(&record, auth.as_ref()) {
+        return resp;
     }
 
     // Only images can have thumbnails
@@ -246,6 +190,39 @@ pub(crate) async fn get_file_thumbnail(
         })),
     )
         .into_response()
+}
+
+fn authorize_file_access(
+    record: &tssp_domain::FileRecord,
+    auth: Option<&crate::auth::AuthContext>,
+) -> Result<(), Response> {
+    if record.visibility == Visibility::Public {
+        return Ok(());
+    }
+
+    match auth {
+        Some(auth) if auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id) => Ok(()),
+        Some(_) => Err((
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "access_denied",
+                    message: "you do not have permission to access this file".to_owned(),
+                },
+            }),
+        )
+            .into_response()),
+        None => Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "authentication_required",
+                    message: "authentication is required to access this file".to_owned(),
+                },
+            }),
+        )
+            .into_response()),
+    }
 }
 
 #[cfg(test)]
