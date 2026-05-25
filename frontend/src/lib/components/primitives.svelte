@@ -12,6 +12,7 @@
     iconRight?: any;
     disabled?: boolean;
     onClick?: () => void;
+    onclick?: (event: MouseEvent) => void;
   }
 
   // ===== Pill Component =====

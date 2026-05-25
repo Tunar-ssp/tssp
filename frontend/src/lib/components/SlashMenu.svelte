@@ -88,7 +88,7 @@
     },
   ];
 
-  const menuItems = items.length > 0 ? items : defaultItems;
+  let menuItems = $derived(items.length > 0 ? items : defaultItems);
 
   function insertText(text: string) {
     // This would be implemented by the parent component

@@ -5,13 +5,12 @@
   import { success, error } from '$lib/stores/notifications';
   import { onMount } from 'svelte';
 
-  let activeTab = 'dashboard';
-  let isLoading = false;
-  let systemStatus: any = null;
-  let commands: any[] = [];
-  let commandOutput = '';
-  let selectedCommand = '';
-  let isExecuting = false;
+  let activeTab = $state('dashboard');
+  let isLoading = $state(false);
+  let systemStatus: any = $state(null);
+  let commands: any[] = $state([]);
+  let commandOutput = $state('');
+  let isExecuting = $state(false);
   let showConsole = $state(false);
 
   const tabs = [
@@ -52,11 +51,11 @@
   async function loadSystemStatus() {
     try {
       isLoading = true;
-      const response = await fetch('/api/v1/admin/status');
+      const response = await fetch('/api/v1/admin/status', { credentials: 'same-origin' });
       if (!response.ok) throw new Error('Failed to load system status');
       systemStatus = await response.json();
     } catch (err) {
-      error('Failed to load system status');
+      error('Status Failed', err instanceof Error ? err.message : 'Failed to load system status');
       console.error(err);
     } finally {
       isLoading = false;
@@ -65,12 +64,12 @@
 
   async function loadAvailableCommands() {
     try {
-      const response = await fetch('/api/v1/admin/console/commands');
+      const response = await fetch('/api/v1/admin/console/commands', { credentials: 'same-origin' });
       if (!response.ok) throw new Error('Failed to load commands');
       const data = await response.json();
       commands = data.commands || [];
     } catch (err) {
-      error('Failed to load available commands');
+      error('Commands Failed', err instanceof Error ? err.message : 'Failed to load available commands');
       console.error(err);
     }
   }
@@ -82,15 +81,16 @@
       const response = await fetch('/api/v1/admin/console/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ command: commandName }),
       });
       if (!response.ok) throw new Error('Command failed');
       const data = await response.json();
       commandOutput = data.output || 'Command executed successfully';
-      success('Command executed');
+      success('Command Executed', commandName);
     } catch (err) {
       commandOutput = `Error: ${err instanceof Error ? err.message : 'Unknown error'}`;
-      error('Command failed');
+      error('Command Failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       isExecuting = false;
     }
@@ -98,7 +98,23 @@
 
   async function refreshSystemStatus() {
     await loadSystemStatus();
-    success('System status refreshed');
+    success('Status Refreshed', 'System metrics reloaded');
+  }
+
+  async function executeSafeConsoleCommand(cmd: string) {
+    try {
+      const response = await fetch('/api/v1/admin/console/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ command: cmd }),
+      });
+      if (!response.ok) throw new Error(`Command failed with HTTP ${response.status}`);
+      const data = await response.json();
+      return data.output || 'Command executed';
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : 'Unknown error'}`;
+    }
   }
 
   let storagePercent = $derived(
@@ -120,13 +136,13 @@
       <p class="subtitle">System monitoring, maintenance, and administration</p>
     </div>
     <div class="header-buttons">
-      <button class="refresh-btn" on:click={refreshSystemStatus} disabled={isLoading}>
+      <button type="button" class="refresh-btn" onclick={refreshSystemStatus} disabled={isLoading}>
         <div class="refresh-icon" class:spinning={isLoading}>
           <Icons.RotateCw size={16} />
         </div>
         Refresh
       </button>
-      <button class="console-btn" on:click={() => (showConsole = !showConsole)}>
+      <button type="button" class="console-btn" onclick={() => (showConsole = !showConsole)}>
         <Icons.Terminal size={16} />
         Console
       </button>
@@ -135,12 +151,14 @@
 
   <div class="tabs-bar">
     {#each tabs as tab (tab.id)}
+      {@const Icon = tab.icon}
       <button
+        type="button"
         class="tab-btn"
         class:active={activeTab === tab.id}
-        on:click={() => (activeTab = tab.id)}
+        onclick={() => (activeTab = tab.id)}
       >
-        <svelte:component this={tab.icon} size={16} />
+        <Icon size={16} />
         {tab.label}
       </button>
     {/each}
@@ -151,7 +169,7 @@
       <div class="dashboard">
         {#if isLoading}
           <div class="loading">
-            <div class="spinner" />
+            <div class="spinner"></div>
             Loading system status...
           </div>
         {:else if systemStatus}
@@ -245,13 +263,15 @@
           <h3>Maintenance Tasks</h3>
           <div class="actions-grid">
             {#each maintenanceActions as action (action.id)}
+              {@const ActionIcon = action.icon}
               <button
+                type="button"
                 class="action-card"
-                on:click={action.action}
+                onclick={action.action}
                 disabled={isExecuting}
               >
                 <div class="action-icon">
-                  <svelte:component this={action.icon} size={24} />
+                  <ActionIcon size={24} />
                 </div>
                 <div class="action-info">
                   <div class="action-title">{action.label}</div>
@@ -345,16 +365,7 @@
 <SafeConsole
   isOpen={showConsole}
   onClose={() => (showConsole = false)}
-  onExecuteCommand={async (cmd) => {
-    return await fetch('/api/v1/admin/console/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: cmd }),
-    })
-      .then(r => r.json())
-      .then(d => d.output || 'Command executed')
-      .catch(e => `Error: ${e.message}`);
-  }}
+  onExecuteCommand={executeSafeConsoleCommand}
   {commands}
 />
 

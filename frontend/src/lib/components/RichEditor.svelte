@@ -9,7 +9,7 @@
 
   let { content = '', onChange, placeholder = 'Start typing... (Ctrl+/ for formatting)' }: Props = $props();
 
-  let editorDiv: HTMLDivElement;
+  let editorDiv = $state<HTMLDivElement | null>(null);
   let isFocused = $state(false);
 
   $effect(() => {
@@ -19,10 +19,8 @@
   });
 
   function handleInput() {
-    if (editorDiv) {
-      const html = editorDiv.innerHTML;
-      onChange?.(html);
-    }
+    const html = editorDiv?.innerHTML || '';
+    onChange?.(html);
   }
 
   function handleBlur() {
@@ -91,37 +89,37 @@
 <div class="editor-wrapper">
   <div class="toolbar">
     <div class="toolbar-group">
-      <button class="toolbar-btn" title="Bold (Ctrl+B)" on:click={toggleBold}>
+      <button type="button" class="toolbar-btn" title="Bold (Ctrl+B)" onclick={toggleBold}>
         <Icons.Bold size={16} />
       </button>
-      <button class="toolbar-btn" title="Italic (Ctrl+I)" on:click={toggleItalic}>
+      <button type="button" class="toolbar-btn" title="Italic (Ctrl+I)" onclick={toggleItalic}>
         <Icons.Italic size={16} />
       </button>
-      <button class="toolbar-btn" title="Underline (Ctrl+U)" on:click={toggleUnderline}>
+      <button type="button" class="toolbar-btn" title="Underline (Ctrl+U)" onclick={toggleUnderline}>
         <Icons.Underline size={16} />
       </button>
     </div>
 
     <div class="toolbar-group">
-      <button class="toolbar-btn" title="Heading 1" on:click={toggleH1}>
+      <button type="button" class="toolbar-btn" title="Heading 1" onclick={toggleH1}>
         <span style="font-weight: bold; font-size: 14px;">H1</span>
       </button>
-      <button class="toolbar-btn" title="Heading 2" on:click={toggleH2}>
+      <button type="button" class="toolbar-btn" title="Heading 2" onclick={toggleH2}>
         <span style="font-weight: bold; font-size: 13px;">H2</span>
       </button>
-      <button class="toolbar-btn" title="Code Block" on:click={toggleCode}>
+      <button type="button" class="toolbar-btn" title="Code Block" onclick={toggleCode}>
         <Icons.Code2 size={16} />
       </button>
     </div>
 
     <div class="toolbar-group">
-      <button class="toolbar-btn" title="Bullet List" on:click={toggleBulletList}>
+      <button type="button" class="toolbar-btn" title="Bullet List" onclick={toggleBulletList}>
         <Icons.List size={16} />
       </button>
-      <button class="toolbar-btn" title="Ordered List" on:click={toggleOrderedList}>
+      <button type="button" class="toolbar-btn" title="Ordered List" onclick={toggleOrderedList}>
         <Icons.ListOrdered size={16} />
       </button>
-      <button class="toolbar-btn" title="Link" on:click={insertLink}>
+      <button type="button" class="toolbar-btn" title="Link" onclick={insertLink}>
         <Icons.Link2 size={16} />
       </button>
     </div>
@@ -134,9 +132,10 @@
       contenteditable="true"
       role="textbox"
       aria-label="Rich text editor"
-      on:input={handleInput}
-      on:focus={handleFocus}
-      on:blur={handleBlur}
+      data-placeholder={placeholder}
+      oninput={handleInput}
+      onfocus={handleFocus}
+      onblur={handleBlur}
     >
       <p></p>
     </div>
@@ -220,6 +219,12 @@
     line-height: 1.6;
     color: var(--text);
     word-wrap: break-word;
+  }
+
+  .editor-content:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted);
+    pointer-events: none;
   }
 
   .editor-content :global(h1) {

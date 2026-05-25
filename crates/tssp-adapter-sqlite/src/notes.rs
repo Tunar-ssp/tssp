@@ -123,7 +123,7 @@ impl NoteRepository for SqliteFileRepository {
 
         let connection = self.connect()?;
         let mut sql = String::from(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
+            "SELECT n.id, n.title, substr(n.body, 1, 200) as body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
              FROM notes n",
         );
         let mut where_clauses = Vec::new();

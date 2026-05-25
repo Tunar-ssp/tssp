@@ -637,23 +637,6 @@
     overflow: hidden;
   }
 
-  .editor-textarea {
-    flex: 1;
-    border: none;
-    background: var(--bg);
-    color: var(--text);
-    padding: var(--s-6);
-    font-family: var(--ff-sans);
-    font-size: var(--fs-14);
-    line-height: var(--lh-relaxed);
-    outline: none;
-    resize: none;
-  }
-
-  .editor-textarea::placeholder {
-    color: var(--muted);
-  }
-
   .editor-footer {
     display: flex;
     align-items: center;

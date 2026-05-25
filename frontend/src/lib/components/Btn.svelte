@@ -12,10 +12,16 @@
     iconRight,
     disabled = false,
     onClick,
+    onclick,
     class: className,
     children,
     ...rest
   } = $props<$$Props>();
+
+  function handleClick(event: MouseEvent) {
+    onclick?.(event);
+    onClick?.();
+  }
 
   const sizeClasses = {
     sm: 'btn-sm',
@@ -35,18 +41,20 @@
 <button
   class="btn {kindClasses[kind]} {sizeClasses[size]} {className || ''}"
   {disabled}
-  on:click={onClick}
+  onclick={handleClick}
   {...rest}
 >
   {#if icon}
+    {@const Icon = icon}
     <span class="btn-icon-left">
-      <svelte:component this={icon} />
+      <Icon />
     </span>
   {/if}
-  <slot />
+  {@render children?.()}
   {#if iconRight}
+    {@const IconRight = iconRight}
     <span class="btn-icon-right">
-      <svelte:component this={iconRight} />
+      <IconRight />
     </span>
   {/if}
 </button>

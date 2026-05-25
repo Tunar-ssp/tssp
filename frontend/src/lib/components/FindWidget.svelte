@@ -16,7 +16,7 @@
   let searchQuery = $state('');
   let matchCase = $state(false);
   let wholeWord = $state(false);
-  let findInput: HTMLInputElement;
+  let findInput = $state<HTMLInputElement | null>(null);
 
   function handleSearch() {
     onFind(searchQuery, { matchCase, wholeWord });
@@ -53,6 +53,7 @@
 
     <div class="find-options">
       <button
+        type="button"
         class="find-option"
         class:active={matchCase}
         onclick={() => matchCase = !matchCase}
@@ -61,6 +62,7 @@
         <Icons.CaseSensitive size={14} />
       </button>
       <button
+        type="button"
         class="find-option"
         class:active={wholeWord}
         onclick={() => wholeWord = !wholeWord}
@@ -71,6 +73,7 @@
     </div>
 
     <button
+      type="button"
       class="find-close"
       onclick={onClose}
       title="Close (Escape)"

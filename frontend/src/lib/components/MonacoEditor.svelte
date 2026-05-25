@@ -36,44 +36,60 @@
     'ruby',
   ];
 
-  onMount(async () => {
-    // Load Monaco dynamically
-    const monacoModule = await import('monaco-editor');
-    monaco = monacoModule.default;
+  onMount(() => {
+    let disposed = false;
 
-    // Create editor instance
-    editor = monaco.editor.create(container, {
-      value,
-      language,
-      theme: 'vs-dark',
-      automaticLayout: true,
-      minimap: { enabled: true, side: 'right' },
-      fontSize: 14,
-      fontFamily: 'Menlo, Monaco, Courier New, monospace',
-      lineNumbers: 'on',
-      scrollBeyondLastLine: false,
-      wordWrap: 'on',
-      formatOnPaste: true,
-      formatOnType: true,
-      tabSize: 2,
-      insertSpaces: true,
-      useTabStops: true,
-    });
+    async function initEditor() {
+      const monacoModule = await import('monaco-editor');
+      if (disposed) return;
 
-    // Set theme based on system preference
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs-light');
+      monaco = monacoModule.default;
+      editor = monaco.editor.create(container, {
+        value,
+        language,
+        theme: 'vs-dark',
+        automaticLayout: true,
+        minimap: { enabled: true, side: 'right' },
+        fontSize: 14,
+        fontFamily: 'Menlo, Monaco, Courier New, monospace',
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        formatOnPaste: true,
+        formatOnType: true,
+        tabSize: 2,
+        insertSpaces: true,
+        useTabStops: true,
+      });
 
-    // Listen for changes
-    editor.onDidChangeModelContent(() => {
-      onChange?.(editor.getValue());
-    });
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs-light');
 
-    isInitialized = true;
+      editor.onDidChangeModelContent(() => {
+        onChange?.(editor.getValue());
+      });
+
+      isInitialized = true;
+    }
+
+    void initEditor();
 
     return () => {
+      disposed = true;
       editor?.dispose();
     };
+  });
+
+  $effect(() => {
+    if (!editor) return;
+    const currentValue = editor.getValue();
+    if (value !== currentValue) editor.setValue(value);
+  });
+
+  $effect(() => {
+    if (!editor || !monaco) return;
+    const currentModel = editor.getModel();
+    if (currentModel) monaco.editor.setModelLanguage(currentModel, language);
   });
 
   function handleLanguageChange(e: any) {
@@ -108,7 +124,7 @@
 <div class="monaco-wrapper" style="height: {height}">
   <div class="editor-toolbar">
     <div class="toolbar-left">
-      <select class="language-select" value={language} on:change={handleLanguageChange}>
+      <select class="language-select" value={language} onchange={handleLanguageChange}>
         {#each languages as lang}
           <option value={lang}>{lang}</option>
         {/each}
@@ -116,13 +132,13 @@
     </div>
 
     <div class="toolbar-right">
-      <button class="toolbar-btn" title="Undo" on:click={handleUndo}>
+      <button type="button" class="toolbar-btn" title="Undo" onclick={handleUndo}>
         <Icons.Undo2 size={14} />
       </button>
-      <button class="toolbar-btn" title="Redo" on:click={handleRedo}>
+      <button type="button" class="toolbar-btn" title="Redo" onclick={handleRedo}>
         <Icons.Redo2 size={14} />
       </button>
-      <button class="toolbar-btn" title="Format (Alt+Shift+F)" on:click={handleFormat}>
+      <button type="button" class="toolbar-btn" title="Format (Alt+Shift+F)" onclick={handleFormat}>
         <Icons.Wand2 size={14} />
       </button>
     </div>

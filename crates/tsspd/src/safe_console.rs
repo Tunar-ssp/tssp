@@ -8,7 +8,6 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsoleCommand {
@@ -87,6 +86,154 @@ pub async fn list_commands() -> impl IntoResponse {
     Json(commands)
 }
 
+fn get_disk_usage() -> Result<String, String> {
+    // Read /proc/mounts and stat each filesystem
+    std::fs::read_to_string("/proc/mounts")
+        .map_err(|e| e.to_string())
+        .and_then(|mounts| {
+            let mut output = String::new();
+            for line in mounts.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() > 1 {
+                    let path = parts[1];
+                    if let Ok(stat) = rustix::fs::statvfs(path) {
+                        let block_size = stat.f_bsize as u64;
+                        let total_blocks = stat.f_blocks as u64;
+                        let free_blocks = stat.f_bfree as u64;
+
+                        let total = total_blocks * block_size / (1024 * 1024 * 1024);
+                        let used = (total_blocks - free_blocks) * block_size / (1024 * 1024 * 1024);
+                        let percent = if total > 0 { (used * 100) / total } else { 0 };
+
+                        output.push_str(&format!("{:<20} {:>8}G {:>8}G {:>3}% {}\n",
+                            format!("{}:", path), total, used, percent, path));
+                    }
+                }
+            }
+            Ok(output)
+        })
+}
+
+fn get_memory_usage() -> Result<String, String> {
+    std::fs::read_to_string("/proc/meminfo")
+        .map_err(|e| e.to_string())
+        .map(|content| {
+            let mut mem_total = 0u64;
+            let mut mem_available = 0u64;
+
+            for line in content.lines() {
+                if let Some(value_str) = line.strip_prefix("MemTotal:") {
+                    mem_total = value_str.trim().split_whitespace().next()
+                        .and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+                } else if let Some(value_str) = line.strip_prefix("MemAvailable:") {
+                    mem_available = value_str.trim().split_whitespace().next()
+                        .and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+                }
+            }
+
+            let used = (mem_total - mem_available) / 1024;
+            let total = mem_total / 1024;
+            let percent = if total > 0 { (used * 100) / total } else { 0 };
+
+            format!("Mem:  {:>8}M {:>8}M {:>3}%\n", total, used, percent)
+        })
+}
+
+fn get_uptime() -> Result<String, String> {
+    std::fs::read_to_string("/proc/uptime")
+        .map_err(|e| e.to_string())
+        .and_then(|content| {
+            content.split_whitespace().next()
+                .and_then(|s| s.parse::<f64>().ok())
+                .map(|seconds| {
+                    let days = seconds as u64 / 86400;
+                    let hours = (seconds as u64 % 86400) / 3600;
+                    let minutes = (seconds as u64 % 3600) / 60;
+
+                    format!("up {:.0}d {:.0}h {:.0}m\n", days, hours, minutes)
+                })
+                .ok_or_else(|| "Could not parse uptime".to_string())
+        })
+}
+
+fn get_top_processes() -> Result<String, String> {
+    // Simple process listing from /proc
+    let mut processes = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            if let Ok(filename) = entry.file_name().into_string() {
+                if filename.chars().all(|c| c.is_ascii_digit()) {
+                    let stat_path = format!("/proc/{}/stat", filename);
+                    if let Ok(stat_content) = std::fs::read_to_string(&stat_path) {
+                        // Basic parsing: get process name and CPU info
+                        if let Some(open_paren) = stat_content.find('(') {
+                            if let Some(close_paren) = stat_content.find(')') {
+                                let name = &stat_content[open_paren + 1..close_paren];
+                                processes.push((filename, name.to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    processes.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut output = String::from("PID     COMMAND\n");
+    for (pid, name) in processes.iter().take(10) {
+        output.push_str(&format!("{:<6} {}\n", pid, name));
+    }
+    Ok(output)
+}
+
+fn get_network_info() -> Result<String, String> {
+    let mut output = String::new();
+
+    if let Ok(entries) = std::fs::read_dir("/sys/class/net") {
+        for entry in entries.flatten() {
+            if let Ok(filename) = entry.file_name().into_string() {
+                output.push_str(&format!("{}\n", filename));
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+fn get_temperature() -> Result<String, String> {
+    std::fs::read_to_string("/sys/class/thermal/thermal_zone0/temp")
+        .map_err(|e| e.to_string())
+        .map(|temp_str| {
+            if let Ok(temp_millidegrees) = temp_str.trim().parse::<f64>() {
+                let temp_celsius = temp_millidegrees / 1000.0;
+                format!("CPU Temp: {:.1}°C\n", temp_celsius)
+            } else {
+                "N/A\n".to_string()
+            }
+        })
+}
+
+fn get_disk_io() -> Result<String, String> {
+    std::fs::read_to_string("/proc/diskstats")
+        .map_err(|e| e.to_string())
+        .map(|content| {
+            let mut output = String::from("Device            Read(MB)     Write(MB)\n");
+            for line in content.lines().take(5) {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() > 10 {
+                    let device = parts[2];
+                    let read_sectors = parts[5].parse::<u64>().unwrap_or(0);
+                    let write_sectors = parts[9].parse::<u64>().unwrap_or(0);
+                    let read_mb = (read_sectors * 512) / (1024 * 1024);
+                    let write_mb = (write_sectors * 512) / (1024 * 1024);
+                    output.push_str(&format!("{:<15} {:>10} {:>10}\n", device, read_mb, write_mb));
+                }
+            }
+            output
+        })
+}
+
 /// Run a whitelisted console command (admin only)
 pub async fn run_command(
     State(_state): State<()>,
@@ -131,35 +278,75 @@ pub async fn run_command(
     };
 
     let start = std::time::Instant::now();
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(cmd_str)
-        .output();
+
+    let output_str = match req.command.as_str() {
+        "disk_usage" => {
+            // Use /proc/mounts and statfs for disk usage
+            match get_disk_usage() {
+                Ok(s) => s,
+                Err(e) => format!("Error: {}", e),
+            }
+        },
+        "memory_usage" => {
+            // Read /proc/meminfo for memory stats
+            match get_memory_usage() {
+                Ok(s) => s,
+                Err(e) => format!("Error: {}", e),
+            }
+        },
+        "uptime" => {
+            // Read /proc/uptime for uptime
+            match get_uptime() {
+                Ok(s) => s,
+                Err(e) => format!("Error: {}", e),
+            }
+        },
+        "processes" => {
+            // Read /proc files for process info
+            match get_top_processes() {
+                Ok(s) => s,
+                Err(e) => format!("Error: {}", e),
+            }
+        },
+        "network" => {
+            // Read /sys/class/net for network interfaces
+            match get_network_info() {
+                Ok(s) => s,
+                Err(e) => format!("Error: {}", e),
+            }
+        },
+        "temperature" => {
+            // Read /sys/class/thermal for temp
+            match get_temperature() {
+                Ok(s) => s,
+                Err(e) => format!("N/A"),
+            }
+        },
+        "disk_io" => {
+            // Read /proc/diskstats for I/O info
+            match get_disk_io() {
+                Ok(s) => s,
+                Err(e) => format!("iostat not available"),
+            }
+        },
+        "file_count" => {
+            // This requires directory walking - just return a message for now
+            "File counting requires bulk operation. Use admin API for accurate count.".to_string()
+        },
+        _ => "Unknown command".to_string(),
+    };
 
     let duration = start.elapsed();
 
-    match output {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let code = output.status.code().unwrap_or(-1);
-
-            (
-                StatusCode::OK,
-                Json(CommandOutput {
-                    command: req.command,
-                    output: stdout,
-                    exit_code: code,
-                    duration_ms: duration.as_millis(),
-                }),
-            )
-                .into_response()
-        }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "error": format!("Failed to execute: {}", e)
-            })),
-        )
-            .into_response(),
-    }
+    (
+        StatusCode::OK,
+        Json(CommandOutput {
+            command: req.command,
+            output: output_str,
+            exit_code: 0,
+            duration_ms: duration.as_millis(),
+        }),
+    )
+        .into_response()
+}
 }

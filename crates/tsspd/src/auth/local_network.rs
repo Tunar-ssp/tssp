@@ -36,13 +36,19 @@ pub fn client_ip(
 ) -> IpAddr {
     // Only trust X-Forwarded-For if:
     // 1. trust_forwarded is enabled AND
-    // 2. peer IP is in the trusted proxy list
+    // 2. trusted_proxies is configured (not empty) AND
+    // 3. peer IP is in the trusted proxy list
     if !trust_forwarded {
         return peer;
     }
 
+    // If trusted_proxies is empty, never trust the header (fail-safe)
+    if trusted_proxies.is_empty() {
+        return peer;
+    }
+
     // If peer is not a trusted proxy, ignore the header completely
-    if !trusted_proxies.is_empty() && !trusted_proxies.contains(&peer) {
+    if !trusted_proxies.contains(&peer) {
         return peer;
     }
 
@@ -112,10 +118,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_trusted_proxy_list_allows_all() {
+    fn empty_trusted_proxy_list_rejects_forwarded_for() {
         let peer = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1));
         let ip = client_ip(peer, Some("203.0.113.5"), true, &[]);
-        // Empty trusted list means all peers are allowed (backward compat)
-        assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5)));
+        // Empty trusted list means we never trust X-Forwarded-For (fail-safe)
+        assert_eq!(ip, peer);
     }
 }
