@@ -12,6 +12,14 @@
   let contextMenu = { visible: false, x: 0, y: 0, file: null as any };
   let fileInput: HTMLInputElement;
   let filterQuery = '';
+  let viewMode: 'list' | 'grid' = (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'list') || 'list';
+
+  function toggleViewMode(mode: 'list' | 'grid') {
+    viewMode = mode;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('driveViewMode', mode);
+    }
+  }
 
   onMount(async () => {
     await loadFiles();
@@ -102,6 +110,25 @@
     <div class="search-bar">
       <Icons.Search size={16} />
       <input type="text" placeholder="Search files..." bind:value={filterQuery} />
+      <div style="flex: 1" />
+      <div class="view-toggle">
+        <button
+          class="toggle-btn"
+          class:active={viewMode === 'list'}
+          on:click={() => toggleViewMode('list')}
+          title="List view"
+        >
+          <Icons.List size={16} />
+        </button>
+        <button
+          class="toggle-btn"
+          class:active={viewMode === 'grid'}
+          on:click={() => toggleViewMode('grid')}
+          title="Grid view"
+        >
+          <Icons.Grid2x2 size={16} />
+        </button>
+      </div>
     </div>
 
     <div class="files-container">
@@ -116,10 +143,10 @@
           <h3>No files</h3>
           <p>Drop files here or click upload to get started</p>
         </div>
-      {:else}
+      {:else if viewMode === 'list'}
         <div class="files-list">
           {#each filteredFiles as file (file.id)}
-            <div 
+            <div
               class="file-row"
               on:contextmenu={(e) => showContextMenu(e, file)}
             >
@@ -137,10 +164,10 @@
 
               <div class="file-actions">
                 {#if file.pinned_at}
-                  <Icons.Pin size={14} class="pinned" />
+                  <Icons.Pin size={14} style="color: var(--orange)" />
                 {/if}
                 {#if file.public}
-                  <Icons.Share2 size={14} class="shared" />
+                  <Icons.Share2 size={14} style="color: var(--green)" />
                 {/if}
                 <button class="action-btn" on:click={() => handleDownload(file)}>
                   <Icons.Download size={14} />
@@ -148,6 +175,31 @@
                 <button class="action-btn" on:click={(e) => showContextMenu(e, file)}>
                   <Icons.MoreVertical size={14} />
                 </button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="files-grid">
+          {#each filteredFiles as file (file.id)}
+            <div
+              class="file-card"
+              on:contextmenu={(e) => showContextMenu(e, file)}
+            >
+              <div class="file-card-icon">
+                <FileIcon mimeType={file.mime_type} name={file.name} size={32} />
+              </div>
+              <div class="file-card-name">{file.name}</div>
+              <div class="file-card-meta">
+                {(file.size_bytes / 1024 / 1024).toFixed(1)} MB
+              </div>
+              <div class="file-card-actions">
+                {#if file.pinned_at}
+                  <Icons.Pin size={12} style="color: var(--orange)" />
+                {/if}
+                {#if file.public}
+                  <Icons.Share2 size={12} style="color: var(--green)" />
+                {/if}
               </div>
             </div>
           {/each}
@@ -231,13 +283,13 @@
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     background: var(--surface);
     color: var(--muted);
   }
 
   .search-bar input {
-    flex: 1;
+    flex: 0 1 300px;
     border: none;
     background: transparent;
     color: var(--text);
@@ -247,6 +299,40 @@
 
   .search-bar input::placeholder {
     color: var(--muted);
+  }
+
+  .view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    background: var(--surface-2);
+  }
+
+  .toggle-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+
+  .toggle-btn:hover {
+    color: var(--text);
+  }
+
+  .toggle-btn.active {
+    background: var(--surface-3);
+    color: var(--blue);
   }
 
   .files-container {
@@ -385,5 +471,70 @@
   .action-btn:hover {
     background: var(--surface-2);
     color: var(--text);
+  }
+
+  .files-grid {
+    flex: 1;
+    overflow: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .file-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-3);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+    position: relative;
+  }
+
+  .file-card:hover {
+    background: var(--surface-2);
+    border-color: var(--text-2);
+  }
+
+  .file-card-icon {
+    flex-shrink: 0;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+  }
+
+  .file-card-name {
+    font-size: var(--fs-12);
+    font-weight: 500;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+    width: 100%;
+  }
+
+  .file-card-meta {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .file-card-actions {
+    display: flex;
+    gap: 4px;
+    position: absolute;
+    top: 8px;
+    right: 8px;
   }
 </style>
