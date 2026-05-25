@@ -50,7 +50,7 @@ export async function createNewNote() {
   try {
     const newNote = await api.createNote({
       title: 'Untitled Note',
-      body: '',
+      body: '# New Note\n',
       tags: [],
     });
     notes.update(n => [newNote, ...n]);

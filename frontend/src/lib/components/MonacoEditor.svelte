@@ -40,11 +40,14 @@
     let disposed = false;
 
     async function initEditor() {
-      const monacoModule = await import('monaco-editor');
-      if (disposed) return;
+      try {
+        const monacoModule = await import('monaco-editor');
+        if (disposed) return;
 
-      monaco = monacoModule.default;
-      editor = monaco.editor.create(container, {
+        monaco = monacoModule.default || monacoModule;
+        if (!monaco?.editor) return;
+
+        editor = monaco.editor.create(container, {
         value,
         language,
         theme: 'vs-dark',
@@ -70,6 +73,9 @@
       });
 
       isInitialized = true;
+      } catch (err) {
+        console.error('Failed to initialize Monaco:', err);
+      }
     }
 
     void initEditor();
