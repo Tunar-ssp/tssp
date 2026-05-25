@@ -54,7 +54,7 @@ export interface Workspace {
 const BASE = '/api/v1';
 
 async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch('/api/auth' + path, {
+  const res = await fetch('/api/v1/auth' + path, {
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
@@ -74,7 +74,7 @@ async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function devicesRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch('/api/devices' + path, {
+  const res = await fetch('/api/v1/auth/devices' + path, {
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
@@ -94,7 +94,7 @@ async function devicesRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function shareRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch('/api/share' + path, {
+  const res = await fetch('/api/v1/files' + path + '/share', {
     credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
@@ -481,23 +481,19 @@ export const api = {
     ),
 
   // Chunked upload
-  startUpload: (folder?: string) =>
+  startUpload: (filename: string, totalSize: number, folder?: string) =>
     request<{ session_id: string; chunk_size: number }>('/files/upload/start', {
       method: 'POST',
-      body: JSON.stringify({ folder: folder || '' }),
+      body: JSON.stringify({ filename, total_size: totalSize, folder_path: folder || '' }),
     }),
-  uploadChunk: (sessionId: string, index: number, chunk: Blob) => {
-    const formData = new FormData();
-    formData.append('chunk', chunk);
-    return request<{ session_id: string; chunk_index: number }>(
+  uploadChunk: (sessionId: string, index: number, chunk: Blob) =>
+    request<{ session_id: string; chunk_index: number }>(
       `/files/upload/${encodeURIComponent(sessionId)}/chunk/${index}`,
       {
-        method: 'PUT',
-        body: formData,
-        headers: {}, // Remove Content-Type to let browser set it with boundary
+        method: 'POST',
+        body: chunk,
       }
-    );
-  },
+    ),
   completeUpload: (sessionId: string, files: Array<{ name: string; mime_type: string }>) =>
     request<{ schema_version: number; files: FileRecord[] }>(
       `/files/upload/${encodeURIComponent(sessionId)}`,

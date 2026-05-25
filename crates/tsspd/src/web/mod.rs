@@ -102,15 +102,18 @@ fn web_v2_mime(path: &FsPath) -> &'static str {
     }
 }
 
-fn serve_web_v2_index_from_dir(base: &FsPath) -> Response<Body> {
+async fn serve_web_v2_index_from_dir(base: &FsPath) -> Response<Body> {
     let index = base.join("index.html");
-    let Ok(bytes) = std::fs::read(&index) else {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            [(CONTENT_TYPE, "text/plain; charset=utf-8")],
-            WEB_V2_MISSING_MESSAGE,
-        )
-            .into_response();
+    let bytes = match tokio::fs::read(&index).await {
+        Ok(b) => b,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+                WEB_V2_MISSING_MESSAGE,
+            )
+                .into_response();
+        }
     };
     let mut response = response_with_file_bytes(
         bytes,
@@ -122,49 +125,52 @@ fn serve_web_v2_index_from_dir(base: &FsPath) -> Response<Body> {
     response
 }
 
-fn serve_web_v2_path_from_dir(base: &FsPath, requested: &str) -> Response<Body> {
+async fn serve_web_v2_path_from_dir(base: &FsPath, requested: &str) -> Response<Body> {
     let normalized = requested.trim_start_matches('/');
     if normalized.contains("..") {
         return StatusCode::NOT_FOUND.into_response();
     }
     if normalized.is_empty() {
-        return serve_web_v2_index_from_dir(base);
+        return serve_web_v2_index_from_dir(base).await;
     }
 
     let candidate = base.join(normalized);
-    if candidate.is_file() {
-        let Ok(bytes) = std::fs::read(&candidate) else {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        };
-        let cache = if normalized == "index.html" {
-            Some("no-store, max-age=0")
-        } else {
-            Some("public, max-age=86400, immutable")
-        };
-        let mut response = response_with_file_bytes(bytes, web_v2_mime(&candidate), cache);
-        if normalized == "index.html" {
-            response
-                .headers_mut()
-                .insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(HTML_CSP));
+    match tokio::fs::metadata(&candidate).await {
+        Ok(meta) if meta.is_file() => {
+            let Ok(bytes) = tokio::fs::read(&candidate).await else {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            };
+            let cache = if normalized == "index.html" {
+                Some("no-store, max-age=0")
+            } else {
+                Some("public, max-age=86400, immutable")
+            };
+            let mut response = response_with_file_bytes(bytes, web_v2_mime(&candidate), cache);
+            if normalized == "index.html" {
+                response
+                    .headers_mut()
+                    .insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(HTML_CSP));
+            }
+            return response;
         }
-        return response;
+        _ => {}
     }
 
     if normalized.starts_with("assets/") || normalized.contains('.') {
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    serve_web_v2_index_from_dir(base)
+    serve_web_v2_index_from_dir(base).await
 }
 
 /// Serves the built Svelte/Vite preview bundle at `/app-v2`.
 pub(crate) async fn serve_web_v2_index() -> Response<Body> {
-    serve_web_v2_index_from_dir(&web_v2_dir())
+    serve_web_v2_index_from_dir(&web_v2_dir()).await
 }
 
 /// Serves the built Svelte/Vite preview bundle paths at `/app-v2/{*path}`.
 pub(crate) async fn serve_web_v2_path(Path(path): Path<String>) -> Response<Body> {
-    serve_web_v2_path_from_dir(&web_v2_dir(), &path)
+    serve_web_v2_path_from_dir(&web_v2_dir(), &path).await
 }
 
 /// SPA fallback: static assets, otherwise `index.html`.

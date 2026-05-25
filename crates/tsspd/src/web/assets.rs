@@ -1,173 +1,37 @@
-//! Embedded dashboard static assets.
+//! Legacy assets are deprecated. New Svelte frontend served from assets/web-v2.
 
-pub(crate) const INDEX_HTML: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/index.html"
-));
-pub(crate) const MANIFEST: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/manifest.webmanifest"
-));
-pub(crate) const SERVICE_WORKER: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/sw.js"));
+pub(crate) const INDEX_HTML: &str = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TSSP</title>
+  <script>window.location.href = '/app-v2';</script>
+</head>
+<body>
+  Redirecting to application...
+</body>
+</html>"#;
 
-pub(crate) const CSS_TOKENS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/tokens.css"
-));
-pub(crate) const CSS_BASE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/base.css"
-));
-pub(crate) const CSS_LAYOUT: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/layout.css"
-));
-pub(crate) const CSS_COMPONENTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/components.css"
-));
-pub(crate) const CSS_VIEWS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/views.css"
-));
-pub(crate) const CSS_MOBILE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/mobile.css"
-));
-pub(crate) const CSS_PRODUCT: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/css/product.css"
-));
-
-pub(crate) const JS_API: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/api.js"));
-pub(crate) const JS_UI_FORMAT: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/ui/format.js"
-));
-pub(crate) const JS_UI_RENDER: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/ui/render.js"
-));
-pub(crate) const JS_UI_TOAST: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/ui/toast.js"
-));
-pub(crate) const JS_UI_DIALOGS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/ui/dialogs.js"
-));
-pub(crate) const JS_STATE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/state.js"
-));
-pub(crate) const JS_UPLOAD: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/upload.js"
-));
-pub(crate) const JS_FEATURE_OVERVIEW: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/features/overview.js"
-));
-pub(crate) const JS_FEATURE_SEARCH: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/features/search.js"
-));
-pub(crate) const JS_FEATURE_MEDIA: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/features/media.js"
-));
-pub(crate) const JS_FEATURE_PUBLIC: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/features/public.js"
-));
-pub(crate) const JS_FEATURE_COMMAND_PALETTE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/features/command_palette.js"
-));
-pub(crate) const JS_FEATURE_WORKSPACES: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/features/workspaces.js"
-));
-pub(crate) const JS_FILES: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/files.js"
-));
-pub(crate) const JS_NOTES: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/notes.js"
-));
-pub(crate) const JS_ADMIN: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/admin.js"
-));
-pub(crate) const JS_EDITOR: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/assets/web/js/editor.js"
-));
-pub(crate) const JS_APP: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/js/app.js"));
-pub(crate) const LEGACY_APP: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/web/app.js"));
-pub(crate) const LEGACY_APP_CSS: &str = r#"@import url("/assets/css/tokens.css?v=2026-05-24-5");
-@import url("/assets/css/base.css?v=2026-05-24-5");
-@import url("/assets/css/layout.css?v=2026-05-24-5");
-@import url("/assets/css/components.css?v=2026-05-24-5");
-@import url("/assets/css/views.css?v=2026-05-24-5");
-@import url("/assets/css/mobile.css?v=2026-05-24-5");
-@import url("/assets/css/product.css?v=2026-05-24-5");
+pub(crate) const SERVICE_WORKER: &str = r#"const CACHE_VERSION = 'v2026-05-25-tssp';
+const CACHE_ASSETS = [
+  '/app-v2',
+  '/app-v2/index.html',
+  '/api/v1/status',
+];
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => self.clients.claim());
 "#;
 
 pub(crate) const HTML_CSP: &str =
     "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; \
      img-src 'self' data: blob:; base-uri 'self'; form-action 'self'";
 
-/// Lookup embedded asset bytes and MIME type by path under `assets/web/`.
+/// Legacy asset lookup - all assets now served from /app-v2.
 pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
     match path {
         "index.html" => Some((INDEX_HTML, "text/html; charset=utf-8")),
-        "manifest.webmanifest" => Some((MANIFEST, "application/manifest+json; charset=utf-8")),
         "sw.js" => Some((SERVICE_WORKER, "application/javascript; charset=utf-8")),
-        "css/tokens.css" => Some((CSS_TOKENS, "text/css; charset=utf-8")),
-        "css/base.css" => Some((CSS_BASE, "text/css; charset=utf-8")),
-        "css/layout.css" => Some((CSS_LAYOUT, "text/css; charset=utf-8")),
-        "css/components.css" => Some((CSS_COMPONENTS, "text/css; charset=utf-8")),
-        "css/views.css" => Some((CSS_VIEWS, "text/css; charset=utf-8")),
-        "css/mobile.css" => Some((CSS_MOBILE, "text/css; charset=utf-8")),
-        "css/product.css" => Some((CSS_PRODUCT, "text/css; charset=utf-8")),
-        "js/api.js" => Some((JS_API, "application/javascript; charset=utf-8")),
-        "js/ui/format.js" => Some((JS_UI_FORMAT, "application/javascript; charset=utf-8")),
-        "js/ui/render.js" => Some((JS_UI_RENDER, "application/javascript; charset=utf-8")),
-        "js/ui/toast.js" => Some((JS_UI_TOAST, "application/javascript; charset=utf-8")),
-        "js/ui/dialogs.js" => Some((JS_UI_DIALOGS, "application/javascript; charset=utf-8")),
-        "js/state.js" => Some((JS_STATE, "application/javascript; charset=utf-8")),
-        "js/upload.js" => Some((JS_UPLOAD, "application/javascript; charset=utf-8")),
-        "js/features/overview.js" => {
-            Some((JS_FEATURE_OVERVIEW, "application/javascript; charset=utf-8"))
-        }
-        "js/features/search.js" => {
-            Some((JS_FEATURE_SEARCH, "application/javascript; charset=utf-8"))
-        }
-        "js/features/media.js" => Some((JS_FEATURE_MEDIA, "application/javascript; charset=utf-8")),
-        "js/features/public.js" => {
-            Some((JS_FEATURE_PUBLIC, "application/javascript; charset=utf-8"))
-        }
-        "js/features/command_palette.js" => Some((
-            JS_FEATURE_COMMAND_PALETTE,
-            "application/javascript; charset=utf-8",
-        )),
-        "js/features/workspaces.js" => Some((
-            JS_FEATURE_WORKSPACES,
-            "application/javascript; charset=utf-8",
-        )),
-        "js/files.js" => Some((JS_FILES, "application/javascript; charset=utf-8")),
-        "js/notes.js" => Some((JS_NOTES, "application/javascript; charset=utf-8")),
-        "js/admin.js" => Some((JS_ADMIN, "application/javascript; charset=utf-8")),
-        "js/editor.js" => Some((JS_EDITOR, "application/javascript; charset=utf-8")),
-        "js/app.js" => Some((JS_APP, "application/javascript; charset=utf-8")),
-        "app.js" => Some((LEGACY_APP, "application/javascript; charset=utf-8")),
-        "app.css" => Some((LEGACY_APP_CSS, "text/css; charset=utf-8")),
         _ => None,
     }
 }

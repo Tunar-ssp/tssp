@@ -30,7 +30,7 @@ export async function startChunkedUpload(
   folder: string
 ): Promise<string | null> {
   try {
-    const data = await api.startUpload(folder);
+    const data = await api.startUpload(file.name, file.size, folder);
     return data.session_id;
   } catch (err) {
     console.error('Error starting upload:', err);

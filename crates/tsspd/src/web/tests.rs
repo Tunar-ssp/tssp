@@ -19,14 +19,9 @@ use super::{
 
 #[tokio::test]
 async fn serve_asset_returns_modular_css() {
+    // Legacy CSS assets are no longer embedded; new Svelte app handles styling
     let response = serve_asset(axum::extract::Path("css/tokens.css".to_owned())).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let ct = response
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    assert!(ct.contains("text/css"));
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -80,8 +75,9 @@ async fn web_fallback_serves_index_with_security_headers() {
         .await
         .unwrap_or_else(|e| panic!("body read: {e}"));
     let text = String::from_utf8_lossy(&body);
+    // Index now redirects to /app-v2
     assert!(text.contains("TSSP"));
-    assert!(text.contains("/assets/js/app.js"));
+    assert!(text.contains("/app-v2"));
 }
 
 #[tokio::test]
@@ -104,14 +100,14 @@ async fn serve_asset_missing_returns_not_found() {
 }
 
 #[tokio::test]
-async fn embedded_index_matches_runtime_fallback() {
-    assert!(INDEX_HTML.contains("login-screen"));
-    assert!(INDEX_HTML.contains("view-admin"));
-    assert!(INDEX_HTML.contains("view-note-editor"));
+async fn embedded_index_redirects_to_app_v2() {
+    // Legacy index.html now redirects to the new Svelte app at /app-v2
+    assert!(INDEX_HTML.contains("/app-v2"));
 }
 
 #[tokio::test]
 async fn serve_asset_returns_new_js_modules() {
+    // Legacy JS modules are no longer embedded; new Svelte app at /app-v2 handles everything
     for path in [
         "js/files.js",
         "js/notes.js",
@@ -121,80 +117,29 @@ async fn serve_asset_returns_new_js_modules() {
         "js/features/overview.js",
     ] {
         let response = serve_asset(axum::extract::Path(path.to_owned())).await;
-        assert_eq!(response.status(), StatusCode::OK, "expected 200 for {path}");
-        let ct = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        assert!(
-            ct.contains("javascript"),
-            "expected JS content-type for {path}"
-        );
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "legacy asset {path} should not exist");
     }
 }
 
 #[tokio::test]
-async fn index_does_not_load_pro_js() {
-    // pro.js was replaced by the four focused modules; it must no longer be referenced
-    assert!(
-        !INDEX_HTML.contains("pro.js"),
-        "index.html must not load the removed pro.js"
-    );
-    assert!(INDEX_HTML.contains("files.js"));
-    assert!(INDEX_HTML.contains("notes.js"));
-    assert!(INDEX_HTML.contains("admin.js"));
-    assert!(INDEX_HTML.contains("ui/format.js"));
-    assert!(INDEX_HTML.contains("features/search.js"));
-    assert!(!INDEX_HTML.contains("views.js"));
-    assert!(!INDEX_HTML.contains("/assets/app.js"));
+async fn index_redirects_to_new_app() {
+    // Legacy index.html has been replaced with redirect to new Svelte app
+    assert!(!INDEX_HTML.contains("pro.js"));
+    assert!(!INDEX_HTML.contains("files.js"));
+    assert!(!INDEX_HTML.contains("notes.js"));
+    assert!(INDEX_HTML.contains("/app-v2"));
 }
 
 #[tokio::test]
-async fn service_worker_cache_list_matches_current_assets() {
-    for path in [
-        "/assets/css/tokens.css",
-        "/assets/css/base.css",
-        "/assets/css/layout.css",
-        "/assets/css/components.css",
-        "/assets/css/views.css",
-        "/assets/css/mobile.css",
-        "/assets/css/product.css",
-        "/assets/manifest.webmanifest",
-        "/assets/js/api.js",
-        "/assets/js/ui/format.js",
-        "/assets/js/ui/render.js",
-        "/assets/js/ui/toast.js",
-        "/assets/js/ui/dialogs.js",
-        "/assets/js/state.js",
-        "/assets/js/upload.js",
-        "/assets/js/features/overview.js",
-        "/assets/js/features/search.js",
-        "/assets/js/features/media.js",
-        "/assets/js/features/public.js",
-        "/assets/js/features/command_palette.js",
-        "/assets/js/features/workspaces.js",
-        "/assets/js/files.js",
-        "/assets/js/notes.js",
-        "/assets/js/admin.js",
-        "/assets/js/editor.js",
-        "/assets/js/app.js",
-        "/assets/app.js",
-        "/assets/app.css",
-    ] {
-        assert!(
-            SERVICE_WORKER.contains(path),
-            "service worker cache list should include {path}"
-        );
-    }
-    assert!(!SERVICE_WORKER.contains("/assets/js/pro.js"));
-    assert!(!SERVICE_WORKER.contains("/assets/js/views.js"));
-    assert!(SERVICE_WORKER.contains("/assets/app.js"));
-    assert!(SERVICE_WORKER.contains("/assets/app.css"));
+async fn service_worker_caches_new_app() {
+    // Service worker now caches the new app at /app-v2
+    assert!(SERVICE_WORKER.contains("/app-v2"));
+    assert!(SERVICE_WORKER.contains("CACHE_VERSION"));
 }
 
 #[tokio::test]
 async fn serve_asset_returns_ui_modules() {
+    // Legacy UI modules are no longer embedded; new Svelte app handles this
     for path in [
         "js/ui/format.js",
         "js/ui/render.js",
@@ -202,23 +147,15 @@ async fn serve_asset_returns_ui_modules() {
         "js/ui/dialogs.js",
     ] {
         let response = serve_asset(axum::extract::Path(path.to_owned())).await;
-        assert_eq!(response.status(), StatusCode::OK, "missing asset: {path}");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "legacy asset {path} should not exist");
     }
 }
 
 #[tokio::test]
 async fn serve_asset_returns_console_css_via_views() {
-    // Console CSS ships inside views.css — verify the stylesheet is served correctly
+    // Legacy CSS files are no longer embedded; new Svelte app handles styling
     let response = serve_asset(axum::extract::Path("css/views.css".to_owned())).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(response.into_body(), 256_000)
-        .await
-        .unwrap_or_else(|e| panic!("body read: {e}"));
-    let text = String::from_utf8_lossy(&body);
-    assert!(
-        text.contains("console-layout"),
-        "views.css must include console panel styles"
-    );
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -229,7 +166,7 @@ async fn web_v2_preview_serves_built_asset_from_directory() {
     fs::write(assets_dir.join("index.js"), "console.log('v2');")
         .unwrap_or_else(|error| panic!("write failed: {error}"));
 
-    let response = serve_web_v2_path_from_dir(dir.path(), "assets/index.js");
+    let response = serve_web_v2_path_from_dir(dir.path(), "assets/index.js").await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response
@@ -255,7 +192,7 @@ async fn web_v2_preview_falls_back_to_index_for_client_route() {
     )
     .unwrap_or_else(|error| panic!("write failed: {error}"));
 
-    let response = serve_web_v2_path_from_dir(dir.path(), "notes");
+    let response = serve_web_v2_path_from_dir(dir.path(), "notes").await;
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().get(CONTENT_SECURITY_POLICY).is_some());
     let body = axum::body::to_bytes(response.into_body(), 256_000)
@@ -267,7 +204,7 @@ async fn web_v2_preview_falls_back_to_index_for_client_route() {
 #[tokio::test]
 async fn web_v2_preview_reports_missing_bundle_helpfully() {
     let dir = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
-    let response = serve_web_v2_index_from_dir(dir.path());
+    let response = serve_web_v2_index_from_dir(dir.path()).await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body = axum::body::to_bytes(response.into_body(), 256_000)
         .await

@@ -623,16 +623,31 @@ pub async fn complete_upload(
 
     let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
     let total_chunks = session.uploaded_chunks.len();
+    let upload_temp_dir = state.upload_temp_dir.clone();
 
     // Assemble chunks into a single temp file with hash computation to avoid double-write
-    let (assembled_path, content_hash, file_size) = match assemble_chunks_to_temp(&chunk_dir, total_chunks, &state.upload_temp_dir) {
-        Ok(result) => result,
-        Err(e) => {
+    // Wrap in spawn_blocking to avoid blocking the async handler thread
+    let chunk_dir_for_assembly = chunk_dir.clone();
+    let (assembled_path, content_hash, file_size) = match tokio::task::spawn_blocking(move || {
+        assemble_chunks_to_temp(&chunk_dir_for_assembly, total_chunks, &upload_temp_dir)
+    })
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
             let _ = std::fs::remove_dir_all(&chunk_dir);
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "assembly_error",
                 &format!("failed to assemble chunks: {e}"),
+            );
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&chunk_dir);
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "spawn_error",
+                &format!("failed to spawn assembly task: {e}"),
             );
         }
     };
