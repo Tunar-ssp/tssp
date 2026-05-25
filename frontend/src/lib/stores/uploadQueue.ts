@@ -155,11 +155,14 @@ function createStoreInstance() {
   return {
     subscribe,
     addFiles: async (files: FileList, folder: string = '') => {
-      const newItems = Array.from(files).map((file) =>
-        createUploadQueueItem(file, folder)
-      );
+      const newItems: UploadQueueItem[] = [];
 
-      for (const item of newItems) {
+      // Create items and register files
+      for (const file of files) {
+        const item = createUploadQueueItem(file, folder);
+        registerFileForUpload(item.id, file);
+        newItems.push(item);
+
         try {
           await saveItemToDb(item);
         } catch (err) {
@@ -221,6 +224,8 @@ function createStoreInstance() {
         console.error('Failed to delete item from IndexedDB:', err);
       }
 
+      unregisterFileForUpload(id);
+
       update((store) => ({
         ...store,
         items: store.items.filter((i) => i.id !== id),
@@ -266,20 +271,93 @@ function createStoreInstance() {
 
 export const uploadQueue = createStoreInstance();
 
+let fileMap = new Map<string, File>();
+
+function registerFileForUpload(uploadId: string, file: File) {
+  fileMap.set(uploadId, file);
+}
+
+function getFileForUpload(uploadId: string): File | undefined {
+  return fileMap.get(uploadId);
+}
+
+function unregisterFileForUpload(uploadId: string) {
+  fileMap.delete(uploadId);
+}
+
 async function processQueue() {
-  // This is a placeholder that will be implemented to:
-  // 1. Process uploads in FIFO order
-  // 2. Limit concurrent uploads to MAX_CONCURRENT_UPLOADS
-  // 3. Use the new /api/v1/files/upload/* endpoints
-  // 4. Implement retry logic with exponential backoff
-  // 5. Update progress tracking
-  // 6. Persist state after each chunk upload
-  //
-  // For now, this is a foundation that:
-  // - Persists upload queue to IndexedDB
-  // - Tracks upload progress
-  // - Provides retry mechanism
-  // - Recovers from page refresh
-  //
-  // Full implementation coming next.
+  // Process uploads in background: up to MAX_CONCURRENT_UPLOADS at a time
+  // This will be called after files are added to the queue
+  const { startChunkedUpload, uploadChunk, completeUpload } = await import('../services/chunkedUploadService');
+
+  const processNextBatch = async () => {
+    let queueState: UploadQueueStore | null = null;
+    const unsubscribe = subscribe((state) => {
+      queueState = state;
+    });
+
+    while (queueState && queueState.items.some((i) => i.status === 'pending')) {
+      const pending = queueState.items.filter((i) => i.status === 'pending');
+      const uploading = queueState.items.filter((i) => i.status === 'uploading');
+
+      if (uploading.length >= MAX_CONCURRENT_UPLOADS || pending.length === 0) {
+        break;
+      }
+
+      const uploadItem = pending[0];
+      const file = getFileForUpload(uploadItem.id);
+
+      if (!file) {
+        // File not available (page refresh), mark as failed
+        const unsubscribe2 = subscribe((state) => {
+          const item = state.items.find((i) => i.id === uploadItem.id);
+          if (item && item.status === 'pending') {
+            item.status = 'failed';
+            item.lastError = 'File not available (recovered upload)';
+          }
+        });
+        unsubscribe2();
+        continue;
+      }
+
+      // Start the upload
+      const subscription = subscribe((state) => {
+        queueState = state;
+      });
+
+      const sessionId = await startChunkedUpload(uploadItem.id, file, uploadItem.folder);
+      if (!sessionId) continue;
+
+      // Upload all chunks
+      let success = true;
+      for (let i = 0; i < uploadItem.totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+
+        const uploaded = await uploadChunk(uploadItem.id, sessionId, i, chunk);
+        if (!uploaded) {
+          success = false;
+          break;
+        }
+      }
+
+      if (success) {
+        await completeUpload(uploadItem.id, sessionId);
+      }
+
+      subscription();
+    }
+
+    unsubscribe();
+
+    // Continue processing if there are more pending items
+    if (queueState && queueState.items.some((i) => i.status === 'pending')) {
+      setTimeout(processNextBatch, 100);
+    }
+  };
+
+  processNextBatch().catch((err) => {
+    console.error('Upload queue processing error:', err);
+  });
 }

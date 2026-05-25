@@ -27,7 +27,8 @@ export const filteredNotes = derived(
 
 export const sortedNotes = derived(filteredNotes, ($notes) =>
   [...$notes].sort((a, b) =>
-    new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    (b.pinned_at ? 1_000_000_000_000 + b.pinned_at : b.updated_at) -
+    (a.pinned_at ? 1_000_000_000_000 + a.pinned_at : a.updated_at)
   )
 );
 

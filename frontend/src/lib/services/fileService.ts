@@ -1,6 +1,7 @@
 import { api } from '../api';
 import { success, error } from '../stores/notifications';
 import { loadFiles } from '../stores/drive';
+import { uploadQueue } from '../stores/uploadQueue';
 
 export async function deleteFile(id: string, name: string) {
   try {
@@ -69,33 +70,18 @@ export async function togglePublic(id: string, isPublic: boolean) {
 
 export async function uploadFiles(files: FileList, folder: string = '') {
   try {
-    const formData = new FormData();
-    let count = 0;
+    const count = files.length;
 
-    for (const file of files) {
-      formData.append('files', file);
-      count++;
-    }
+    // Queue files for chunked, resumable upload with persistence
+    await uploadQueue.addFiles(files, folder);
 
-    if (folder) {
-      formData.append('folder', folder);
-    }
+    success('Uploads Queued', `${count} file(s) queued for resumable upload`);
 
-    const res = await fetch('/api/v1/files/batch', {
-      method: 'POST',
-      body: formData,
-      credentials: 'same-origin',
-    });
-
-    if (!res.ok) {
-      throw new Error(`Upload failed: ${res.statusText}`);
-    }
-
-    await loadFiles();
-    success('Upload Complete', `${count} file(s) uploaded successfully`);
+    // Files will be uploaded in background with progress tracking
+    // Queue persists across page refreshes for recovery
     return true;
   } catch (err: any) {
-    error('Upload Failed', err.message || 'Could not upload files');
+    error('Upload Failed', err.message || 'Could not queue files for upload');
     return false;
   }
 }

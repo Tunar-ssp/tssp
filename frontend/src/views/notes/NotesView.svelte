@@ -179,7 +179,7 @@
   <div class="notes-sidebar">
     <div class="sidebar-header">
       <h2>Notes</h2>
-      <Btn kind="primary" size="sm" on:click={handleCreateNote}>
+      <Btn kind="primary" size="sm" onClick={handleCreateNote}>
         <Icons.Plus size={14} />
       </Btn>
     </div>
@@ -204,13 +204,17 @@
           <button
             class="note-item"
             class:active={$activeNote?.id === note.id}
-            on:click={() => handleSelectNote(note.id)}
-            on:contextmenu={(e) => showContextMenu(e, note)}
+            type="button"
+            onclick={() => handleSelectNote(note.id)}
+            oncontextmenu={(e) => showContextMenu(e, note)}
           >
-            <div class="note-color" style="background: {note.color || '#6ea8ff'}"></div>
+            <div class="note-color" class:pinned={!!note.pinned_at}></div>
             <div class="note-preview">
               <div class="note-title">{note.title || 'Untitled'}</div>
               <div class="note-excerpt">{note.body.substring(0, 40)}...</div>
+              {#if note.tags?.length}
+                <div class="note-tags">{note.tags.slice(0, 3).join(' · ')}</div>
+              {/if}
             </div>
           </button>
         {/each}
@@ -230,14 +234,19 @@
         <input
           type="text"
           bind:value={titleDraft}
-          on:change={handleSaveNote}
+          oninput={scheduleSave}
+          onchange={() => handleSaveNote()}
           class="editor-title"
           placeholder="Note title..."
         />
         <div class="editor-actions">
-          <button class="color-btn" on:click={() => (showColorPicker = !showColorPicker)}>
-            <div class="color-preview" style="background: {noteColor}"></div>
-            Color
+          <button type="button" class="action-chip" onclick={() => handlePinNote($activeNote)}>
+            <Icons.Pin size={14} />
+            {$activeNote.pinned_at ? 'Pinned' : 'Pin'}
+          </button>
+          <button type="button" class="action-chip" onclick={() => handleDuplicateNote($activeNote.id)}>
+            <Icons.Copy size={14} />
+            Duplicate
           </button>
           {#if $isSaving}
             <span class="saving">Saving...</span>
@@ -247,17 +256,30 @@
         </div>
       </div>
 
-      {#if showColorPicker}
-        <div class="color-picker-container">
-          <ColorPicker
-            color={noteColor}
-            onChange={(c) => {
-              noteColor = c;
-              handleSaveNote();
-            }}
-          />
+      <div class="note-meta-strip">
+        <div class="tag-list" aria-label="Note tags">
+          {#if $activeNote.tags?.length}
+            {#each $activeNote.tags as tag}
+              <button type="button" class="tag-chip" onclick={() => removeTag(tag)} title="Remove tag">
+                {tag}
+                <Icons.X size={12} />
+              </button>
+            {/each}
+          {:else}
+            <span class="tag-empty">No tags yet</span>
+          {/if}
         </div>
-      {/if}
+        <form
+          class="tag-form"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void addTag();
+          }}
+        >
+          <input bind:value={tagDraft} placeholder="Add tag" aria-label="Add note tag" />
+          <button type="submit">Add</button>
+        </form>
+      </div>
 
       <div class="editor-main">
         <div class="editor-column">
@@ -265,7 +287,7 @@
             content={bodyDraft}
             onChange={(html) => {
               bodyDraft = html;
-              handleSaveNote();
+              scheduleSave();
             }}
           />
         </div>
@@ -397,10 +419,16 @@
   }
 
   .note-color {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
+    width: 10px;
+    height: 42px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--blue), var(--violet));
     flex-shrink: 0;
+  }
+
+  .note-color.pinned {
+    background: linear-gradient(180deg, var(--yellow), var(--orange));
+    box-shadow: 0 0 18px rgba(251, 191, 36, 0.16);
   }
 
   .note-preview {
@@ -421,6 +449,15 @@
     font-size: var(--fs-11);
     color: var(--muted);
     margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .note-tags {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--blue);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -479,7 +516,7 @@
     margin-left: var(--s-4);
   }
 
-  .color-btn {
+  .action-chip {
     display: flex;
     align-items: center;
     gap: var(--s-2);
@@ -494,14 +531,9 @@
     transition: all var(--duration-quick) var(--ease-smooth);
   }
 
-  .color-btn:hover {
+  .action-chip:hover {
     background: var(--surface-3);
-  }
-
-  .color-preview {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    color: var(--text);
   }
 
   .saving,
@@ -514,10 +546,81 @@
     color: var(--green);
   }
 
-  .color-picker-container {
+  .note-meta-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-4);
     padding: var(--s-4) var(--s-6);
     border-bottom: 1px solid var(--border);
     background: var(--surface);
+  }
+
+  .tag-list {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid rgba(110, 168, 255, 0.22);
+    background: rgba(110, 168, 255, 0.08);
+    color: var(--blue);
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: var(--fs-12);
+    cursor: pointer;
+  }
+
+  .tag-chip:hover {
+    border-color: rgba(110, 168, 255, 0.48);
+    background: rgba(110, 168, 255, 0.14);
+  }
+
+  .tag-empty {
+    color: var(--muted);
+    font-size: var(--fs-12);
+  }
+
+  .tag-form {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    flex-shrink: 0;
+  }
+
+  .tag-form input {
+    width: 132px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    background: var(--bg);
+    color: var(--text);
+    padding: var(--s-2) var(--s-3);
+    font-size: var(--fs-12);
+    outline: none;
+  }
+
+  .tag-form input:focus {
+    border-color: var(--blue);
+  }
+
+  .tag-form button {
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: var(--s-2) var(--s-3);
+    cursor: pointer;
+    font-size: var(--fs-12);
+  }
+
+  .tag-form button:hover {
+    background: var(--surface-3);
   }
 
   .editor-main {
