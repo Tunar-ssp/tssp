@@ -4,6 +4,8 @@
   import { currentView, banner } from '$lib/stores/ui';
   import TopBar from '$lib/components/TopBar.svelte';
   import Dock from '$lib/components/Dock.svelte';
+  import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import HomeView from './views/home/HomeView.svelte';
   import DriveView from './views/drive/DriveView.svelte';
   import NotesView from './views/notes/NotesView.svelte';
   import WorkspaceView from './views/workspace/WorkspaceView.svelte';
@@ -14,18 +16,19 @@
   });
 
   const viewMap = {
+    home: HomeView,
     drive: DriveView,
     notes: NotesView,
     workspace: WorkspaceView,
-    admin: OperationsView,
+    operations: OperationsView,
   };
 
-  $: CurrentView = viewMap[$currentView as keyof typeof viewMap] || DriveView;
+  $: CurrentView = viewMap[$currentView as keyof typeof viewMap] || HomeView;
 </script>
 
 <div class="app">
   <TopBar context={$currentView} />
-  
+
   <div class="shell">
     <main class="main">
       {#if $banner}
@@ -38,6 +41,7 @@
   </div>
 
   <Dock />
+  <CommandPalette />
 </div>
 
 <style>

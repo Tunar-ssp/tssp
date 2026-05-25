@@ -1,7 +1,14 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { onMount } from 'svelte';
 
-  let commands: any[] = [];
+  interface ConsoleCommand {
+    name: string;
+    description: string;
+    category: string;
+  }
+
+  let commands: ConsoleCommand[] = [];
   let selectedCommand: string = '';
   let output: string = '';
   let running = false;
@@ -31,14 +38,16 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command_id: selectedCommand }),
+        body: JSON.stringify({ command: selectedCommand }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        output = data.output || 'Command completed';
+        // Format the output nicely
+        output = `Command: ${data.command}\nStatus: ${data.success ? 'SUCCESS' : 'FAILED'}\n\n${JSON.stringify(data.output, null, 2)}`;
       } else {
-        output = 'Error: ' + res.statusText;
+        const error = await res.json().catch(() => ({}));
+        output = `Error: ${error?.error?.message || res.statusText}`;
       }
     } catch (err: any) {
       output = 'Error: ' + (err.message || 'Failed to run command');
@@ -47,11 +56,9 @@
     }
   }
 
-  const command = commands.find(c => c.id === selectedCommand);
+  const command = commands.find(c => c.name === selectedCommand);
 
   onMount(loadCommands);
-
-  import { onMount } from 'svelte';
 </script>
 
 <div class="safe-console">
@@ -71,19 +78,19 @@
         <label>Select Command:</label>
         <select bind:value={selectedCommand}>
           <option value="">Choose a command...</option>
-          {#each commands as cmd (cmd.id)}
-            <option value={cmd.id}>
-              {cmd.label}
+          {#each commands as cmd (cmd.name)}
+            <option value={cmd.name}>
+              {cmd.name}
             </option>
           {/each}
         </select>
 
         {#if command}
           <div class="command-info">
+            <p class="info-label">Category:</p>
+            <p class="info-text">{command.category}</p>
             <p class="info-label">Description:</p>
             <p class="info-text">{command.description}</p>
-            <p class="info-label">Command:</p>
-            <p class="info-text mono">{command.command}</p>
           </div>
         {/if}
 
@@ -217,14 +224,6 @@
     margin: 0 0 8px;
     font-size: var(--fs-12);
     color: var(--text-2);
-  }
-
-  .info-text.mono {
-    font-family: var(--ff-mono);
-    background: var(--bg);
-    padding: 6px 8px;
-    border-radius: 4px;
-    color: var(--green);
   }
 
   .run-btn {

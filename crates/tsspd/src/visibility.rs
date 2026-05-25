@@ -114,7 +114,7 @@ pub async fn patch_file_visibility(
         Ok(None) => return not_found(),
         Err(message) => return internal(message),
     };
-    if !auth.can_manage_file(&existing) {
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
         return forbidden();
     }
 
@@ -194,7 +194,7 @@ pub async fn bulk_file_visibility(
         let Some(existing) = state.stats_provider.find_file(&file_id).ok().flatten() else {
             continue;
         };
-        if !auth.can_manage_file(&existing) {
+        if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
             continue;
         }
         let token = match visibility {

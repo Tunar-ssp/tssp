@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export const currentView = writable<string>('drive');
+export const currentView = writable<string>('home');
 export const banner = writable<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 export const commandPaletteOpen = writable(false);
 

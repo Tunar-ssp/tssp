@@ -84,6 +84,7 @@ where
                 updated_at: now,
                 tags,
                 pinned_at,
+                folder_path: String::new(),
             })
             .map_err(NoteError::Repository)
     }

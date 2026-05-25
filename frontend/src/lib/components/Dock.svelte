@@ -7,7 +7,7 @@
     { id: 'drive', label: 'Cloud Drive', icon: Cloud },
     { id: 'notes', label: 'Notes', icon: FileText },
     { id: 'workspace', label: 'Workspace', icon: SquareTerminal },
-    { id: 'admin', label: 'Admin', icon: Shield },
+    { id: 'operations', label: 'Operations', icon: Shield },
   ];
 
   function selectApp(id: string) {

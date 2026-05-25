@@ -92,7 +92,11 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_search_indexes(connection)?;
     migrate_content_hash_index(connection)?;
     migrate_workspace_documents_schema(connection)?;
-    notes::migrate_notes_folders(connection)
+    notes::migrate_notes_folders(connection)?;
+    migrate_folder_path_column(connection)?;
+    migrate_soft_delete_columns(connection)?;
+    migrate_audit_events_table(connection)?;
+    migrate_workspace_files_table(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -275,6 +279,105 @@ pub(crate) fn migrate_workspace_documents_schema(
         .map_err(SqliteRepositoryError::Migration)?;
 
     record_migration(connection, 11)?;
+    Ok(())
+}
+
+/// Adds folder_path column to files for folder organization (schema v12).
+pub(crate) fn migrate_folder_path_column(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 12)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE files ADD COLUMN folder_path TEXT DEFAULT '';
+            CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_path);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 12)?;
+    Ok(())
+}
+
+/// Adds soft-delete columns (deleted_at) for trash functionality (schema v13).
+pub(crate) fn migrate_soft_delete_columns(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 13)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE files ADD COLUMN deleted_at INTEGER;
+            ALTER TABLE notes ADD COLUMN deleted_at INTEGER;
+            CREATE INDEX IF NOT EXISTS idx_files_deleted ON files(deleted_at);
+            CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(deleted_at);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 13)?;
+    Ok(())
+}
+
+/// Adds audit_events table for logging operations (schema v14).
+pub(crate) fn migrate_audit_events_table(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 14)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id TEXT PRIMARY KEY,
+                timestamp INTEGER NOT NULL,
+                user_id TEXT,
+                action TEXT NOT NULL,
+                resource TEXT,
+                resource_id TEXT,
+                status TEXT NOT NULL,
+                details TEXT
+            ) STRICT;
+            CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_events(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_events(user_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_events(action);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 14)?;
+    Ok(())
+}
+
+/// Adds workspace_files table for multi-file workspace support (schema v15).
+pub(crate) fn migrate_workspace_files_table(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 15)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS workspace_files (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'text',
+                body TEXT NOT NULL,
+                folder_path TEXT DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            ) STRICT;
+            CREATE INDEX IF NOT EXISTS idx_workspace_files_workspace ON workspace_files(workspace_id);
+            CREATE INDEX IF NOT EXISTS idx_workspace_files_folder ON workspace_files(workspace_id, folder_path);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 15)?;
     Ok(())
 }
 
