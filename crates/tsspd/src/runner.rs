@@ -22,7 +22,7 @@ use tsspd::{
         initialize_database as initialize_auth_database, AuthService, AuthStore, DeviceStore,
         UserStore,
     },
-    bind_error_message, build_router, run_startup_integrity_scan, spawn_advertisement,
+    bind_error_message, build_router, collect_garbage, run_startup_integrity_scan, spawn_advertisement,
     ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
     ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
     CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder, RepositoryFileSearchProvider,
@@ -369,6 +369,16 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         .map_err(|error| format!("database integrity check failed: {error}"))?;
     let storage = open_storage(&settings)?;
     let corrupt_file_count = run_startup_integrity_scan(&repository, &storage);
+
+    match collect_garbage(storage.root(), repository.as_ref()) {
+        Ok(count) => {
+            if count > 0 {
+                tracing::info!("garbage collection: deleted {count} orphaned blobs");
+            }
+        }
+        Err(e) => tracing::warn!("garbage collection failed: {e}"),
+    }
+
     let session_service = start_session_service(pool.clone(), &paths.upload_temp_dir)?;
     let auth_service = start_auth_service(pool.clone(), &settings)?;
 

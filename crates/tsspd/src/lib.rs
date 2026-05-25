@@ -17,6 +17,7 @@ mod edge_cases_tests;
 mod error_handling_tests;
 mod file;
 mod folders;
+mod garbage_collection;
 mod http_error;
 #[allow(dead_code)]
 mod integrity;
@@ -58,6 +59,7 @@ pub use config::bind_error_message;
 pub use delete::{
     ApplicationFileDeleteProvider, FileDeleteProvider, HttpDeleteError, HttpDeleteOutcome,
 };
+pub use garbage_collection::collect_garbage;
 pub use integrity::run_startup_integrity_scan;
 pub use mdns::spawn_advertisement;
 pub use notes::{ApplicationNoteProvider, NoteProvider};
