@@ -178,7 +178,10 @@ mod tests {
             Ok(self.record.clone())
         }
 
-        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+        fn list_folder_counts(
+            &self,
+            _: Option<&tssp_domain::UserId>,
+        ) -> Result<Vec<(String, u64)>, String> {
             Ok(Vec::new())
         }
 

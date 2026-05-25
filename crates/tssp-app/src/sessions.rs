@@ -218,7 +218,7 @@ mod tests {
         let token = SessionToken::new("aaaaaaaaaaaaaaaaaaaaaa").expect("invalid token");
         let now = UnixTimestamp::new(1000).expect("invalid timestamp");
         let session = service
-            .create_send_session(token, "file-001", 3600, now)
+            .create_send_session(token, "file-001", 3600, now, None)
             .expect("failed to create session");
 
         assert_eq!(session.kind, SessionKind::Send);
@@ -235,7 +235,7 @@ mod tests {
         let token = SessionToken::new("bbbbbbbbbbbbbbbbbbbbbb").expect("invalid token");
         let now = UnixTimestamp::new(1000).expect("invalid timestamp");
         let session = service
-            .create_receive_session(token, 3600, now)
+            .create_receive_session(token, 3600, now, None)
             .expect("failed to create session");
 
         assert_eq!(session.kind, SessionKind::Receive);
@@ -252,7 +252,7 @@ mod tests {
         let token = SessionToken::new("cccccccccccccccccccccc").expect("invalid token");
         let now = UnixTimestamp::new(1000).expect("invalid timestamp");
         let created = service
-            .create_send_session(token.clone(), "file-001", 3600, now)
+            .create_send_session(token.clone(), "file-001", 3600, now, None)
             .expect("failed to create session");
 
         let found = service
@@ -272,7 +272,7 @@ mod tests {
         let token = SessionToken::new("dddddddddddddddddddddd").expect("invalid token");
         let now = UnixTimestamp::new(1000).expect("invalid timestamp");
         let session = service
-            .create_send_session(token, "file-001", 3600, now)
+            .create_send_session(token, "file-001", 3600, now, None)
             .expect("failed to create session");
 
         let used_at = UnixTimestamp::new(1500).expect("invalid timestamp");

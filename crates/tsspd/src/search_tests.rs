@@ -201,7 +201,10 @@ impl FileRepository for MockRepo {
         unimplemented!()
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+    fn list_folder_counts(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -436,7 +439,10 @@ impl FileRepository for FailingMockRepo {
         unimplemented!()
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
+    fn list_folder_counts(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, tssp_ports::RepositoryError> {
         Ok(Vec::new())
     }
 

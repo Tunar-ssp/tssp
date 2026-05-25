@@ -226,7 +226,10 @@ mod tests {
             Ok(None)
         }
 
-        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+        fn list_folder_counts(
+            &self,
+            _owner_id: Option<&tssp_domain::UserId>,
+        ) -> Result<Vec<(String, u64)>, RepositoryError> {
             Ok(Vec::new())
         }
 

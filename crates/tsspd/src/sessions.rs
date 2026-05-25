@@ -506,6 +506,7 @@ mod tests {
             kind: "send".to_string(),
             created_at: 1000,
             expires_at: 2000,
+            creator_id: Some("user-1".to_string()),
             source_file: Some("file-001".to_string()),
             received_file: None,
             expected_name: None,
@@ -517,6 +518,7 @@ mod tests {
         let json = serde_json::to_string(&response).expect("serialize failed");
         assert!(json.contains("\"token\":\"test-token-abc123\""));
         assert!(json.contains("\"kind\":\"send\""));
+        assert!(json.contains("\"creator_id\":\"user-1\""));
         assert!(json.contains("\"source_file\":\"file-001\""));
         assert!(!json.contains("received_file"));
     }
@@ -528,6 +530,7 @@ mod tests {
             kind: "receive".to_string(),
             created_at: 1000,
             expires_at: 2000,
+            creator_id: None,
             source_file: None,
             received_file: None,
             expected_name: None,
@@ -537,6 +540,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&response).expect("serialize failed");
+        assert!(!json.contains("creator_id"));
         assert!(!json.contains("source_file"));
         assert!(!json.contains("received_file"));
         assert!(!json.contains("expected_name"));
@@ -547,8 +551,8 @@ mod tests {
     fn static_session_provider_rejects_operations() {
         let provider = StaticSessionProvider;
 
-        assert!(provider.create_send_session("file-1", 3600).is_err());
-        assert!(provider.create_receive_session(3600).is_err());
+        assert!(provider.create_send_session("file-1", 3600, None).is_err());
+        assert!(provider.create_receive_session(3600, None).is_err());
 
         let token = SessionToken::new("aaaaaaaaaaaaaaaaaaaaaa").expect("invalid token");
         assert!(provider.get_session(&token).is_err());

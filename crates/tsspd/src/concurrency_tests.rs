@@ -127,7 +127,10 @@ mod tests {
         ) -> Result<Option<FileRecord>, RepositoryError> {
             unimplemented!()
         }
-        fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, RepositoryError> {
+        fn list_folder_counts(
+            &self,
+            _: Option<&tssp_domain::UserId>,
+        ) -> Result<Vec<(String, u64)>, RepositoryError> {
             unimplemented!()
         }
         fn set_file_visibility(

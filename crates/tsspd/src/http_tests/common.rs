@@ -423,7 +423,10 @@ impl MetadataStatsProvider for FixedStatsProvider {
         Ok(None)
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+    fn list_folder_counts(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, String> {
         Ok(Vec::new())
     }
 
@@ -494,7 +497,10 @@ impl MetadataStatsProvider for FailingStatsProvider {
         Err("metadata database is unavailable".to_owned())
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+    fn list_folder_counts(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, String> {
         Err("metadata database is unavailable".to_owned())
     }
 
@@ -576,7 +582,10 @@ impl MetadataStatsProvider for SingleRecordStatsProvider {
         Ok(Some(single_record()))
     }
 
-    fn list_folder_counts(&self) -> Result<Vec<(String, u64)>, String> {
+    fn list_folder_counts(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, String> {
         Ok(vec![(String::new(), 1)])
     }
 
