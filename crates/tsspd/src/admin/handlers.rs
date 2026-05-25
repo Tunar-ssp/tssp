@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::unreadable_literal, clippy::needless_raw_string_hashes)]
 //! HTTP handlers for `/api/v1/admin/*`.
 
 use axum::extract::{Path, Query, State};

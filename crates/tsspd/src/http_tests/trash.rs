@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::unreadable_literal, clippy::needless_raw_string_hashes)]
 //! Trash and soft-delete integration tests.
 
 #![allow(unused_imports)]

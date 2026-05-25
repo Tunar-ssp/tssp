@@ -17,7 +17,7 @@
     action = '',
     onAction = () => {},
     variant = 'default',
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const variantIcons = {
     default: Icons.Inbox,

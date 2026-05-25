@@ -1,23 +1,26 @@
-//! Legacy assets are deprecated. New Svelte frontend served from assets/web-v2.
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::expect_used)]
+#![allow(clippy::needless_raw_string_hashes)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::uninlined_format_args)]
 
-pub(crate) const INDEX_HTML: &str = r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TSSP</title>
-  <script>window.location.href = '/app-v2';</script>
-</head>
-<body>
-  Redirecting to application...
-</body>
-</html>"#;
+//! Embedded dashboard static assets.
 
-pub(crate) const SERVICE_WORKER: &str = r#"const CACHE_VERSION = 'v2026-05-25-tssp';
+pub(crate) const INDEX_HTML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web-v2/index.html"
+));
+pub(crate) const MANIFEST: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/web-v2/manifest.json"
+));
+pub(crate) const SERVICE_WORKER: &str = r"const CACHE_VERSION = 'v2026-05-25-tssp';
 const CACHE_ASSETS = [
   '/app-v2',
   '/app-v2/index.html',
-  '/api/v1/status',
+  '/app-v2/app.js',
+  '/app-v2/app.css',
+  '/app-v2/assets/icons/favicon.ico',
 ];
 
 self.addEventListener('install', (event) => {
@@ -26,65 +29,37 @@ self.addEventListener('install', (event) => {
       return cache.addAll(CACHE_ASSETS);
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((keys) => {
       return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_VERSION)
-          .map((name) => caches.delete(name))
+        keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))
       );
     })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const cache = caches.open(CACHE_VERSION);
-            cache.then((c) => c.put(request, response.clone()));
-          }
-          return response;
-        })
-        .catch(() => {
-          return caches.match(request);
-        })
-    );
-    return;
-  }
-
-  if (request.method === 'GET') {
-    event.respondWith(
-      caches
-        .match(request)
-        .then((cached) => cached || fetch(request))
-        .catch(() => {
-          return caches.match('/app-v2/index.html');
-        })
-    );
-  }
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
 });
-"#;
+";
 
-pub(crate) const HTML_CSP: &str =
-    "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; \
-     img-src 'self' data: blob:; base-uri 'self'; form-action 'self'";
+pub(crate) const LEGACY_APP: &str = "console.log('Legacy app loaded');";
+pub(crate) const LEGACY_APP_CSS: &str = "body { background: #000; }";
 
-/// Legacy asset lookup - all assets now served from /app-v2.
-pub(crate) fn asset(path: &str) -> Option<(&'static str, &'static str)> {
+pub(crate) fn asset_for_path(path: &str) -> Option<(&'static str, &'static str)> {
     match path {
-        "index.html" => Some((INDEX_HTML, "text/html; charset=utf-8")),
-        "sw.js" => Some((SERVICE_WORKER, "application/javascript; charset=utf-8")),
+        "index.html" | "" => Some((INDEX_HTML, "text/html; charset=utf-8")),
+        "manifest.json" => Some((MANIFEST, "application/json; charset=utf-8")),
+        "service-worker.js" => Some((SERVICE_WORKER, "application/javascript; charset=utf-8")),
+        "app.js" => Some((LEGACY_APP, "application/javascript; charset=utf-8")),
+        "app.css" => Some((LEGACY_APP_CSS, "text/css; charset=utf-8")),
         _ => None,
     }
 }

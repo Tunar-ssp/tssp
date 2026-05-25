@@ -133,6 +133,7 @@ impl TransferSession {
     }
 
     /// Sets the session creator.
+    #[must_use]
     pub fn with_creator(mut self, creator_id: UserId) -> Self {
         self.creator_id = Some(creator_id);
         self

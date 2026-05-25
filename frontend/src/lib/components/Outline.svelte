@@ -18,7 +18,7 @@
     content = '',
     onSelectItem,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let outline = $derived.by(() => {
     const items: OutlineItem[] = [];

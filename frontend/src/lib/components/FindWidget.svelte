@@ -11,7 +11,7 @@
     isOpen = false,
     onClose = () => {},
     onFind = () => {},
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let searchQuery = $state('');
   let matchCase = $state(false);

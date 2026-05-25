@@ -12,7 +12,7 @@
     class: className,
     children,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let showTooltip = $state(false);
   let timeout: ReturnType<typeof setTimeout>;

@@ -22,7 +22,7 @@
     onChange,
     colors = defaultColors,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   function handleColorSelect(selectedColor: string) {
     if (onChange) {

@@ -284,7 +284,7 @@ pub(crate) fn migrate_workspace_documents_schema(
     Ok(())
 }
 
-/// Adds folder_path column to files for folder organization (schema v12).
+/// Adds `folder_path` column to files for folder organization (schema v12).
 pub(crate) fn migrate_folder_path_column(connection: &Connection) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 12)? {
         return Ok(());
@@ -303,7 +303,7 @@ pub(crate) fn migrate_folder_path_column(connection: &Connection) -> Result<(), 
     Ok(())
 }
 
-/// Adds soft-delete columns (deleted_at) for trash functionality (schema v13).
+/// Adds soft-delete columns (`deleted_at`) for trash functionality (schema v13).
 pub(crate) fn migrate_soft_delete_columns(connection: &Connection) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 13)? {
         return Ok(());
@@ -324,7 +324,7 @@ pub(crate) fn migrate_soft_delete_columns(connection: &Connection) -> Result<(),
     Ok(())
 }
 
-/// Adds audit_events table for logging operations (schema v14).
+/// Adds `audit_events` table for logging operations (schema v14).
 pub(crate) fn migrate_audit_events_table(connection: &Connection) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 14)? {
         return Ok(());
@@ -354,7 +354,7 @@ pub(crate) fn migrate_audit_events_table(connection: &Connection) -> Result<(), 
     Ok(())
 }
 
-/// Adds workspace_files table for multi-file workspace support (schema v15).
+/// Adds `workspace_files` table for multi-file workspace support (schema v15).
 pub(crate) fn migrate_workspace_files_table(connection: &Connection) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 15)? {
         return Ok(());
@@ -383,7 +383,7 @@ pub(crate) fn migrate_workspace_files_table(connection: &Connection) -> Result<(
     Ok(())
 }
 
-/// Adds creator_id column to sessions table (schema v16).
+/// Adds `creator_id` column to sessions table (schema v16).
 pub(crate) fn migrate_session_creator_column(
     connection: &Connection,
 ) -> Result<(), SqliteRepositoryError> {

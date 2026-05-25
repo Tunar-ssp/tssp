@@ -42,7 +42,7 @@ pub trait FileRepository {
 
     /// Soft-deletes one logical file record and reports remaining blob references.
     ///
-    /// Sets deleted_at timestamp without removing the record. The file becomes invisible to normal queries
+    /// Sets `deleted_at` timestamp without removing the record. The file becomes invisible to normal queries
     /// but can be restored later.
     ///
     /// # Errors
@@ -50,7 +50,7 @@ pub trait FileRepository {
     /// Returns [`RepositoryError`] when the delete transaction cannot complete.
     fn delete_file(&self, id: &FileId) -> Result<Option<DeletedFileRecord>, RepositoryError>;
 
-    /// Restores a soft-deleted file by clearing its deleted_at timestamp.
+    /// Restores a soft-deleted file by clearing its `deleted_at` timestamp.
     ///
     /// # Errors
     ///
@@ -238,6 +238,7 @@ pub trait FileRepository {
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the event cannot be persisted.
+    #[allow(clippy::too_many_arguments)]
     fn insert_audit_event(
         &self,
         id: &str,

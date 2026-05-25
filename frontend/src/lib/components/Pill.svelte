@@ -10,7 +10,7 @@
     class: className,
     children,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const toneClasses = {
     green: 'pill-green',

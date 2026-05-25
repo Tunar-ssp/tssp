@@ -20,7 +20,7 @@
     onClose = () => {},
     onExecuteCommand = async () => '',
     commands = [],
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let input = $state('');
   let history: Array<{ type: 'input' | 'output' | 'error'; text: string }> = $state([]);

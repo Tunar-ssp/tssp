@@ -9,7 +9,7 @@
     tone = 'info',
     class: className,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const toneClasses = {
     ok: 'dot-ok',

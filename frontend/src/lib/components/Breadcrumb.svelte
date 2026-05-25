@@ -15,7 +15,7 @@
   let {
     items = [],
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 </script>
 
 <nav class="breadcrumb {className || ''}" aria-label="Breadcrumb">

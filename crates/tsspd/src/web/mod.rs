@@ -14,7 +14,8 @@ use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use std::path::{Path as FsPath, PathBuf};
 
-use assets::{asset, HTML_CSP, INDEX_HTML};
+use assets::{asset_for_path as asset, INDEX_HTML};
+pub(crate) const HTML_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';";
 
 fn response_with_bytes(
     bytes: &str,

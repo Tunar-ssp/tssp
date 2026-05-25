@@ -7,7 +7,7 @@
   let {
     message = 'Loading...',
     size = 'md',
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const sizeMap = {
     sm: 24,

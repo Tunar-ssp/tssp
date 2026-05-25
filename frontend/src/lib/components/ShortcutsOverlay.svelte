@@ -12,7 +12,7 @@
     isOpen = false,
     onClose,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const shortcuts = [
     {

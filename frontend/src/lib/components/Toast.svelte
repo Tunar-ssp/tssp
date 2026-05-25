@@ -22,7 +22,7 @@
     autoDismiss = 4000,
     class: className,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let timeout: ReturnType<typeof setTimeout>;
 

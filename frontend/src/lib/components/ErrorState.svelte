@@ -13,7 +13,7 @@
     message = 'An unexpected error occurred. Please try again.',
     action = 'Retry',
     onAction = () => {},
-  } = $props<$$Props>();
+  }: $$Props = $props();
 </script>
 
 <div class="error-state">

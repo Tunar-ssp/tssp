@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::unreadable_literal, clippy::needless_raw_string_hashes)]
 //! Chunked upload system tests covering security, reliability, and correctness.
 
 #![allow(unused_imports)]
@@ -208,7 +209,7 @@ async fn complete_upload_rejects_incomplete_chunks() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/files/upload/{}/complete", session_id))
+                .uri(format!("/api/v1/files/upload/{}", session_id))
                 .body(Body::empty())
                 .unwrap(),
         )

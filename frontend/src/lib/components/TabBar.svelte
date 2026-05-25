@@ -20,7 +20,7 @@
     activeTabId = null,
     onSelectTab = () => {},
     onCloseTab = () => {},
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let tabsContainer: HTMLDivElement;
 

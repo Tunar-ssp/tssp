@@ -25,7 +25,7 @@
     onCancel,
     onRetry,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let queueState = $state<{ items: any[]; totalUploadingCount: number }>({
     items: [],

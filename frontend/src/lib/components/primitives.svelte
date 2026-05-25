@@ -1,4 +1,4 @@
-<script lang="ts">
+<script context="module" lang="ts">
   /**
    * P0-FND-05: Primitive Components
    * Reusable UI building blocks. Build once, use everywhere.

@@ -12,7 +12,7 @@
     tone = 'ok',
     class: className,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const toneColors = {
     ok: 'var(--success)',

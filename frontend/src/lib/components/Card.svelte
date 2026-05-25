@@ -13,7 +13,7 @@
     class: className,
     children,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 </script>
 
 <div

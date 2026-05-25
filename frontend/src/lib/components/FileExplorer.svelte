@@ -28,7 +28,7 @@
     onCreateFolder = () => {},
     onDeleteFile = () => {},
     onRenameFile = () => {},
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let expanded: Record<string, boolean> = $state({});
 

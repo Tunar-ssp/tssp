@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::unreadable_literal, clippy::needless_raw_string_hashes)]
 //! Delete use case orchestration.
 //!
 //! File deletion is metadata-first: once the index record is gone the file is no
@@ -31,7 +32,7 @@ where
     B: BlobStore,
     R: FileRepository,
 {
-    /// Soft-deletes one logical file id by marking it deleted_at.
+    /// Soft-deletes one logical file id by marking it `deleted_at`.
     ///
     /// The physical blob is NOT deleted. A background reaper job will clean up
     /// blobs from files deleted more than the configured retention period.
@@ -94,7 +95,7 @@ impl<R> RestoreFileService<R>
 where
     R: FileRepository,
 {
-    /// Restores a soft-deleted file by clearing its deleted_at timestamp.
+    /// Restores a soft-deleted file by clearing its `deleted_at` timestamp.
     ///
     /// # Errors
     ///

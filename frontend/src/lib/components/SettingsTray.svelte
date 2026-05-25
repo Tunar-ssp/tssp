@@ -27,7 +27,7 @@
     isOpen = false,
     onClose,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const dockModes: DockMode[] = ['always', 'autohide', 'compact'];
   const densityModes: DensityMode[] = ['comfortable', 'compact'];

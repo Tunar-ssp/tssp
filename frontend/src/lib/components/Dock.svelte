@@ -20,7 +20,7 @@
     activeId = '',
     mode = 'always',
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let hoveredId = $state<string | null>(null);
 </script>

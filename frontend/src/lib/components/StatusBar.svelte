@@ -19,7 +19,7 @@
     wordCount = 0,
     charCount = 0,
     isDirty = false,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 </script>
 
 <div class="status-bar">

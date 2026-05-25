@@ -14,7 +14,7 @@
     class: className,
     children,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const sizeClasses = {
     sm: 'modal-sm',

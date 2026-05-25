@@ -3,7 +3,7 @@
     class?: string;
   }
 
-  let { class: className, children, ...rest } = $props<$$Props>();
+  let { class: className, children, ...rest }: $$Props = $props();
 </script>
 
 <kbd class="kbd {className || ''}" {...rest}>

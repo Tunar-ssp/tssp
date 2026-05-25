@@ -30,7 +30,7 @@
     onSettings,
     onLogout,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 </script>
 
 <header class="topbar {className || ''}">

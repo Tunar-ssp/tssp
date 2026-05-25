@@ -307,6 +307,7 @@ impl FileRepository for SqliteFileRepository {
         Ok(count > 0)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn list_files(&self, query: &ListQuery) -> Result<PagedFiles, RepositoryError> {
         let page_limit = validate_list_limit(query.limit)?;
 

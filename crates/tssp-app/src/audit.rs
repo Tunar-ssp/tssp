@@ -55,6 +55,7 @@ pub enum AuditAction {
 
 impl AuditAction {
     /// Get the string representation of this audit action.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Login => "login",
@@ -99,13 +100,13 @@ pub fn log_audit_event(
     let event_id = Uuid::new_v4().to_string();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
+        .map(|d| d.as_secs().cast_signed())
         .unwrap_or(0);
 
     if let Err(e) = repository.insert_audit_event(
         &event_id,
         now,
-        user_id.map(|id| id.as_str()),
+        user_id.map(UserId::as_str),
         action.as_str(),
         resource,
         resource_id,

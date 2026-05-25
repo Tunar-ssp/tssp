@@ -19,7 +19,7 @@
     onClose,
     onShare,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let isPublic = $state(false);
   let shareLink = $state('');

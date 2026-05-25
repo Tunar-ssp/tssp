@@ -10,7 +10,7 @@
     size = 'md',
     class: className,
     children,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const variantClasses = {
     default: 'badge-default',

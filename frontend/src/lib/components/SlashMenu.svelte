@@ -25,7 +25,7 @@
     y = 0,
     onClose,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let selectedIndex = $state(0);
 

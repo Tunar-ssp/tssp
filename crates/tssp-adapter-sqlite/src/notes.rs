@@ -817,7 +817,7 @@ fn insert_note_row(
                 new_note.updated_at.seconds(),
                 new_note.pinned_at,
                 new_note.folder_path,
-                new_note.owner_id.as_ref().map(|id| id.as_str()),
+                new_note.owner_id.as_ref().map(tssp_domain::UserId::as_str),
             ],
         )
         .map(|_rows| ())

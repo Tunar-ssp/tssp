@@ -25,7 +25,7 @@
     isOpen = false,
     onClose,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   let searchQuery = $state('');
   let selectedIndex = $state(0);

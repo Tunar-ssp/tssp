@@ -16,7 +16,7 @@
     onClose,
     onDownload,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   function getPreviewLens() {
     if (!file) return 'details';

@@ -16,7 +16,7 @@
     class: className,
     children,
     ...rest
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   function handleClick(event: MouseEvent) {
     onclick?.(event);

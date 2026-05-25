@@ -15,7 +15,7 @@
     name,
     color = 'var(--blue)',
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   const sizeMap = {
     sm: 32,

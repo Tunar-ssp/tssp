@@ -16,7 +16,7 @@
     onClose,
     onLogout,
     class: className,
-  } = $props<$$Props>();
+  }: $$Props = $props();
 
   async function handleLogout() {
     if (onLogout) {
