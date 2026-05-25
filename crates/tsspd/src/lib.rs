@@ -19,10 +19,8 @@ mod file;
 mod folders;
 mod garbage_collection;
 mod http_error;
-#[allow(dead_code)]
 mod integrity;
 mod list;
-#[allow(dead_code)]
 mod mdns;
 mod metrics;
 mod move_file;
