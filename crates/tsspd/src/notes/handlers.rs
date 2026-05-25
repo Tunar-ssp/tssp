@@ -62,14 +62,19 @@ pub(crate) async fn create_note(
 
 pub(crate) async fn list_notes(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Query(params): Query<ListNotesQuery>,
 ) -> Response {
-    let query = match build_list_query(&params) {
+    let mut query = match build_list_query(&params) {
         Ok(value) => value,
         Err(message) => {
             return HttpNoteError::InvalidRequest { message }.response();
         }
     };
+    // Non-admin users only see their own notes
+    if !auth.is_admin() {
+        query.owner_id = Some(auth.user_id.clone());
+    }
     let provider = state.note_provider.clone();
 
     match run_blocking(provider, move |provider| provider.list_notes(query)).await {
@@ -89,12 +94,35 @@ pub(crate) async fn list_notes(
     }
 }
 
-pub(crate) async fn get_note(State(state): State<HttpState>, Path(id): Path<String>) -> Response {
+pub(crate) async fn get_note(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
     let note_id = match parse_note_id(id) {
         Ok(value) => value,
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+
+    let record = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    // Check authorization: admin can read all, others can only read their own
+    if !(auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to read this note".to_owned(),
+        }
+        .response();
+    }
 
     match run_blocking(provider, move |provider| provider.get_note(note_id)).await {
         Ok(record) => (

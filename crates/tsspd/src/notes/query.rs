@@ -62,6 +62,7 @@ pub(crate) fn build_list_query(params: &ListNotesQuery) -> Result<NoteListQuery,
         pinned_only: params.pinned,
         sort,
         after_cursor: None,
+        owner_id: None,
     })
 }
 

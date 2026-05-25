@@ -155,6 +155,10 @@ impl NoteRepository for SqliteFileRepository {
         if query.pinned_only {
             where_clauses.push("n.pinned_at IS NOT NULL".to_owned());
         }
+        if let Some(owner_id) = &query.owner_id {
+            where_clauses.push(format!("n.owner_id = ?{}", parameters.len() + 1));
+            parameters.push(Value::Text(owner_id.as_str().to_owned()));
+        }
 
         if !where_clauses.is_empty() {
             sql.push_str(" WHERE ");

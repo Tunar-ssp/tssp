@@ -148,6 +148,8 @@ pub struct NoteListQuery {
     pub sort: NoteListSort,
     /// Cursor from a previous page.
     pub after_cursor: Option<Cursor>,
+    /// Owner filter: when set, only return notes owned by this user.
+    pub owner_id: Option<UserId>,
 }
 
 impl Default for NoteListQuery {
@@ -161,6 +163,7 @@ impl Default for NoteListQuery {
             pinned_only: false,
             sort: NoteListSort::UpdatedDesc,
             after_cursor: None,
+            owner_id: None,
         }
     }
 }
