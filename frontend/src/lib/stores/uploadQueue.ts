@@ -171,7 +171,7 @@ async function uploadSingleItem(itemId: string) {
       lastError: undefined,
     }));
 
-    const { session_id, chunk_size } = await api.startUpload(item.folder);
+    const { session_id, chunk_size } = await api.startUpload(item.filename, item.fileSize, item.folder);
     const effectiveChunkSize = chunk_size || FALLBACK_CHUNK_SIZE;
     const totalChunks = Math.ceil(file.size / effectiveChunkSize);
 
