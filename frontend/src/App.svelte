@@ -21,8 +21,8 @@
   import '$lib/responsive.css';
   import HomeView from './views/home/HomeLauncher.svelte';
   import DriveView from './views/drive/DriveView.svelte';
-  import NotesViewP4 from './views/notes/NotesViewP4.svelte';
-  import WorkspaceViewP5 from './views/workspace/WorkspaceViewP5.svelte';
+  import NotesView from './views/notes/NotesView.svelte';
+  import WorkspaceView from './views/workspace/WorkspaceView.svelte';
   import OperationsView from './views/operations/OperationsView.svelte';
 
   onMount(() => {
@@ -46,8 +46,8 @@
   const viewMap = {
     home: HomeView,
     drive: DriveView,
-    notes: NotesViewP4,
-    workspace: WorkspaceViewP5,
+    notes: NotesView,
+    workspace: WorkspaceView,
     operations: OperationsView,
   };
 

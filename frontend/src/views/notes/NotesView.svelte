@@ -2,35 +2,60 @@
   import * as Icons from 'lucide-svelte';
   import { sortedNotes, activeNote, loadNotes, setActiveNote, updateActiveNote, createNewNote, deleteNote, isSaving } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
+  import RichEditor from '$lib/components/RichEditor.svelte';
+  import Outline from '$lib/components/Outline.svelte';
+  import SlashMenu from '$lib/components/SlashMenu.svelte';
+  import ColorPicker from '$lib/components/ColorPicker.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
+  import Btn from '$lib/components/Btn.svelte';
   import { onMount } from 'svelte';
 
   let contextMenu = { visible: false, x: 0, y: 0, note: null as any };
-  let searchQuery = '';
-  let isLoading = true;
-  let titleDraft = '';
-  let bodyDraft = '';
-  let tagInput = '';
-  let showTagInput = false;
+  let searchQuery = $state('');
+  let isLoading = $state(true);
+  let titleDraft = $state('');
+  let bodyDraft = $state('');
+  let noteColor = $state('#6ea8ff');
+  let showColorPicker = $state(false);
+  let showSlashMenu = $state(false);
+  let slashMenuPos = { x: 0, y: 0 };
 
   onMount(async () => {
     await loadNotes();
     isLoading = false;
   });
 
-  $: {
+  $effect(() => {
     if ($activeNote) {
       titleDraft = $activeNote.title;
       bodyDraft = $activeNote.body;
+      noteColor = $activeNote.color || '#6ea8ff';
     }
-  }
+  });
 
   function handleCreateNote() {
     createNewNote();
+    success('New note created');
   }
 
   function handleSelectNote(id: string) {
     setActiveNote(id);
+  }
+
+  async function handleSaveNote() {
+    if (!$activeNote) return;
+    await updateActiveNote({
+      title: titleDraft,
+      body: bodyDraft,
+      color: noteColor,
+    });
+    success('Note saved');
+  }
+
+  async function handleDeleteNote(id: string) {
+    if (!confirm('Delete this note?')) return;
+    await deleteNote(id);
+    success('Note deleted');
   }
 
   function showContextMenu(event: MouseEvent, note: any) {
@@ -43,235 +68,149 @@
     };
   }
 
-  async function handleSaveNote() {
-    if (!$activeNote) return;
-    await updateActiveNote({
-      title: titleDraft,
-      body: bodyDraft,
-    });
-    success('Note saved');
-  }
 
-  async function handleDeleteNote(note: any) {
-    if (confirm(`Delete "${note.title || 'Untitled'}"?`)) {
-      await deleteNote(note.id);
-    }
-  }
-
-  async function handlePin(note: any) {
-    // TODO: Implement pin functionality with backend
-    success(note.pinned_at ? 'Note unpinned' : 'Note pinned');
-  }
-
-  async function handleDuplicate(note: any) {
-    // TODO: Implement duplicate functionality
-    success('Note duplicated');
-  }
-
-  function addTag() {
-    if (!tagInput.trim() || !$activeNote) return;
-    const newTags = [...$activeNote.tags, tagInput.trim()];
-    updateActiveNote({ tags: newTags });
-    tagInput = '';
-    showTagInput = false;
-  }
-
-  function removeTag(tag: string) {
-    if (!$activeNote) return;
-    const newTags = $activeNote.tags.filter((t: string) => t !== tag);
-    updateActiveNote({ tags: newTags });
-  }
-
-  $: filteredNotes = searchQuery
+  let filteredNotes = $derived(searchQuery
     ? $sortedNotes.filter(n =>
         n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        n.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        n.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+        n.body.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : $sortedNotes;
+    : $sortedNotes
+  );
 
   function getContextItems(note: any) {
     return [
-      { label: note.pinned_at ? 'Unpin' : 'Pin', action: () => handlePin(note) },
-      { label: 'Duplicate', action: () => handleDuplicate(note) },
-      { label: 'Delete', action: () => handleDeleteNote(note), danger: true },
+      { label: 'Duplicate', action: () => null },
+      { label: 'Archive', action: () => null },
+      { label: 'Delete', action: () => handleDeleteNote(note.id), danger: true },
     ];
+  }
+
+  function formatDate(timestamp: number) {
+    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function getWordCount(text: string) {
+    return text.trim().split(/\s+/).filter(w => w.length > 0).length;
   }
 </script>
 
 <div class="notes-view">
-  <div class="sidebar">
-    <div class="header">
+  <div class="notes-sidebar">
+    <div class="sidebar-header">
       <h2>Notes</h2>
-      <button class="create-btn" on:click={handleCreateNote}>
-        <Icons.Plus size={16} />
-        New
-      </button>
+      <Btn kind="primary" size="sm" on:click={handleCreateNote}>
+        <Icons.Plus size={14} />
+      </Btn>
     </div>
 
-    <div class="search-bar">
+    <div class="search-box">
       <Icons.Search size={16} />
       <input
         type="text"
         placeholder="Search notes..."
         bind:value={searchQuery}
+        class="search-input"
       />
     </div>
 
     <div class="notes-list">
       {#if isLoading}
-        <div class="loading">
-          <div class="spinner" />
-          Loading notes...
-        </div>
+        <div class="loading">Loading notes...</div>
       {:else if filteredNotes.length === 0}
-        <div class="empty">
-          <Icons.BookOpen size={40} />
-          <h3>No notes</h3>
-          <p>Create a new note to get started</p>
-        </div>
+        <div class="empty">No notes yet. Create one to get started!</div>
       {:else}
         {#each filteredNotes as note (note.id)}
-          <div
-            class="note-row"
+          <button
+            class="note-item"
             class:active={$activeNote?.id === note.id}
             on:click={() => handleSelectNote(note.id)}
             on:contextmenu={(e) => showContextMenu(e, note)}
           >
-            <div class="note-content">
+            <div class="note-color" style="background: {note.color || '#6ea8ff'}"></div>
+            <div class="note-preview">
               <div class="note-title">{note.title || 'Untitled'}</div>
-              <div class="note-preview">{note.body.slice(0, 60).replace(/\n/g, ' ')}</div>
-              <div class="note-meta">
-                {#if note.pinned_at}
-                  <Icons.Pin size={12} class="pinned" />
-                {/if}
-                <span>{note.tags.length > 0 ? note.tags.join(', ') : 'untagged'}</span>
-              </div>
+              <div class="note-excerpt">{note.body.substring(0, 40)}...</div>
             </div>
-          </div>
+          </button>
         {/each}
       {/if}
     </div>
   </div>
 
-  <div class="editor">
+  <div class="editor-container">
     {#if !$activeNote}
-      <div class="empty-editor">
+      <div class="no-note-selected">
         <Icons.FileText size={48} />
-        <h3>Select a note</h3>
-        <p>Click a note to edit or create a new one</p>
+        <h3>No note selected</h3>
+        <p>Create a new note or select one from the sidebar</p>
       </div>
     {:else}
       <div class="editor-header">
         <input
           type="text"
-          class="title-input"
-          placeholder="Untitled note"
           bind:value={titleDraft}
           on:change={handleSaveNote}
+          class="editor-title"
+          placeholder="Note title..."
         />
-        <div class="header-actions">
+        <div class="editor-actions">
+          <button class="color-btn" on:click={() => (showColorPicker = !showColorPicker)}>
+            <div class="color-preview" style="background: {noteColor}"></div>
+            Color
+          </button>
           {#if $isSaving}
             <span class="saving">Saving...</span>
+          {:else}
+            <span class="saved">Saved</span>
           {/if}
-          <button class="action-btn" on:click={handleSaveNote}>
-            <Icons.Save size={14} />
-            Save
-          </button>
-          <button
-            class="action-btn"
-            on:click={(e) => showContextMenu(e, $activeNote)}
-          >
-            <Icons.MoreVertical size={14} />
-          </button>
         </div>
       </div>
 
-      <div class="editor-content">
-        <div class="editor-pane">
-          <textarea
-            class="body-input"
-            placeholder="Start typing..."
-            bind:value={bodyDraft}
-            on:change={handleSaveNote}
-          ></textarea>
+      {#if showColorPicker}
+        <div class="color-picker-container">
+          <ColorPicker
+            color={noteColor}
+            onChange={(c) => {
+              noteColor = c;
+              handleSaveNote();
+            }}
+          />
+        </div>
+      {/if}
+
+      <div class="editor-main">
+        <div class="editor-column">
+          <RichEditor
+            content={bodyDraft}
+            onChange={(html) => {
+              bodyDraft = html;
+              handleSaveNote();
+            }}
+          />
         </div>
 
-        <div class="sidebar-pane">
-          <div class="section">
-            <h4>Tags</h4>
-            <div class="tags">
-              {#each $activeNote.tags as tag}
-                <span class="tag">
-                  {tag}
-                  <button
-                    class="tag-remove"
-                    on:click={() => removeTag(tag)}
-                  >
-                    <Icons.X size={12} />
-                  </button>
-                </span>
-              {/each}
-              {#if showTagInput}
-                <input
-                  type="text"
-                  class="tag-input"
-                  placeholder="Add tag..."
-                  bind:value={tagInput}
-                  on:keydown={(e) => {
-                    if (e.key === 'Enter') addTag();
-                    if (e.key === 'Escape') showTagInput = false;
-                  }}
-                  autofocus
-                />
-              {:else}
-                <button class="tag-add" on:click={() => showTagInput = true}>
-                  <Icons.Plus size={12} /> Add tag
-                </button>
-              {/if}
-            </div>
-          </div>
+        <Outline content={bodyDraft} onSelectItem={() => {}} />
+      </div>
 
-          <div class="section">
-            <h4>Info</h4>
-            <div class="info">
-              <div class="info-row">
-                <span>Created</span>
-                <span class="value">{new Date($activeNote.created_at * 1000).toLocaleDateString()}</span>
-              </div>
-              <div class="info-row">
-                <span>Updated</span>
-                <span class="value">{new Date($activeNote.updated_at * 1000).toLocaleDateString()}</span>
-              </div>
-              <div class="info-row">
-                <span>Words</span>
-                <span class="value">{bodyDraft.split(/\s+/).filter(w => w).length}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="section">
-            <h4>Actions</h4>
-            <button class="action-link" on:click={() => handlePin($activeNote)}>
-              <Icons.Pin size={14} />
-              {$activeNote.pinned_at ? 'Unpin' : 'Pin'}
-            </button>
-            <button class="action-link" on:click={() => handleDuplicate($activeNote)}>
-              <Icons.Copy size={14} />
-              Duplicate
-            </button>
-            <button
-              class="action-link danger"
-              on:click={() => handleDeleteNote($activeNote)}
-            >
-              <Icons.Trash2 size={14} />
-              Delete
-            </button>
-          </div>
-        </div>
+      <div class="editor-footer">
+        <span>{getWordCount(bodyDraft)} words</span>
+        <span>•</span>
+        <span>Updated {formatDate($activeNote.updated_at || $activeNote.created_at)}</span>
       </div>
     {/if}
   </div>
+
+  <SlashMenu
+    isOpen={showSlashMenu}
+    x={slashMenuPos.x}
+    y={slashMenuPos.y}
+    onClose={() => (showSlashMenu = false)}
+  />
 </div>
 
 <ContextMenu
@@ -289,411 +228,261 @@
     background: var(--bg);
   }
 
-  .sidebar {
+  .notes-sidebar {
     flex-shrink: 0;
     width: 280px;
-    height: 100%;
-    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
     overflow: hidden;
   }
 
-  .header {
-    padding: 20px 16px;
-    border-bottom: 1px solid var(--border);
+  .sidebar-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--surface);
+    padding: var(--s-4);
+    border-bottom: 1px solid var(--border);
   }
 
-  .header h2 {
+  .sidebar-header h2 {
     margin: 0;
-    font-size: var(--fs-20);
+    font-size: var(--fs-18);
+    font-weight: 600;
     color: var(--text);
   }
 
-  .create-btn {
+  .search-box {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
+    gap: var(--s-2);
+    padding: var(--s-3);
+    margin: var(--s-2);
+    background: var(--surface-2);
     border-radius: var(--r-2);
-    border: 1px solid var(--border);
-    background: var(--blue);
-    color: #0a1228;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.15s;
-    font-size: var(--fs-12);
-  }
-
-  .create-btn:hover {
-    opacity: 0.9;
-  }
-
-  .search-bar {
-    padding: 12px 12px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--surface);
     color: var(--muted);
   }
 
-  .search-bar input {
+  .search-input {
     flex: 1;
     border: none;
     background: transparent;
     color: var(--text);
-    font-size: var(--fs-13);
+    font-size: var(--fs-12);
     outline: none;
   }
 
-  .search-bar input::placeholder {
+  .search-input::placeholder {
     color: var(--muted);
   }
 
   .notes-list {
     flex: 1;
-    overflow: auto;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
   }
 
-  .note-row {
-    padding: 12px;
-    border-bottom: 1px solid var(--hairline);
-    cursor: pointer;
-    transition: background 0.15s;
+  .loading,
+  .empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: var(--fs-12);
+    padding: var(--s-4);
+    text-align: center;
   }
 
-  .note-row:hover {
+  .note-item {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-3);
+    border: none;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: all var(--duration-quick) var(--ease-smooth);
+    border-left: 3px solid transparent;
+    font-family: var(--ff-sans);
+  }
+
+  .note-item:hover {
     background: var(--surface-2);
   }
 
-  .note-row.active {
-    background: var(--surface-3);
+  .note-item.active {
+    background: var(--surface-2);
+    border-left-color: var(--blue);
   }
 
-  .note-content {
+  .note-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .note-preview {
+    flex: 1;
     min-width: 0;
   }
 
   .note-title {
+    font-size: var(--fs-13);
     font-weight: 500;
     color: var(--text);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: var(--fs-13);
+    white-space: nowrap;
   }
 
-  .note-preview {
-    font-size: var(--fs-12);
+  .note-excerpt {
+    font-size: var(--fs-11);
     color: var(--muted);
-    margin-top: 4px;
-    white-space: nowrap;
+    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .note-meta {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 6px;
-  }
-
-  .pinned {
-    color: var(--orange);
-  }
-
-  .editor {
+  .editor-container {
     flex: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  .empty-editor {
+  .no-note-selected {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: var(--s-4);
     color: var(--muted);
   }
 
-  .empty-editor h3 {
+  .no-note-selected h3 {
     margin: 0;
     color: var(--text-2);
-  }
-
-  .empty-editor p {
-    margin: 0;
-    font-size: var(--fs-12);
-  }
-
-  .empty {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    color: var(--muted);
-  }
-
-  .empty h3 {
-    margin: 0;
-    color: var(--text-2);
-  }
-
-  .empty p {
-    margin: 0;
-    font-size: var(--fs-12);
-  }
-
-  .loading {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    color: var(--muted);
-  }
-
-  .spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--surface-3);
-    border-top-color: var(--blue);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
   }
 
   .editor-header {
-    padding: 20px;
-    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    padding: var(--s-6);
+    border-bottom: 1px solid var(--border);
     background: var(--surface);
   }
 
-  .title-input {
+  .editor-title {
     flex: 1;
     border: none;
     background: transparent;
     color: var(--text);
     font-size: var(--fs-24);
-    font-weight: 600;
+    font-weight: 700;
     outline: none;
+    font-family: var(--ff-sans);
   }
 
-  .title-input::placeholder {
+  .editor-title::placeholder {
     color: var(--muted);
   }
 
-  .header-actions {
+  .editor-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--s-3);
+    margin-left: var(--s-4);
   }
 
-  .saving {
+  .color-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-2);
+    border-radius: var(--r-2);
+    cursor: pointer;
+    font-size: var(--fs-12);
+    font-weight: 500;
+    transition: all var(--duration-quick) var(--ease-smooth);
+  }
+
+  .color-btn:hover {
+    background: var(--surface-3);
+  }
+
+  .color-preview {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+  }
+
+  .saving,
+  .saved {
     font-size: var(--fs-12);
     color: var(--muted);
   }
 
-  .action-btn {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    border-radius: var(--r-2);
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
+  .saved {
+    color: var(--green);
   }
 
-  .action-btn:hover {
-    background: var(--surface-2);
-    color: var(--text);
+  .color-picker-container {
+    padding: var(--s-4) var(--s-6);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
   }
 
-  .editor-content {
+  .editor-main {
     flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 240px;
+    display: flex;
     overflow: hidden;
-    gap: 1px;
-    background: var(--hairline);
+    gap: 0;
   }
 
-  .editor-pane {
+  .editor-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-    background: var(--bg);
   }
 
-  .body-input {
-    width: 100%;
-    height: 100%;
+  .editor-textarea {
+    flex: 1;
     border: none;
     background: var(--bg);
     color: var(--text);
-    padding: 20px;
-    font-family: var(--ff-mono);
-    font-size: var(--fs-13);
-    line-height: 1.6;
+    padding: var(--s-6);
+    font-family: var(--ff-sans);
+    font-size: var(--fs-14);
+    line-height: var(--lh-relaxed);
     outline: none;
     resize: none;
   }
 
-  .body-input::placeholder {
+  .editor-textarea::placeholder {
     color: var(--muted);
   }
 
-  .sidebar-pane {
+  .editor-footer {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-3) var(--s-6);
+    border-top: 1px solid var(--border);
     background: var(--surface);
-    overflow: auto;
-    padding: 16px;
-    border-left: 1px solid var(--border);
-  }
-
-  .section {
-    margin-bottom: 24px;
-  }
-
-  .section h4 {
-    margin: 0 0 12px;
-    font-size: var(--fs-11);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    font-size: var(--fs-12);
     color: var(--muted);
-  }
-
-  .tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    background: var(--blue-subtle);
-    color: var(--blue);
-    border-radius: var(--r-2);
-    font-size: var(--fs-12);
-  }
-
-  .tag-remove {
-    border: none;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    opacity: 0.7;
-    transition: opacity 0.15s;
-  }
-
-  .tag-remove:hover {
-    opacity: 1;
-  }
-
-  .tag-input {
-    padding: 4px 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-2);
-    background: var(--bg);
-    color: var(--text);
-    font-size: var(--fs-12);
-    outline: none;
-    width: 100%;
-    max-width: 120px;
-  }
-
-  .tag-add {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border: 1px dashed var(--border);
-    border-radius: var(--r-2);
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    font-size: var(--fs-12);
-    transition: all 0.15s;
-  }
-
-  .tag-add:hover {
-    border-color: var(--text);
-    color: var(--text);
-  }
-
-  .info {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: var(--fs-12);
-    color: var(--text-2);
-  }
-
-  .info-row .value {
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .action-link {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 0;
-    border: none;
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    font-size: var(--fs-12);
-    transition: color 0.15s;
-  }
-
-  .action-link:hover {
-    color: var(--text);
-  }
-
-  .action-link.danger {
-    color: var(--danger);
-  }
-
-  .action-link.danger:hover {
-    color: var(--danger);
-    opacity: 0.8;
   }
 </style>
