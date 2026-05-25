@@ -77,6 +77,19 @@ export async function uploadFiles(files: FileList, folder: string = '') {
 
     success('Uploads Queued', `${count} file(s) queued for resumable upload`);
 
+    // Wait for uploads to complete and reload file list
+    const unsubscribe = uploadQueue.subscribe((state) => {
+      const allDone = state.items.every((item) =>
+        item.status === 'completed' || item.status === 'failed' || item.status === 'paused'
+      );
+      if (allDone && state.items.length > 0 && state.items.some((item) => item.status === 'completed')) {
+        void loadFiles();
+      }
+    });
+
+    // Cleanup subscription after a timeout (e.g., 1 hour)
+    const timeout = setTimeout(() => unsubscribe(), 3600000);
+
     // Files will be uploaded in background with progress tracking
     // Queue persists across page refreshes for recovery
     return true;
