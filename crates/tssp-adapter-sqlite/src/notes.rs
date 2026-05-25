@@ -435,7 +435,7 @@ fn fuzzy_file_candidates(
     let like_prefix = format!("{prefix}%");
     let mut statement = connection
         .prepare(
-            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
+            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token, f.public_expires_at
              FROM files f
              WHERE f.name LIKE ?1 COLLATE NOCASE
                 OR f.mime_type LIKE ?1 COLLATE NOCASE

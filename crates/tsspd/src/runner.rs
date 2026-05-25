@@ -31,6 +31,7 @@ use tsspd::{
 
 use super::Cli;
 
+#[derive(Clone)]
 struct RuntimePaths {
     upload_temp_dir: PathBuf,
     metadata_path: PathBuf,
@@ -374,7 +375,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
 
     let state = build_http_state(
         &settings,
-        paths,
+        paths.clone(),
         pool,
         repository.clone(),
         storage.clone(),
@@ -397,6 +398,22 @@ pub async fn run(cli: Cli) -> Result<(), String> {
                 }
             }
             Err(e) => tracing::warn!("garbage collection failed: {e}"),
+        }
+    });
+
+    let upload_session_manager = state.upload_session_manager.clone();
+    let upload_temp_dir = paths.upload_temp_dir.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            let max_age = std::time::Duration::from_secs(24 * 60 * 60);
+            let cleaned = upload_session_manager
+                .cleanup_expired_with_disk(max_age, &upload_temp_dir)
+                .await;
+            if cleaned > 0 {
+                tracing::info!("cleanup: removed {cleaned} abandoned upload sessions");
+            }
         }
     });
 

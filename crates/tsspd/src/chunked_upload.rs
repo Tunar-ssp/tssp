@@ -140,6 +140,7 @@ impl UploadSession {
 }
 
 /// Session manager for chunked uploads (in-memory for now).
+#[derive(Clone)]
 pub struct UploadSessionManager {
     sessions: Arc<RwLock<HashMap<String, UploadSession>>>,
 }
@@ -187,6 +188,21 @@ impl UploadSessionManager {
         });
 
         expired
+    }
+
+    /// Cleans up expired sessions and their disk files.
+    #[allow(dead_code)]
+    pub async fn cleanup_expired_with_disk(
+        &self,
+        max_age: std::time::Duration,
+        temp_dir: &StdPath,
+    ) -> usize {
+        let expired = self.cleanup_expired(max_age).await;
+        for session_id in &expired {
+            let chunk_dir = chunk_directory(temp_dir, session_id);
+            let _ = tokio::fs::remove_dir_all(&chunk_dir).await;
+        }
+        expired.len()
     }
 }
 
@@ -327,11 +343,37 @@ pub async fn upload_chunk(
     }
 
     // Validate chunk index
-    if chunk_index as usize >= session.uploaded_chunks.len() {
+    let chunk_index_usize = chunk_index as usize;
+    if chunk_index_usize >= session.uploaded_chunks.len() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "invalid_chunk",
             "chunk index out of range",
+        );
+    }
+
+    // Validate chunk size (allow up to CHUNK_SIZE, last chunk may be smaller)
+    let is_last_chunk = chunk_index_usize == session.uploaded_chunks.len() - 1;
+    let expected_max_size = if is_last_chunk {
+        let remaining = session.total_size % CHUNK_SIZE;
+        if remaining > 0 {
+            remaining
+        } else {
+            CHUNK_SIZE
+        }
+    } else {
+        CHUNK_SIZE
+    };
+
+    if body.len() as u64 > expected_max_size {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_chunk_size",
+            &format!(
+                "chunk size {} exceeds maximum {} for this chunk",
+                body.len(),
+                expected_max_size
+            ),
         );
     }
 

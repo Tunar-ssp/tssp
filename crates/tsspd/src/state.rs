@@ -36,7 +36,8 @@ pub struct HttpState {
     pub(crate) public_urls: PublicUrlBuilder,
     /// Number of files whose content blob is missing on disk.
     pub corrupt_file_count: Arc<std::sync::atomic::AtomicU64>,
-    pub(crate) upload_session_manager: Arc<UploadSessionManager>,
+    /// Session manager for chunked uploads.
+    pub upload_session_manager: Arc<UploadSessionManager>,
     pub(crate) repository: Arc<dyn FileRepository + Send + Sync>,
     pub(crate) stats_provider: Arc<dyn MetadataStatsProvider>,
     pub(crate) upload_provider: Arc<dyn FileUploadProvider>,

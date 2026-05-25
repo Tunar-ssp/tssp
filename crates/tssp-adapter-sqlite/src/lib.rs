@@ -138,7 +138,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
                  FROM files
                  WHERE id = ?1 AND deleted_at IS NULL",
             )
@@ -162,7 +162,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
                  FROM files
                  WHERE content_hash = ?1 AND deleted_at IS NULL
                  ORDER BY uploaded_at ASC, id ASC
@@ -223,7 +223,7 @@ impl FileRepository for SqliteFileRepository {
 
         let connection = self.connect()?;
         let mut sql = String::from(
-            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
+            "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token, f.public_expires_at
              FROM files f",
         );
         let mut where_clauses = Vec::new();
@@ -636,7 +636,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
                  FROM files
                  WHERE pinned_at IS NOT NULL AND deleted_at IS NULL
                  ORDER BY pinned_at ASC, id ASC",
@@ -684,11 +684,10 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token
-                 FROM file_search s
-                 JOIN files f ON f.id = s.file_id
-                 WHERE file_search MATCH ?1 AND f.deleted_at IS NULL
-                 ORDER BY rank
+                "SELECT f.id, f.name, f.size_bytes, f.content_hash, f.mime_type, f.storage_handle, f.uploaded_at, f.pinned_at, f.folder_path, f.owner_id, f.visibility, f.public_token, f.public_expires_at
+                 FROM files f
+                 WHERE f.id IN (SELECT file_id FROM file_search WHERE file_search MATCH ?1)
+                 AND f.deleted_at IS NULL
                  LIMIT 100",
             )
             .map_err(map_rusqlite_repository_error)?;
@@ -798,7 +797,7 @@ impl FileRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token
+                "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
                  FROM files
                  WHERE public_token = ?1 AND visibility = 'public' AND deleted_at IS NULL
                  LIMIT 1",

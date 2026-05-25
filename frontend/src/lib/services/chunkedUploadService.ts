@@ -1,4 +1,3 @@
-import { api } from '../api';
 import { uploadQueue } from '../stores/uploadQueue';
 
 const CHUNK_SIZE = 262_144; // 256 KB
@@ -30,7 +29,7 @@ export async function startChunkedUpload(
   folder: string
 ): Promise<string | null> {
   try {
-    const response = await fetch('/api/v1/files/upload/start', {
+    const res = await fetch('/api/v1/files/upload/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -43,11 +42,11 @@ export async function startChunkedUpload(
       credentials: 'same-origin',
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to start upload: ${response.statusText}`);
+    if (!res.ok) {
+      throw new Error(`Failed to start upload: ${res.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await res.json();
     return data.session_id;
   } catch (err) {
     console.error('Error starting upload:', err);
@@ -64,7 +63,7 @@ async function uploadChunk(
   retryCount: number = 0
 ): Promise<boolean> {
   try {
-    const response = await fetch(
+    const res = await fetch(
       `/api/v1/files/upload/${sessionId}/chunk/${chunkIndex}`,
       {
         method: 'POST',
@@ -73,16 +72,15 @@ async function uploadChunk(
       }
     );
 
-    if (!response.ok) {
-      if (response.status >= 500 && retryCount < MAX_RETRIES) {
-        // Server error, retry with backoff
+    if (!res.ok) {
+      if (res.status >= 500 && retryCount < MAX_RETRIES) {
         await delay(getRetryDelay(retryCount));
         return uploadChunk(uploadId, sessionId, chunkIndex, chunk, retryCount + 1);
       }
-      throw new Error(`Chunk upload failed: ${response.statusText}`);
+      throw new Error(`Chunk upload failed: ${res.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await res.json();
     const uploadedBytes = (chunkIndex + 1) * CHUNK_SIZE;
     await uploadQueue.updateProgress(uploadId, uploadedBytes, chunkIndex);
 
@@ -103,7 +101,7 @@ async function completeUpload(
   sessionId: string
 ): Promise<boolean> {
   try {
-    const response = await fetch(
+    const res = await fetch(
       `/api/v1/files/upload/${sessionId}/complete`,
       {
         method: 'POST',
@@ -111,8 +109,8 @@ async function completeUpload(
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Failed to complete upload: ${response.statusText}`);
+    if (!res.ok) {
+      throw new Error(`Failed to complete upload: ${res.statusText}`);
     }
 
     await uploadQueue.setStatus(uploadId, 'completed');
