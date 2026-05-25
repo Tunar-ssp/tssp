@@ -6,9 +6,12 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Write;
+use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::upload::HttpUploadRequest;
 use crate::HttpState;
 
 /// 256 KB chunks for Orange Pi efficiency.
@@ -208,7 +211,7 @@ pub async fn upload_chunk(
     State(state): State<HttpState>,
     auth: crate::auth::OptionalAuthContext,
     Path((session_id_str, chunk_index)): Path<(String, u32)>,
-    _body: axum::body::Bytes,
+    body: axum::body::Bytes,
 ) -> Response {
     let session_id = UploadSessionId::new(session_id_str);
 
@@ -251,8 +254,25 @@ pub async fn upload_chunk(
         );
     }
 
-    // TODO: Store chunk data to temp location
-    // For now, just mark as received
+    let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
+    let chunk_path = chunk_file_path(&chunk_dir, chunk_index);
+
+    if let Err(e) = std::fs::create_dir_all(&chunk_dir) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "storage_error",
+            &format!("failed to create chunk directory: {e}"),
+        );
+    }
+
+    if let Err(e) = std::fs::write(&chunk_path, &body) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "storage_error",
+            &format!("failed to write chunk: {e}"),
+        );
+    }
+
     state
         .upload_session_manager
         .mark_chunk_uploaded(&session_id, chunk_index as usize)
@@ -277,40 +297,196 @@ pub async fn upload_chunk(
 
 /// Complete an upload by assembling chunks and creating the file.
 pub async fn complete_upload(
-    State(_state): State<HttpState>,
-    _auth: crate::auth::OptionalAuthContext,
+    State(state): State<HttpState>,
+    auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
     let session_id = UploadSessionId::new(session_id_str);
 
-    // TODO: Verify session exists and is complete
-    // TODO: Assemble chunks into final file
-    // TODO: Create file record in database
-    // TODO: Cleanup temporary files
+    let session = match state.upload_session_manager.get_session(&session_id).await {
+        Some(s) => s,
+        None => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                "session_not_found",
+                "upload session not found",
+            )
+        }
+    };
 
-    (
-        StatusCode::OK,
-        Json(CompleteUploadResponse {
-            session_id: session_id.0,
-            status: "completed".to_string(),
+    // Verify ownership
+    if let Some(session_owner) = &session.owner_id {
+        if let Some(auth_ctx) = &auth.0 {
+            if auth_ctx.user_id.as_str() != *session_owner && !auth_ctx.is_admin() {
+                return error_response(
+                    StatusCode::FORBIDDEN,
+                    "forbidden",
+                    "you do not have permission to complete this upload",
+                );
+            }
+        } else {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "authentication required",
+            );
+        }
+    }
+
+    // Verify all chunks are uploaded
+    if !session.is_complete() {
+        let missing = session
+            .uploaded_chunks
+            .iter()
+            .enumerate()
+            .filter(|(_, &uploaded)| !uploaded)
+            .count();
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "incomplete_upload",
+            &format!("{} chunks still pending", missing),
+        );
+    }
+
+    let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
+    let assembly_path = state.upload_temp_dir.join(format!("{}.assembly", session_id.0));
+
+    if let Err(e) = assemble_chunks(&chunk_dir, &assembly_path, &session) {
+        let _ = std::fs::remove_dir_all(&chunk_dir);
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "assembly_error",
+            &format!("failed to assemble chunks: {e}"),
+        );
+    }
+
+    let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
+    let upload_request = HttpUploadRequest {
+        filename: session.filename.clone(),
+        mime_type: session.mime_type.clone(),
+        tags: session.tags.clone(),
+        pinned: false,
+        folder_path: session.folder_path.clone(),
+        owner_id,
+        source: Box::new(match std::fs::File::open(&assembly_path) {
+            Ok(f) => f,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&chunk_dir);
+                let _ = std::fs::remove_file(&assembly_path);
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "file_error",
+                    &format!("failed to open assembled file: {e}"),
+                );
+            }
         }),
-    )
-        .into_response()
+        staged_path: None,
+        content_hash: None,
+        size: None,
+    };
+
+    let _mutation_guard = state.storage_mutation_lock.lock().await;
+    let upload_provider = state.upload_provider.clone();
+    let result = tokio::task::spawn_blocking(move || upload_provider.upload(upload_request))
+        .await
+        .map_err(|e| format!("spawn error: {e}"))
+        .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
+
+    let _ = std::fs::remove_dir_all(&chunk_dir);
+    let _ = std::fs::remove_file(&assembly_path);
+    state.upload_session_manager.delete_session(&session_id).await;
+
+    match result {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(CompleteUploadResponse {
+                session_id: session_id.0,
+                status: "completed".to_string(),
+            }),
+        )
+            .into_response(),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "upload_error",
+            &format!("failed to upload assembled file: {e}"),
+        ),
+    }
 }
 
 /// Cancel an upload and cleanup resources.
 pub async fn cancel_upload(
     State(state): State<HttpState>,
-    _auth: crate::auth::OptionalAuthContext,
+    auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
     let session_id = UploadSessionId::new(session_id_str);
 
+    let session = match state.upload_session_manager.get_session(&session_id).await {
+        Some(s) => s,
+        None => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                "session_not_found",
+                "upload session not found",
+            )
+        }
+    };
+
+    // Verify ownership
+    if let Some(session_owner) = &session.owner_id {
+        if let Some(auth_ctx) = &auth.0 {
+            if auth_ctx.user_id.as_str() != *session_owner && !auth_ctx.is_admin() {
+                return error_response(
+                    StatusCode::FORBIDDEN,
+                    "forbidden",
+                    "you do not have permission to cancel this upload",
+                );
+            }
+        } else {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "authentication required",
+            );
+        }
+    }
+
+    let chunk_dir = chunk_directory(&state.upload_temp_dir, &session_id);
+    let _ = std::fs::remove_dir_all(&chunk_dir);
     state.upload_session_manager.delete_session(&session_id).await;
 
-    // TODO: Cleanup temporary files
-
     StatusCode::NO_CONTENT.into_response()
+}
+
+fn chunk_directory(temp_dir: &StdPath, session_id: &UploadSessionId) -> PathBuf {
+    temp_dir.join(format!(".{}", session_id.0))
+}
+
+fn chunk_file_path(chunk_dir: &StdPath, chunk_index: u32) -> PathBuf {
+    chunk_dir.join(format!("chunk_{}.part", chunk_index))
+}
+
+fn assemble_chunks(
+    chunk_dir: &StdPath,
+    output_path: &StdPath,
+    session: &UploadSession,
+) -> Result<(), String> {
+    let mut output = std::fs::File::create(output_path)
+        .map_err(|e| format!("failed to create output file: {e}"))?;
+
+    for chunk_index in 0..session.uploaded_chunks.len() {
+        let chunk_path = chunk_file_path(chunk_dir, chunk_index as u32);
+        let chunk_data =
+            std::fs::read(&chunk_path).map_err(|e| format!("failed to read chunk {}: {e}", chunk_index))?;
+        output
+            .write_all(&chunk_data)
+            .map_err(|e| format!("failed to write chunk {}: {e}", chunk_index))?;
+    }
+
+    output
+        .sync_all()
+        .map_err(|e| format!("failed to sync output file: {e}"))?;
+    Ok(())
 }
 
 fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
