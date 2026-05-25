@@ -41,14 +41,14 @@
 </script>
 
 {#if isOpen && $user}
-  <div class="menu-backdrop" on:click={handleBackdropClick}>
+  <div class="menu-backdrop" onclick={handleBackdropClick}>
     <div class="profile-menu {className || ''}">
       <div class="menu-header">
         <div class="user-avatar">
-          {$user.email.charAt(0).toUpperCase()}
+          {$user.name.charAt(0).toUpperCase()}
         </div>
         <div class="user-info">
-          <div class="user-email">{$user.email}</div>
+          <div class="user-email">{$user.name}</div>
           <div class="user-role">{$user.role === 'admin' ? '👑 Admin' : 'User'}</div>
         </div>
       </div>
@@ -56,16 +56,16 @@
       <div class="menu-divider"></div>
 
       <div class="menu-items">
-        <a href="/profile" class="menu-item" on:click={onClose}>
+        <a href="/profile" class="menu-item" onclick={onClose}>
           <Icons.User size={16} />
           <span>Profile</span>
         </a>
-        <a href="/devices" class="menu-item" on:click={onClose}>
+        <a href="/devices" class="menu-item" onclick={onClose}>
           <Icons.Smartphone size={16} />
           <span>Trusted Devices</span>
         </a>
         {#if $user.role === 'admin'}
-          <a href="/admin" class="menu-item admin" on:click={onClose}>
+          <a href="/admin" class="menu-item admin" onclick={onClose}>
             <Icons.Settings size={16} />
             <span>Admin Panel</span>
           </a>
@@ -74,7 +74,7 @@
 
       <div class="menu-divider"></div>
 
-      <button class="menu-item danger" on:click={handleLogout}>
+      <button class="menu-item danger" onclick={handleLogout}>
         <Icons.LogOut size={16} />
         <span>Sign Out</span>
       </button>

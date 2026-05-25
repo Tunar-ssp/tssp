@@ -220,14 +220,8 @@ export async function renameFile(id: string, newName: string): Promise<FileRecor
 
     validateFilename(newName);
 
-    const file = await api.renameFile(id, newName);
-
-    if (!file?.id) {
-      throw new DriveServiceError(
-        'INVALID_RESPONSE',
-        'Server returned invalid file data'
-      );
-    }
+    await api.renameFile(id, newName);
+    const file = await api.getFile(id);
 
     log('renameFile', 'Success', { id, newName });
     return file;
@@ -247,10 +241,6 @@ export async function renameFile(id: string, newName: string): Promise<FileRecor
 
 /**
  * Move a file to another folder
- * Edge cases:
- * - Moving to same folder (no-op)
- * - Moving folder into itself (prevent)
- * - Duplicate filename in target (auto-rename)
  */
 export async function moveFile(
   id: string,
@@ -282,17 +272,8 @@ export async function moveFile(
     }
 
     // API call to move file
-    const file = await api.updateFile(id, { folder_path: toPath });
-
-    if (!file?.id) {
-      throw new DriveServiceError(
-        'INVALID_RESPONSE',
-        'Server returned invalid file data'
-      );
-    }
-
-    log('moveFile', 'Success', { id, toPath });
-    return file;
+    const response = await api.moveFile(id, toPath);
+    return response.file;
   } catch (err) {
     const message = err instanceof DriveServiceError
       ? err.message
@@ -365,8 +346,11 @@ export async function searchFiles(query: string): Promise<FileRecord[]> {
 
     if (!sanitized) return [];
 
-    const response = await api.searchFiles(sanitized);
-    const files = response.files || [];
+    const response = await api.search(sanitized);
+    
+    // Filter to only include files from the search results
+    const fileIds = response.results.filter(r => r.type === 'file').map(r => r.id);
+    const files = await Promise.all(fileIds.map(id => api.getFile(id)));
 
     log('searchFiles', 'Success', { resultCount: files.length });
     return files;
@@ -390,22 +374,12 @@ export async function updateFileTags(
       throw new DriveServiceError('VALIDATION_ERROR', 'File ID required');
     }
 
-    // Deduplicate and sanitize
     const uniqueTags = Array.from(new Set(
       tags.map(tag => tag.trim()).filter(tag => tag.length > 0)
     ));
 
-    const file = await api.updateFileTags(id, uniqueTags);
-
-    if (!file?.id) {
-      throw new DriveServiceError(
-        'INVALID_RESPONSE',
-        'Server returned invalid file data'
-      );
-    }
-
-    log('updateFileTags', 'Success', { id, tagCount: uniqueTags.length });
-    return file;
+    await api.updateFileTags(id, uniqueTags);
+    return await api.getFile(id);
   } catch (err) {
     const message = err instanceof DriveServiceError
       ? err.message
@@ -434,19 +408,13 @@ export async function togglePin(
       throw new DriveServiceError('VALIDATION_ERROR', 'File ID required');
     }
 
-    const file = await api.updateFile(id, {
-      pinned_at: currentlyPinned ? null : Math.floor(Date.now() / 1000),
-    });
-
-    if (!file?.id) {
-      throw new DriveServiceError(
-        'INVALID_RESPONSE',
-        'Server returned invalid file data'
-      );
+    if (currentlyPinned) {
+      await api.unpinFile(id);
+    } else {
+      await api.pinFile(id);
     }
 
-    log('togglePin', 'Success', { id, nowPinned: !currentlyPinned });
-    return file;
+    return await api.getFile(id);
   } catch (err) {
     const message = err instanceof DriveServiceError
       ? err.message
@@ -567,16 +535,6 @@ export async function loadTrash(): Promise<FileRecord[]> {
   }
 }
 
-export async function searchFiles(query: string): Promise<FileRecord[]> {
-  try {
-    const data = await api.search(query);
-    return (data.results || []).filter((r: any) => r.type === 'file') as FileRecord[];
-  } catch (err) {
-    error(`Search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    return [];
-  }
-}
-
 export async function restoreFile(fileId: string): Promise<void> {
   try {
     await api.restoreFile(fileId);
@@ -610,43 +568,6 @@ export async function toggleFileVisibility(fileId: string, isPublic: boolean): P
     return result?.file || null;
   } catch (err) {
     error(`Failed to toggle visibility: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    throw err;
-  }
-}
-
-export async function renameFile(fileId: string, newName: string): Promise<void> {
-  try {
-    await api.renameFile(fileId, newName);
-  } catch (err) {
-    error(`Failed to rename file: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    throw err;
-  }
-}
-
-export async function pinFile(fileId: string): Promise<void> {
-  try {
-    await api.pinFile(fileId);
-  } catch (err) {
-    error(`Failed to pin file: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    throw err;
-  }
-}
-
-export async function unpinFile(fileId: string): Promise<void> {
-  try {
-    await api.unpinFile(fileId);
-  } catch (err) {
-    error(`Failed to unpin file: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    throw err;
-  }
-}
-
-export async function moveFile(fileId: string, folderPath: string): Promise<FileRecord | null> {
-  try {
-    const result = await api.moveFile(fileId, folderPath);
-    return result?.file || null;
-  } catch (err) {
-    error(`Failed to move file: ${err instanceof Error ? err.message : 'Unknown error'}`);
     throw err;
   }
 }

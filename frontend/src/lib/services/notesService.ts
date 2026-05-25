@@ -251,28 +251,29 @@ export async function listNotes(limit: number = 100): Promise<Note[]> {
 
 /**
  * Search notes by title, body, or tags
- * Edge cases: Special characters, empty query, large result set
  */
 export async function searchNotes(query: string): Promise<Note[]> {
   log('searchNotes', 'Starting', { queryLength: query.length });
 
   try {
     if (!query || query.trim().length === 0) {
-      // Empty search returns empty
       return [];
     }
 
-    // Sanitize query - remove problematic characters for safe searching
     const sanitized = query
       .trim()
-      .slice(0, 200) // Cap search length
-      .replace(/[<>]/g, ''); // Remove angle brackets
+      .slice(0, 200)
+      .replace(/[<>]/g, '');
 
-    // If query becomes empty after sanitization, return empty
     if (!sanitized) return [];
 
-    const response = await api.searchNotes(sanitized);
-    const notes = response.notes || [];
+    const response = await api.search(sanitized);
+    
+    // Filter to only include notes from search results
+    const noteIds = response.results.filter(r => r.type === 'note').map(r => r.id);
+    
+    // Fetch full note details if needed, or return partials
+    const notes = await Promise.all(noteIds.map(id => api.getNote(id)));
 
     log('searchNotes', 'Success', { queryLength: sanitized.length, resultCount: notes.length });
     return notes;
@@ -280,7 +281,6 @@ export async function searchNotes(query: string): Promise<Note[]> {
     const message = 'Failed to search notes';
 
     log('searchNotes', 'Error', { error: message });
-    // Don't throw for search failures - return empty instead
     return [];
   }
 }
@@ -344,7 +344,7 @@ export async function toggleNotePin(id: string, currentlyPinned: boolean): Promi
     }
 
     const note = await api.updateNote(id, {
-      pinned_at: currentlyPinned ? null : Math.floor(Date.now() / 1000),
+      pinned_at: currentlyPinned ? undefined : Math.floor(Date.now() / 1000),
     });
 
     if (!note?.id) {

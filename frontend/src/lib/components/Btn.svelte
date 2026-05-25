@@ -4,6 +4,7 @@
   interface $$Props extends ButtonProps {
     class?: string;
     children?: import('svelte').Snippet;
+    style?: string;
   }
 
   let {

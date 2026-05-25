@@ -66,7 +66,7 @@ export function buildFolderEntries(files: FileRecord[]): FolderEntry[] {
       const segments = path.split("/").filter(Boolean);
       return {
         path,
-        label: segments.at(-1) || "Bucket root",
+        label: segments[segments.length - 1] || "Bucket root",
         depth: segments.length,
         count,
       };

@@ -25,7 +25,15 @@
     try {
       isLoading = true;
       const data = await api.listAdminDevices();
-      devices = data.devices || [];
+      devices = (data.devices || []).map(d => ({
+        id: d.id,
+        token: d.token,
+        name: 'Admin Trusted',
+        fingerprint: d.token.substring(0, 8),
+        created_at: d.trusted_at || Date.now() / 1000,
+        last_used_at: d.trusted_at || Date.now() / 1000,
+        is_current: false
+      })) as Device[];
       currentDeviceToken = localStorage.getItem('device_token');
       error = null;
     } catch (e) {

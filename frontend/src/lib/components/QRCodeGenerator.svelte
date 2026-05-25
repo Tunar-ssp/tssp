@@ -22,7 +22,6 @@
       if (canvas) {
         await QRCode.toCanvas(canvas, data, {
           errorCorrectionLevel: level,
-          type: 'image/png',
           width: size,
           margin: 2,
           color: {
