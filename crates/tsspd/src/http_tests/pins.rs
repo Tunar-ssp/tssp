@@ -2,7 +2,6 @@
 
 //! HTTP integration tests.
 
-
 use super::common::*;
 use super::imports::*;
 
@@ -71,7 +70,9 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         .unwrap_or_else(|error| panic!("pin request failed: {error}"));
     if first_pin.status() != StatusCode::OK {
         let status = first_pin.status();
-        let body_bytes = axum::body::to_bytes(first_pin.into_body(), 10000).await.unwrap();
+        let body_bytes = axum::body::to_bytes(first_pin.into_body(), 10000)
+            .await
+            .unwrap();
         let body = String::from_utf8_lossy(&body_bytes);
         panic!("pin request for id {first_id} (PUT /api/v1/files/{first_id}/pin) failed with status {status} and body: {body}. Ensure the router is configured correctly.");
     }
@@ -105,9 +106,8 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
     assert_eq!(listed_body["files"][0]["id"], second_id);
     assert_eq!(listed_body["files"][1]["id"], first_id);
 
-    let mut reorder_req = reorder_pins_request(&format!(
-        r#"{{"ids":["{first_id}","{second_id}"]}}"#
-    ));
+    let mut reorder_req =
+        reorder_pins_request(&format!(r#"{{"ids":["{first_id}","{second_id}"]}}"#));
     let peer_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
     reorder_req
         .extensions_mut()

@@ -2,7 +2,6 @@
 
 //! HTTP integration tests.
 
-
 use super::common::*;
 use super::imports::*;
 

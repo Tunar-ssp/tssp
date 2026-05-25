@@ -15,7 +15,8 @@ use axum::response::{Html, IntoResponse, Response};
 use std::path::{Path as FsPath, PathBuf};
 
 use assets::{asset_for_path as asset, INDEX_HTML};
-pub(crate) const HTML_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';";
+pub(crate) const HTML_CSP: &str =
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';";
 
 fn response_with_bytes(
     bytes: &str,
@@ -105,16 +106,13 @@ fn web_v2_mime(path: &FsPath) -> &'static str {
 
 async fn serve_web_v2_index_from_dir(base: &FsPath) -> Response<Body> {
     let index = base.join("index.html");
-    let bytes = match tokio::fs::read(&index).await {
-        Ok(b) => b,
-        Err(_) => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                [(CONTENT_TYPE, "text/plain; charset=utf-8")],
-                WEB_V2_MISSING_MESSAGE,
-            )
-                .into_response();
-        }
+    let Ok(bytes) = tokio::fs::read(&index).await else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+            WEB_V2_MISSING_MESSAGE,
+        )
+            .into_response();
     };
     let mut response = response_with_file_bytes(
         bytes,

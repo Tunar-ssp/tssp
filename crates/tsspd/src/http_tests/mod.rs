@@ -1,8 +1,8 @@
 //! HTTP integration tests split across focused modules.
 
-pub(crate) mod common;
 mod auth;
 mod chunked_upload;
+pub(crate) mod common;
 mod files;
 mod folders;
 mod imports;

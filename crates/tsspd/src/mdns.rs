@@ -76,7 +76,7 @@ fn local_ipv4_addresses() -> Vec<IpAddr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SERVICE_TYPE, INSTANCE, MdnsAdvertiser, local_ipv4_addresses};
+    use super::{local_ipv4_addresses, MdnsAdvertiser, INSTANCE, SERVICE_TYPE};
     use std::net::IpAddr;
 
     #[test]

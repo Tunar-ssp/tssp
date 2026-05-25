@@ -119,11 +119,7 @@ impl HttpTagError {
             Self::NotFound { message } => {
                 (StatusCode::NOT_FOUND, "file_not_found", message.clone())
             }
-            Self::Forbidden { message } => (
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                message.clone(),
-            ),
+            Self::Forbidden { message } => (StatusCode::FORBIDDEN, "forbidden", message.clone()),
             Self::Busy { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "metadata_busy",
@@ -195,9 +191,7 @@ where
     }
 }
 
-pub(crate) async fn create_tag(
-    Json(body): Json<CreateTagBody>,
-) -> Response {
+pub(crate) async fn create_tag(Json(body): Json<CreateTagBody>) -> Response {
     let tag_name = body.name.trim();
     if tag_name.is_empty() {
         return HttpTagError::InvalidRequest {
@@ -213,7 +207,10 @@ pub(crate) async fn create_tag(
         .response();
     }
 
-    if !tag_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if !tag_name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return HttpTagError::InvalidRequest {
             message: "tag name must contain only alphanumeric characters, hyphens, and underscores"
                 .to_owned(),
@@ -241,8 +238,9 @@ pub(crate) async fn list_tags(
     if auth.is_admin() {
         let provider = state.tag_provider.clone();
         return match tokio::task::spawn_blocking(move || provider.list_tags()).await {
-            Ok(Ok(tags)) => (StatusCode::OK, Json(TagListResponse::from_tags(&tags)))
-                .into_response(),
+            Ok(Ok(tags)) => {
+                (StatusCode::OK, Json(TagListResponse::from_tags(&tags))).into_response()
+            }
             Ok(Err(error)) => error.response(),
             Err(error) => HttpTagError::Internal {
                 message: format!("tag worker failed: {error}"),
@@ -272,12 +270,12 @@ pub(crate) async fn list_tags(
             let tags: Vec<tssp_ports::TagSummary> = tag_counts
                 .into_iter()
                 .filter_map(|(key, count)| {
-                    tssp_domain::Tag::new(key).ok().map(|tag| {
-                        tssp_ports::TagSummary {
+                    tssp_domain::Tag::new(key)
+                        .ok()
+                        .map(|tag| tssp_ports::TagSummary {
                             tag,
                             file_count: count,
-                        }
-                    })
+                        })
                 })
                 .collect();
 
@@ -324,12 +322,7 @@ pub(crate) async fn add_tags(
             }
             .response()
         }
-        Err(e) => {
-            return HttpTagError::Internal {
-                message: e,
-            }
-            .response()
-        }
+        Err(e) => return HttpTagError::Internal { message: e }.response(),
     };
 
     if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
@@ -374,12 +367,7 @@ pub(crate) async fn remove_tag(
             }
             .response()
         }
-        Err(e) => {
-            return HttpTagError::Internal {
-                message: e,
-            }
-            .response()
-        }
+        Err(e) => return HttpTagError::Internal { message: e }.response(),
     };
 
     if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {

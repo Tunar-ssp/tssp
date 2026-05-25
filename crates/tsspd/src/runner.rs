@@ -13,7 +13,8 @@ use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository, SqliteSes
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
 use tssp_app::{
-    DeleteFileService, RestoreFileService, NoteService, PinService, SessionService, TagService, UploadService, PurgeDeletedFilesService,
+    DeleteFileService, NoteService, PinService, PurgeDeletedFilesService, RestoreFileService,
+    SessionService, TagService, UploadService,
 };
 use tssp_ports::Clock;
 use tsspd::workspaces::WorkspaceStore;
@@ -23,10 +24,12 @@ use tsspd::{
         UserStore,
     },
     bind_error_message, build_router, collect_garbage, spawn_advertisement,
-    spawn_startup_integrity_scan, ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, ApplicationFilePinProvider, ApplicationFileTagProvider,
-    ApplicationFileUploadProvider, ApplicationNoteProvider, ApplicationSessionProvider,
-    CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder, RepositoryFileSearchProvider,
-    RepositoryMetadataStatsProvider, trash_cleanup::purge_expired_trash,
+    spawn_startup_integrity_scan,
+    trash_cleanup::purge_expired_trash,
+    ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileRestoreProvider,
+    ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationNoteProvider,
+    ApplicationSessionProvider, CliOverrides, DaemonSettings, HttpState, PublicUrlBuilder,
+    RepositoryFileSearchProvider, RepositoryMetadataStatsProvider,
 };
 
 use super::Cli;
@@ -252,6 +255,7 @@ fn build_http_state(
     settings: &Arc<DaemonSettings>,
     paths: RuntimePaths,
     pool: Pool<SqliteConnectionManager>,
+    #[allow(clippy::needless_pass_by_value)]
     repository: Arc<SqliteFileRepository>,
     storage: Arc<FilesystemBlobStore>,
     session_service: SessionService<SqliteSessionRepository>,
@@ -284,7 +288,9 @@ fn build_http_state(
     .with_stats_provider(Arc::new(stats_provider))
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
     .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
-    .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(restore_service)))
+    .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(
+        restore_service,
+    )))
     .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
     .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
     .with_session_provider(Arc::new(ApplicationSessionProvider::new(
@@ -292,7 +298,9 @@ fn build_http_state(
         SystemClock,
     )))
     .with_note_provider(Arc::new(ApplicationNoteProvider::new(note_service)))
-    .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(repository.clone())))
+    .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(
+        repository.clone(),
+    )))
     .with_blob_reader(storage)
     .with_auth(auth_service)
 }
@@ -426,7 +434,10 @@ pub async fn run(cli: Cli) -> Result<(), String> {
             // Purge expired trash
             let purge_report = purge_expired_trash(&purge_service, retention_days);
             if purge_report.files_purged > 0 {
-                tracing::info!("trash: purged {count} files older than {retention_days} days", count = purge_report.files_purged);
+                tracing::info!(
+                    "trash: purged {count} files older than {retention_days} days",
+                    count = purge_report.files_purged
+                );
             }
             if purge_report.error {
                 tracing::warn!("trash: purge operation failed");

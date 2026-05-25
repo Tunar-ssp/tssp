@@ -14,7 +14,6 @@ pub use tssp_app::{DeleteFileService, PinService, TagService, UploadService};
 
 pub use crate::{
     bind_error_message, build_router, ApplicationFileDeleteProvider, ApplicationFilePinProvider,
-    ApplicationFileTagProvider, ApplicationFileUploadProvider, DaemonSettings,
-    HttpState, 
+    ApplicationFileTagProvider, ApplicationFileUploadProvider, DaemonSettings, HttpState,
     RepositoryMetadataStatsProvider,
 };

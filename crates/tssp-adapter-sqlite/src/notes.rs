@@ -756,9 +756,7 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
             })
         })
         .transpose()?;
-    let owner_id_raw: Option<String> = row
-        .get(7)
-        .map_err(map_rusqlite_repository_error)?;
+    let owner_id_raw: Option<String> = row.get(7).map_err(map_rusqlite_repository_error)?;
     let owner_id = owner_id_raw
         .map(|value| UserId::new(value).map_err(|error| map_domain_repository_error(&error)))
         .transpose()?;

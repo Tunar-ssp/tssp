@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 
 const MAX_ATTEMPTS: u32 = 5;
 const LOCKOUT_SECONDS: u64 = 1800; // 30 minutes
@@ -83,9 +83,7 @@ impl RateLimiter {
     /// Returns true if the attempt is allowed, false if rate-limited.
     pub async fn check_and_record_attempt(&self, ip: IpAddr) -> bool {
         let mut buckets = self.buckets.write().await;
-        let bucket = buckets
-            .entry(ip)
-            .or_insert_with(BucketState::new);
+        let bucket = buckets.entry(ip).or_insert_with(BucketState::new);
 
         if bucket.is_locked_out() {
             return false;

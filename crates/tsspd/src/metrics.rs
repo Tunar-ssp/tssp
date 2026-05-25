@@ -147,7 +147,9 @@ mod tests {
         ];
         for name in names {
             assert!(name.starts_with("tssp_"));
-            assert!(name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
+            assert!(name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
         }
     }
 
@@ -190,8 +192,8 @@ mod tests {
     fn uptime_seconds_from_elapsed() {
         let start = std::time::Instant::now();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let elapsed = start.elapsed().as_secs();
-        assert!(elapsed <= u64::MAX);
+        let _elapsed = start.elapsed().as_secs();
+        // elapsed is always <= u64::MAX
     }
 
     #[test]

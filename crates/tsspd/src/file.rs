@@ -192,6 +192,7 @@ pub(crate) async fn get_file_thumbnail(
         .into_response()
 }
 
+#[allow(clippy::result_large_err)]
 fn authorize_file_access(
     record: &tssp_domain::FileRecord,
     auth: Option<&crate::auth::AuthContext>,
@@ -237,19 +238,25 @@ mod tests {
 
     #[test]
     fn thumbnail_query_size_deserializes_small() {
-        let query = ThumbnailQuery { size: Some("small".to_owned()) };
+        let query = ThumbnailQuery {
+            size: Some("small".to_owned()),
+        };
         assert_eq!(query.size.as_deref(), Some("small"));
     }
 
     #[test]
     fn thumbnail_query_size_deserializes_medium() {
-        let query = ThumbnailQuery { size: Some("medium".to_owned()) };
+        let query = ThumbnailQuery {
+            size: Some("medium".to_owned()),
+        };
         assert_eq!(query.size.as_deref(), Some("medium"));
     }
 
     #[test]
     fn thumbnail_query_size_deserializes_large() {
-        let query = ThumbnailQuery { size: Some("large".to_owned()) };
+        let query = ThumbnailQuery {
+            size: Some("large".to_owned()),
+        };
         assert_eq!(query.size.as_deref(), Some("large"));
     }
 

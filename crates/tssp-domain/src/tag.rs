@@ -73,7 +73,9 @@ impl fmt::Display for Tag {
 }
 
 /// Case-insensitive tag lookup key.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct TagKey(String);
 
 impl TagKey {

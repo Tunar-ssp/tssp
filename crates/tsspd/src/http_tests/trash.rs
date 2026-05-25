@@ -1,6 +1,5 @@
 //! Trash and soft-delete integration tests.
 
-
 use super::common::*;
 use super::imports::*;
 
@@ -8,7 +7,11 @@ use super::imports::*;
 async fn delete_moves_file_to_trash_and_list_trash_shows_it() {
     let (_temp, app) = real_storage_app();
 
-    let upload = app.clone().oneshot(multipart_request(REAL_UPLOAD_BODY)).await.unwrap();
+    let upload = app
+        .clone()
+        .oneshot(multipart_request(REAL_UPLOAD_BODY))
+        .await
+        .unwrap();
     assert_eq!(upload.status(), StatusCode::CREATED);
     let upload_body = response_json(upload).await;
     let file_id = upload_body["id"].as_str().expect("id should exist");
@@ -39,15 +42,15 @@ async fn delete_moves_file_to_trash_and_list_trash_shows_it() {
 async fn restore_moves_file_from_trash() {
     let (_temp, app) = real_storage_app();
 
-    let upload = app.clone().oneshot(multipart_request(REAL_UPLOAD_BODY)).await.unwrap();
+    let upload = app
+        .clone()
+        .oneshot(multipart_request(REAL_UPLOAD_BODY))
+        .await
+        .unwrap();
     let upload_body = response_json(upload).await;
     let file_id = upload_body["id"].as_str().expect("id should exist");
 
-    let _delete = app
-        .clone()
-        .oneshot(delete_request(file_id))
-        .await
-        .unwrap();
+    let _delete = app.clone().oneshot(delete_request(file_id)).await.unwrap();
 
     let trash_after_delete = app
         .clone()
@@ -107,15 +110,15 @@ async fn restore_moves_file_from_trash() {
 async fn permanent_delete_removes_file_from_trash() {
     let (_temp, app) = real_storage_app();
 
-    let upload = app.clone().oneshot(multipart_request(REAL_UPLOAD_BODY)).await.unwrap();
+    let upload = app
+        .clone()
+        .oneshot(multipart_request(REAL_UPLOAD_BODY))
+        .await
+        .unwrap();
     let upload_body = response_json(upload).await;
     let file_id = upload_body["id"].as_str().expect("id should exist");
 
-    let _delete = app
-        .clone()
-        .oneshot(delete_request(file_id))
-        .await
-        .unwrap();
+    let _delete = app.clone().oneshot(delete_request(file_id)).await.unwrap();
 
     let trash_before = app
         .clone()
@@ -165,11 +168,19 @@ async fn permanent_delete_removes_file_from_trash() {
 async fn empty_trash_purges_old_deleted_files() {
     let (_temp, app) = real_storage_app();
 
-    let upload1 = app.clone().oneshot(multipart_request(REAL_UPLOAD_BODY)).await.unwrap();
+    let upload1 = app
+        .clone()
+        .oneshot(multipart_request(REAL_UPLOAD_BODY))
+        .await
+        .unwrap();
     let body1 = response_json(upload1).await;
     let id1 = body1["id"].as_str().unwrap();
 
-    let upload2 = app.clone().oneshot(multipart_request(SECOND_UPLOAD_BODY)).await.unwrap();
+    let upload2 = app
+        .clone()
+        .oneshot(multipart_request(SECOND_UPLOAD_BODY))
+        .await
+        .unwrap();
     let body2 = response_json(upload2).await;
     let id2 = body2["id"].as_str().unwrap();
 
@@ -210,21 +221,17 @@ async fn empty_trash_purges_old_deleted_files() {
 async fn soft_deleted_file_is_not_accessible_but_exists_in_trash() {
     let (_temp, app) = real_storage_app();
 
-    let upload = app.clone().oneshot(multipart_request(REAL_UPLOAD_BODY)).await.unwrap();
+    let upload = app
+        .clone()
+        .oneshot(multipart_request(REAL_UPLOAD_BODY))
+        .await
+        .unwrap();
     let upload_body = response_json(upload).await;
     let file_id = upload_body["id"].as_str().expect("id should exist");
 
-    let _delete = app
-        .clone()
-        .oneshot(delete_request(file_id))
-        .await
-        .unwrap();
+    let _delete = app.clone().oneshot(delete_request(file_id)).await.unwrap();
 
-    let get_file = app
-        .clone()
-        .oneshot(file_request(file_id))
-        .await
-        .unwrap();
+    let get_file = app.clone().oneshot(file_request(file_id)).await.unwrap();
     assert_eq!(get_file.status(), StatusCode::NOT_FOUND);
 
     let trash_list = app

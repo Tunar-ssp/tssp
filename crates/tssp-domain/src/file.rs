@@ -10,7 +10,9 @@ const MAX_STORAGE_COMPONENT_BYTES: usize = 120;
 const MAX_MIME_LEN: usize = 127;
 
 /// Opaque file identifier exposed to clients.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct FileId(String);
 
 impl FileId {
@@ -96,7 +98,9 @@ impl fmt::Display for FileName {
 }
 
 /// Byte length of a stored file.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct FileSize(u64);
 
 impl FileSize {

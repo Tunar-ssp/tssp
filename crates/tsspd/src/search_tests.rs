@@ -1,6 +1,5 @@
 //! Search endpoint integration tests.
 
-
 use super::*;
 use axum::body::to_bytes;
 use axum::http::Request;

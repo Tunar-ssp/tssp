@@ -160,10 +160,7 @@ where
                         purged_count += 1;
                     }
                     Err(e) => {
-                        eprintln!(
-                            "warning: failed to clean blob for {}: {}",
-                            file.id, e
-                        );
+                        eprintln!("warning: failed to clean blob for {}: {}", file.id, e);
                     }
                 }
             }
@@ -270,7 +267,10 @@ mod tests {
             Ok(None)
         }
 
-        fn list_deleted_files(&self, _older_than: tssp_domain::UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+        fn list_deleted_files(
+            &self,
+            _older_than: tssp_domain::UnixTimestamp,
+        ) -> Result<Vec<FileRecord>, RepositoryError> {
             Ok(Vec::new())
         }
 

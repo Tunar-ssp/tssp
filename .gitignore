@@ -14,3 +14,4 @@ scratch_*.rs
 merger.py
 *.txt
 ui/
+docs/temp

@@ -1,7 +1,9 @@
 //! Note lifecycle use cases.
 
 use thiserror::Error;
-use tssp_domain::{derive_note_title, DomainError, NoteBody, NoteId, NoteRecord, NoteTitle, Tag, UserId};
+use tssp_domain::{
+    derive_note_title, DomainError, NoteBody, NoteId, NoteRecord, NoteTitle, Tag, UserId,
+};
 use tssp_ports::{
     Clock, IdGenerator, NewNoteRecord, NoteListQuery, NoteRepository, PagedNotes, PinOutcome,
     RepositoryError, TagMutationOutcome,

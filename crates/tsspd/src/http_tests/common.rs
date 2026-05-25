@@ -22,8 +22,8 @@ use tssp_domain::{
 use tssp_ports::RepositoryStats;
 
 use crate::{
-    build_router, ApplicationFileDeleteProvider, ApplicationFileRestoreProvider,
-    ApplicationFilePinProvider, ApplicationFileTagProvider, ApplicationFileUploadProvider,
+    build_router, ApplicationFileDeleteProvider, ApplicationFilePinProvider,
+    ApplicationFileRestoreProvider, ApplicationFileTagProvider, ApplicationFileUploadProvider,
     FileUploadProvider, HttpState, HttpUploadError, HttpUploadOutcome, HttpUploadRequest,
     MetadataStatsProvider, RepositoryMetadataStatsProvider,
 };
@@ -87,7 +87,9 @@ pub fn real_storage_app() -> (tempfile::TempDir, Router) {
             .with_stats_provider(Arc::new(stats_provider))
             .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
             .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
-            .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(restore_service)))
+            .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(
+                restore_service,
+            )))
             .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
             .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
             .with_blob_reader(storage),
@@ -325,7 +327,7 @@ pub fn test_record(request: &HttpUploadRequest) -> FileRecord {
         owner_id: None,
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
-            public_expires_at: None,
+        public_expires_at: None,
     }
 }
 
@@ -344,7 +346,7 @@ pub fn single_record() -> FileRecord {
         owner_id: None,
         visibility: tssp_domain::Visibility::Private,
         public_token: None,
-            public_expires_at: None,
+        public_expires_at: None,
     }
 }
 

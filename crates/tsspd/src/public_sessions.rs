@@ -203,7 +203,10 @@ pub async fn post_receive_session_upload(
         }
     };
 
-    let owner_id = session.creator_id.as_ref().and_then(|id| tssp_domain::UserId::new(id).ok());
+    let owner_id = session
+        .creator_id
+        .as_ref()
+        .and_then(|id| tssp_domain::UserId::new(id).ok());
 
     let upload_req = HttpUploadRequest {
         filename: staged.filename,
@@ -421,7 +424,10 @@ mod tests {
 
     #[test]
     fn status_code_internal_server_error_value() {
-        assert_eq!(StatusCode::INTERNAL_SERVER_ERROR, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]

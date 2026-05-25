@@ -62,7 +62,10 @@ pub trait FileRepository {
     /// # Errors
     ///
     /// Returns [`RepositoryError`] when the query fails.
-    fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError>;
+    fn list_deleted_files(
+        &self,
+        older_than: UnixTimestamp,
+    ) -> Result<Vec<FileRecord>, RepositoryError>;
 
     /// Permanently deletes a soft-deleted file record.
     ///
@@ -382,7 +385,10 @@ where
         self.as_ref().restore_file(id)
     }
 
-    fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+    fn list_deleted_files(
+        &self,
+        older_than: UnixTimestamp,
+    ) -> Result<Vec<FileRecord>, RepositoryError> {
         self.as_ref().list_deleted_files(older_than)
     }
 
@@ -510,8 +516,16 @@ where
         status: &str,
         details: Option<&str>,
     ) -> Result<(), RepositoryError> {
-        self.as_ref()
-            .insert_audit_event(id, timestamp, user_id, action, resource, resource_id, status, details)
+        self.as_ref().insert_audit_event(
+            id,
+            timestamp,
+            user_id,
+            action,
+            resource,
+            resource_id,
+            status,
+            details,
+        )
     }
 }
 

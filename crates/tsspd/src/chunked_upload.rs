@@ -134,7 +134,9 @@ impl UploadSession {
             return 0;
         }
         let uploaded = self.uploaded_chunks.iter().filter(|&&u| u).count();
-        ((u32::try_from(uploaded).unwrap_or(0) * 100) / u32::try_from(self.uploaded_chunks.len()).unwrap_or(0)).min(100)
+        ((u32::try_from(uploaded).unwrap_or(0) * 100)
+            / u32::try_from(self.uploaded_chunks.len()).unwrap_or(0))
+        .min(100)
     }
 }
 
@@ -275,15 +277,12 @@ pub async fn get_upload_session(
         );
     };
 
-    let session = match state.upload_session_manager.get_session(&session_id).await {
-        Some(s) => s,
-        None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "session_not_found",
-                "upload session not found or expired",
-            )
-        }
+    let Some(session) = state.upload_session_manager.get_session(&session_id).await else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "session_not_found",
+            "upload session not found or expired",
+        );
     };
 
     // Verify ownership
@@ -390,15 +389,12 @@ pub async fn upload_chunk(
         );
     };
 
-    let session = match state.upload_session_manager.get_session(&session_id).await {
-        Some(s) => s,
-        None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "session_not_found",
-                "upload session not found",
-            )
-        }
+    let Some(session) = state.upload_session_manager.get_session(&session_id).await else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "session_not_found",
+            "upload session not found",
+        );
     };
 
     // Verify ownership
@@ -479,11 +475,13 @@ pub async fn upload_chunk(
         .mark_chunk_uploaded(&session_id, chunk_index as usize)
         .await;
 
-    let updated_session = state
-        .upload_session_manager
-        .get_session(&session_id)
-        .await
-        .unwrap();
+    let Some(updated_session) = state.upload_session_manager.get_session(&session_id).await else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "session_not_found",
+            "upload session not found",
+        );
+    };
 
     (
         StatusCode::OK,
@@ -548,7 +546,8 @@ fn assemble_chunks_to_temp(
     let assembled_path = temp_file
         .into_temp_path()
         .keep()
-        .map_err(|e| format!("failed to persist assembly temp: {e}"))?.clone();
+        .map_err(|e| format!("failed to persist assembly temp: {e}"))?
+        .clone();
     let hash_hex = hasher.finalize().to_hex();
     let content_hash = tssp_domain::ContentHash::new(hash_hex)
         .map_err(|e| format!("invalid content hash: {e}"))?;
@@ -572,15 +571,12 @@ pub async fn complete_upload(
         );
     };
 
-    let session = match state.upload_session_manager.get_session(&session_id).await {
-        Some(s) => s,
-        None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "session_not_found",
-                "upload session not found",
-            )
-        }
+    let Some(session) = state.upload_session_manager.get_session(&session_id).await else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "session_not_found",
+            "upload session not found",
+        );
     };
 
     // Verify ownership
@@ -685,12 +681,14 @@ pub async fn complete_upload(
     tokio::spawn({
         let dir = chunk_dir_cleanup.clone();
         async move {
-            let _ = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(dir))
-                .await;
+            let _ = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(dir)).await;
         }
     });
 
-    state.upload_session_manager.delete_session(&session_id).await;
+    state
+        .upload_session_manager
+        .delete_session(&session_id)
+        .await;
 
     match result {
         Ok(_) => (
@@ -723,15 +721,12 @@ pub async fn cancel_upload(
         );
     };
 
-    let session = match state.upload_session_manager.get_session(&session_id).await {
-        Some(s) => s,
-        None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "session_not_found",
-                "upload session not found",
-            )
-        }
+    let Some(session) = state.upload_session_manager.get_session(&session_id).await else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "session_not_found",
+            "upload session not found",
+        );
     };
 
     // Verify ownership
@@ -761,7 +756,10 @@ pub async fn cancel_upload(
         let _ = tokio::fs::remove_dir_all(&chunk_dir_cleanup).await;
     });
 
-    state.upload_session_manager.delete_session(&session_id).await;
+    state
+        .upload_session_manager
+        .delete_session(&session_id)
+        .await;
 
     StatusCode::NO_CONTENT.into_response()
 }
@@ -773,7 +771,6 @@ fn chunk_directory(temp_dir: &StdPath, session_id: &UploadSessionId) -> PathBuf 
 fn chunk_file_path(chunk_dir: &StdPath, chunk_index: u32) -> PathBuf {
     chunk_dir.join(format!("chunk_{chunk_index}.part"))
 }
-
 
 fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
     (

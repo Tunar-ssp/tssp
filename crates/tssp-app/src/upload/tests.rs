@@ -166,7 +166,10 @@ impl FileRepository for FakeRepository {
         Ok(None)
     }
 
-    fn list_deleted_files(&self, _older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+    fn list_deleted_files(
+        &self,
+        _older_than: UnixTimestamp,
+    ) -> Result<Vec<FileRecord>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -219,7 +222,7 @@ impl FileRepository for FakeRepository {
             pinned_count: 0,
             recent_upload_count: 0,
             recent_note_count: 0,
-                storage_bytes_used: 0,
+            storage_bytes_used: 0,
         })
     }
 

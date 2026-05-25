@@ -79,7 +79,11 @@ impl ApiError {
 
     /// Unavailable error (503)
     pub fn unavailable(message: impl Into<String>) -> Self {
-        Self::new("SERVICE_UNAVAILABLE", message, StatusCode::SERVICE_UNAVAILABLE)
+        Self::new(
+            "SERVICE_UNAVAILABLE",
+            message,
+            StatusCode::SERVICE_UNAVAILABLE,
+        )
     }
 }
 
@@ -107,8 +111,7 @@ mod tests {
 
     #[test]
     fn test_error_with_details() {
-        let err = ApiError::not_found("User not found")
-            .with_details("User ID: 123");
+        let err = ApiError::not_found("User not found").with_details("User ID: 123");
         assert_eq!(err.details, Some("User ID: 123".to_string()));
     }
 }

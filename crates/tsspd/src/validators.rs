@@ -13,15 +13,21 @@ pub fn validate_filename(name: &str) -> Result<(), ApiError> {
     }
 
     if name.len() > 256 {
-        return Err(ApiError::validation("File name too long (max 256 characters)"));
+        return Err(ApiError::validation(
+            "File name too long (max 256 characters)",
+        ));
     }
 
     if name.contains('\0') {
-        return Err(ApiError::validation("File name contains invalid characters"));
+        return Err(ApiError::validation(
+            "File name contains invalid characters",
+        ));
     }
 
     if name.starts_with('/') || name.contains("../") {
-        return Err(ApiError::validation("File name contains invalid path traversal"));
+        return Err(ApiError::validation(
+            "File name contains invalid path traversal",
+        ));
     }
 
     Ok(())
@@ -64,7 +70,9 @@ pub fn validate_email(email: &str) -> Result<(), ApiError> {
 /// Returns an error if the title is too long.
 pub fn validate_note_title(title: &str) -> Result<(), ApiError> {
     if title.len() > 256 {
-        return Err(ApiError::validation("Note title too long (max 256 characters)"));
+        return Err(ApiError::validation(
+            "Note title too long (max 256 characters)",
+        ));
     }
     Ok(())
 }
@@ -82,7 +90,10 @@ pub fn validate_tag(tag: &str) -> Result<(), ApiError> {
         return Err(ApiError::validation("Tag too long (max 50 characters)"));
     }
 
-    if !tag.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if !tag
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(ApiError::validation("Tag contains invalid characters"));
     }
 
@@ -93,7 +104,10 @@ pub fn validate_tag(tag: &str) -> Result<(), ApiError> {
 ///
 /// # Errors
 /// Returns an error if the offset is too large or the limit is invalid.
-pub fn validate_pagination(offset: Option<u32>, limit: Option<u32>) -> Result<(u32, u32), ApiError> {
+pub fn validate_pagination(
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Result<(u32, u32), ApiError> {
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(50).min(500); // Max 500 items per page
 

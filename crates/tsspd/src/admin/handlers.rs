@@ -455,7 +455,9 @@ pub async fn admin_cleanup_temp(State(state): State<HttpState>) -> impl IntoResp
         .await;
 
     for session_id in expired_sessions {
-        let session_dir = state.upload_temp_dir.join(format!(".{}", session_id.as_str()));
+        let session_dir = state
+            .upload_temp_dir
+            .join(format!(".{}", session_id.as_str()));
         if session_dir.exists() {
             let _ = std::fs::remove_dir_all(session_dir);
         }
@@ -841,18 +843,16 @@ mod tests {
     fn admin_activity_response_serializes_items() {
         let response = AdminActivityResponse {
             schema_version: 1,
-            items: vec![
-                AdminActivityItem {
-                    kind: "file".to_owned(),
-                    id: "id1".to_owned(),
-                    title: "title1".to_owned(),
-                    detail: "detail1".to_owned(),
-                    occurred_at: 100,
-                    visibility: Some("public".to_owned()),
-                    size_bytes: Some(500),
-                    language: None,
-                },
-            ],
+            items: vec![AdminActivityItem {
+                kind: "file".to_owned(),
+                id: "id1".to_owned(),
+                title: "title1".to_owned(),
+                detail: "detail1".to_owned(),
+                occurred_at: 100,
+                visibility: Some("public".to_owned()),
+                size_bytes: Some(500),
+                language: None,
+            }],
         };
         let json = serde_json::to_string(&response).expect("serialization failed");
         assert!(json.contains("\"schema_version\":1"));

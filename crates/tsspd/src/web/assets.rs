@@ -1,4 +1,3 @@
-
 //! Embedded dashboard static assets.
 
 pub(crate) const INDEX_HTML: &str = include_str!(concat!(
@@ -47,7 +46,9 @@ pub(crate) const LEGACY_APP_CSS: &str = "body { background: #000; }";
 pub(crate) fn asset_for_path(path: &str) -> Option<(&'static str, &'static str)> {
     match path {
         "index.html" | "" => Some((INDEX_HTML, "text/html; charset=utf-8")),
-        "sw.js" | "service-worker.js" => Some((SERVICE_WORKER, "application/javascript; charset=utf-8")),
+        "sw.js" | "service-worker.js" => {
+            Some((SERVICE_WORKER, "application/javascript; charset=utf-8"))
+        }
         "app.js" => Some((LEGACY_APP, "application/javascript; charset=utf-8")),
         "app.css" => Some((LEGACY_APP_CSS, "text/css; charset=utf-8")),
         _ => None,

@@ -342,7 +342,7 @@ pub(crate) async fn readyz() -> impl IntoResponse {
 }
 
 /// Returns cached or calculated directory size.
-pub async fn get_storage_usage_from_stats(stats: &RepositoryStats) -> u64 {
+pub fn get_storage_usage_from_stats(stats: &RepositoryStats) -> u64 {
     stats.storage_bytes_used
 }
 
@@ -363,7 +363,7 @@ pub(crate) async fn status(State(state): State<HttpState>) -> Response {
             let corrupt_file_count = state
                 .corrupt_file_count
                 .load(std::sync::atomic::Ordering::Relaxed);
-            let storage_bytes_used = get_storage_usage_from_stats(&repository_stats).await;
+            let storage_bytes_used = get_storage_usage_from_stats(&repository_stats);
 
             Json(StatusResponse {
                 schema_version: 1,

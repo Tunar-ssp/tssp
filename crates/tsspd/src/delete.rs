@@ -4,7 +4,10 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use tssp_app::{AuditAction, DeleteFileError, DeleteFileService, RestoreFileError, RestoreFileService, log_audit_event};
+use tssp_app::{
+    log_audit_event, AuditAction, DeleteFileError, DeleteFileService, RestoreFileError,
+    RestoreFileService,
+};
 use tssp_domain::FileId;
 use tssp_ports::{BlobStore, FileRepository, RepositoryError};
 
@@ -174,7 +177,7 @@ pub(crate) async fn delete_file(
                 None,
             );
             delete_success_response(outcome)
-        },
+        }
         Ok(Err(error)) => {
             log_audit_event(
                 state.repository.as_ref(),
@@ -186,7 +189,7 @@ pub(crate) async fn delete_file(
                 Some("delete operation failed"),
             );
             error.response()
-        },
+        }
         Err(error) => {
             log_audit_event(
                 state.repository.as_ref(),
@@ -201,7 +204,7 @@ pub(crate) async fn delete_file(
                 message: format!("delete worker failed: {error}"),
             }
             .response()
-        },
+        }
     }
 }
 
@@ -217,7 +220,6 @@ fn invalid_file_id_response(message: String) -> Response {
     )
         .into_response()
 }
-
 
 fn forbidden_response() -> Response {
     (
@@ -397,7 +399,7 @@ pub(crate) async fn restore_file(
                 None,
             );
             restore_success_response(outcome)
-        },
+        }
         Ok(Err(error)) => {
             log_audit_event(
                 state.repository.as_ref(),
@@ -409,7 +411,7 @@ pub(crate) async fn restore_file(
                 Some("restore operation failed"),
             );
             error.response()
-        },
+        }
         Err(error) => {
             log_audit_event(
                 state.repository.as_ref(),
@@ -424,7 +426,7 @@ pub(crate) async fn restore_file(
                 message: format!("restore worker failed: {error}"),
             }
             .response()
-        },
+        }
     }
 }
 
@@ -471,11 +473,7 @@ pub(crate) async fn permanent_delete(
     let repository = state.repository.clone();
     let repository_for_audit = state.repository.clone();
 
-    match tokio::task::spawn_blocking(move || {
-        repository.purge_deleted_file(&file_id)
-    })
-    .await
-    {
+    match tokio::task::spawn_blocking(move || repository.purge_deleted_file(&file_id)).await {
         Ok(Ok(was_deleted)) => {
             if was_deleted {
                 log_audit_event(
@@ -516,7 +514,7 @@ pub(crate) async fn permanent_delete(
                 "purge_failed",
                 "failed to permanently delete file",
             )
-        },
+        }
         Err(_) => {
             log_audit_event(
                 repository_for_audit.as_ref(),
@@ -549,24 +547,24 @@ pub(crate) async fn list_trash(
         let cutoff = now + 1;
 
         match tssp_domain::UnixTimestamp::new(i64::try_from(cutoff).unwrap_or(i64::MAX)) {
-            Ok(cutoff_ts) => {
-                match state.repository.list_deleted_files(cutoff_ts) {
-                    Ok(files) => Ok(files),
-                    Err(e) => Err(format!("failed to list deleted files: {e}"))
-                }
-            }
-            Err(e) => Err(format!("invalid timestamp: {e}"))
+            Ok(cutoff_ts) => match state.repository.list_deleted_files(cutoff_ts) {
+                Ok(files) => Ok(files),
+                Err(e) => Err(format!("failed to list deleted files: {e}")),
+            },
+            Err(e) => Err(format!("invalid timestamp: {e}")),
         }
     })
     .await
     {
-        Ok(Ok(files)) => {
-            Json(serde_json::json!({
-                "files": files
-            }))
-            .into_response()
-        }
-        Ok(Err(msg)) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "query_error", msg.as_str()),
+        Ok(Ok(files)) => Json(serde_json::json!({
+            "files": files
+        }))
+        .into_response(),
+        Ok(Err(msg)) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "query_error",
+            msg.as_str(),
+        ),
         Err(_) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "worker_error",
@@ -592,23 +590,21 @@ pub(crate) async fn empty_trash(
         let older_than_secs = now.saturating_sub(retention_seconds) + 1;
 
         match tssp_domain::UnixTimestamp::new(i64::try_from(older_than_secs).unwrap_or(i64::MAX)) {
-            Ok(cutoff) => {
-                match repo.list_deleted_files(cutoff) {
-                    Ok(deleted_files) => {
-                        let mut purged_count = 0;
-                        for file in deleted_files {
-                            if let Ok(was_deleted) = repo.purge_deleted_file(&file.id) {
-                                if was_deleted {
-                                    purged_count += 1;
-                                }
+            Ok(cutoff) => match repo.list_deleted_files(cutoff) {
+                Ok(deleted_files) => {
+                    let mut purged_count = 0;
+                    for file in deleted_files {
+                        if let Ok(was_deleted) = repo.purge_deleted_file(&file.id) {
+                            if was_deleted {
+                                purged_count += 1;
                             }
                         }
-                        Ok(purged_count)
                     }
-                    Err(_) => Err("failed to list deleted files")
+                    Ok(purged_count)
                 }
-            }
-            Err(_) => Err("invalid retention period")
+                Err(_) => Err("failed to list deleted files"),
+            },
+            Err(_) => Err("invalid retention period"),
         }
     })
     .await;
@@ -630,7 +626,11 @@ pub(crate) async fn empty_trash(
     }
 }
 
-fn error_response(status: StatusCode, code: impl Into<String>, message: impl Into<String>) -> Response {
+fn error_response(
+    status: StatusCode,
+    code: impl Into<String>,
+    message: impl Into<String>,
+) -> Response {
     (
         status,
         Json(serde_json::json!({

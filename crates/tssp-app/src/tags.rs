@@ -124,7 +124,10 @@ mod tests {
             Ok(None)
         }
 
-        fn list_deleted_files(&self, _older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+        fn list_deleted_files(
+            &self,
+            _older_than: UnixTimestamp,
+        ) -> Result<Vec<FileRecord>, RepositoryError> {
             Ok(Vec::new())
         }
 

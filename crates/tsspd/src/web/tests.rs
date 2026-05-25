@@ -1,6 +1,5 @@
 //! Web dashboard handler tests.
 
-
 use std::fs;
 
 use axum::body::Body;
@@ -116,7 +115,11 @@ async fn serve_asset_returns_new_js_modules() {
         "js/features/overview.js",
     ] {
         let response = serve_asset(axum::extract::Path(path.to_owned())).await;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "legacy asset {path} should not exist");
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "legacy asset {path} should not exist"
+        );
     }
 }
 
@@ -146,7 +149,11 @@ async fn serve_asset_returns_ui_modules() {
         "js/ui/dialogs.js",
     ] {
         let response = serve_asset(axum::extract::Path(path.to_owned())).await;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "legacy asset {path} should not exist");
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "legacy asset {path} should not exist"
+        );
     }
 }
 

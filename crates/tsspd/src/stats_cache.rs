@@ -1,8 +1,8 @@
 //! Cached repository statistics to avoid expensive COUNT(*) queries.
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 use tssp_ports::RepositoryStats;
 
 /// How long to cache stats before refreshing (5 seconds).

@@ -7,8 +7,8 @@ use axum::Json;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use getrandom::getrandom;
 use serde::{Deserialize, Serialize};
+use tssp_app::{log_audit_event, AuditAction};
 use tssp_domain::{FileId, Visibility};
-use tssp_app::{AuditAction, log_audit_event};
 
 use crate::auth::AuthContext;
 use crate::upload::FileRecordResponse;
@@ -233,7 +233,10 @@ pub async fn bulk_file_visibility(
                 Some("file"),
                 Some(file_id.as_str()),
                 "success",
-                Some(&format!("bulk changed visibility to {}", visibility.as_str())),
+                Some(&format!(
+                    "bulk changed visibility to {}",
+                    visibility.as_str()
+                )),
             );
             updated.push(FileRecordResponse::from_record(&file));
         }
@@ -273,7 +276,9 @@ mod tests {
         assert!(!token.is_empty());
         assert!(token.len() > 20);
         // Valid base64 should only contain URL_SAFE characters
-        assert!(token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 
     #[test]

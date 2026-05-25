@@ -7,8 +7,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tssp_app::{log_audit_event, AuditAction};
 use tssp_domain::{FileName, Tag};
-use tssp_app::{AuditAction, log_audit_event};
 
 use crate::HttpState;
 
@@ -30,17 +30,45 @@ pub async fn rename_file(
     Path(id): Path<String>,
     Json(request): Json<RenameRequest>,
 ) -> Result<(StatusCode, Json<RenameResponse>), (StatusCode, Json<Value>)> {
-    let file_id = tssp_domain::FileId::new(&id).map_err(|_| rename_error(StatusCode::BAD_REQUEST, "invalid_request", "invalid file id"))?;
-    let new_name = FileName::new(&request.name).map_err(|_| rename_error(StatusCode::BAD_REQUEST, "invalid_request", "invalid filename"))?;
+    let file_id = tssp_domain::FileId::new(&id).map_err(|_| {
+        rename_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "invalid file id",
+        )
+    })?;
+    let new_name = FileName::new(&request.name).map_err(|_| {
+        rename_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "invalid filename",
+        )
+    })?;
 
     let existing = match state.stats_provider.find_file(&file_id) {
         Ok(Some(f)) => f,
-        Ok(None) => return Err(rename_error(StatusCode::NOT_FOUND, "not_found", "file not found")),
-        Err(e) => return Err(rename_error(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", &e)),
+        Ok(None) => {
+            return Err(rename_error(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "file not found",
+            ))
+        }
+        Err(e) => {
+            return Err(rename_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                &e,
+            ))
+        }
     };
 
     if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
-        return Err(rename_error(StatusCode::FORBIDDEN, "forbidden", "you do not have permission to rename this file"));
+        return Err(rename_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "you do not have permission to rename this file",
+        ));
     }
 
     let repository = state.repository.clone();
@@ -72,12 +100,24 @@ pub async fn rename_file(
                 }),
             ))
         }
-        Ok(None) => Err(rename_error(StatusCode::NOT_FOUND, "not_found", "file not found")),
-        Err(_) => Err(rename_error(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "rename failed")),
+        Ok(None) => Err(rename_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "file not found",
+        )),
+        Err(_) => Err(rename_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "rename failed",
+        )),
     }
 }
 
-fn rename_error(status: StatusCode, code: &'static str, message: &str) -> (StatusCode, Json<Value>) {
+fn rename_error(
+    status: StatusCode,
+    code: &'static str,
+    message: &str,
+) -> (StatusCode, Json<Value>) {
     (
         status,
         Json(json!({
@@ -89,7 +129,6 @@ fn rename_error(status: StatusCode, code: &'static str, message: &str) -> (Statu
         })),
     )
 }
-
 
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used, clippy::match_wild_err_arm)]

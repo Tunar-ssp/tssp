@@ -59,11 +59,7 @@ impl HttpNoteError {
             Self::NotFound { message } => {
                 (StatusCode::NOT_FOUND, "note_not_found", message.clone())
             }
-            Self::Forbidden { message } => (
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                message.clone(),
-            ),
+            Self::Forbidden { message } => (StatusCode::FORBIDDEN, "forbidden", message.clone()),
             Self::Unavailable { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "note_unavailable",

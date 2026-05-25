@@ -64,10 +64,7 @@ pub struct FolderEntry {
 }
 
 /// `POST /api/v1/folders` — create a new folder.
-pub async fn create_folder(
-    auth: AuthContext,
-    Json(body): Json<FolderCreateBody>,
-) -> Response {
+pub async fn create_folder(auth: AuthContext, Json(body): Json<FolderCreateBody>) -> Response {
     // Folders are namespaced by the user's files, so all authenticated users can create folders
     let _ = auth;
     let path = normalize_folder_path(&body.path);
@@ -109,10 +106,7 @@ pub async fn create_folder(
 }
 
 /// `GET /api/v1/folders` — list virtual folder counts for the drive browser.
-pub async fn list_folders(
-    State(state): State<HttpState>,
-    auth: AuthContext,
-) -> Response {
+pub async fn list_folders(State(state): State<HttpState>, auth: AuthContext) -> Response {
     let owner_id = if auth.is_admin() {
         None
     } else {

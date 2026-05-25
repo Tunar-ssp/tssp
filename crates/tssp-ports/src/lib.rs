@@ -172,7 +172,7 @@ mod tests {
                 owner_id: None,
                 visibility: tssp_domain::Visibility::Private,
                 public_token: None,
-            public_expires_at: None,
+                public_expires_at: None,
             },
             remaining_content_references: 0,
         };

@@ -5,15 +5,15 @@
 //! services.
 
 mod admin;
-pub mod error_handler;
-pub mod validators;
 pub mod auth;
+mod chunked_upload;
 #[cfg(test)]
 mod concurrency_tests;
 mod config;
 mod content;
 mod delete;
 mod edge_cases_tests;
+pub mod error_handler;
 mod error_handling_tests;
 mod file;
 mod folders;
@@ -48,8 +48,8 @@ mod tags;
 pub mod temp_cleanup;
 pub mod trash_cleanup;
 mod upload;
-mod chunked_upload;
 mod urls;
+pub mod validators;
 mod visibility;
 mod web;
 pub mod workspaces;
@@ -59,8 +59,8 @@ mod http_tests;
 
 pub use config::bind_error_message;
 pub use delete::{
-    ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, FileDeleteProvider, FileRestoreProvider,
-    HttpDeleteError, HttpDeleteOutcome, HttpRestoreError, HttpRestoreOutcome,
+    ApplicationFileDeleteProvider, ApplicationFileRestoreProvider, FileDeleteProvider,
+    FileRestoreProvider, HttpDeleteError, HttpDeleteOutcome, HttpRestoreError, HttpRestoreOutcome,
 };
 pub use garbage_collection::collect_garbage;
 pub use integrity::{run_startup_integrity_scan, spawn_startup_integrity_scan};

@@ -285,7 +285,9 @@ pub(crate) fn migrate_workspace_documents_schema(
 }
 
 /// Adds `folder_path` column to files for folder organization (schema v12).
-pub(crate) fn migrate_folder_path_column(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+pub(crate) fn migrate_folder_path_column(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 12)? {
         return Ok(());
     }
@@ -304,7 +306,9 @@ pub(crate) fn migrate_folder_path_column(connection: &Connection) -> Result<(), 
 }
 
 /// Adds soft-delete columns (`deleted_at`) for trash functionality (schema v13).
-pub(crate) fn migrate_soft_delete_columns(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+pub(crate) fn migrate_soft_delete_columns(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 13)? {
         return Ok(());
     }
@@ -325,7 +329,9 @@ pub(crate) fn migrate_soft_delete_columns(connection: &Connection) -> Result<(),
 }
 
 /// Adds `audit_events` table for logging operations (schema v14).
-pub(crate) fn migrate_audit_events_table(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+pub(crate) fn migrate_audit_events_table(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 14)? {
         return Ok(());
     }
@@ -355,7 +361,9 @@ pub(crate) fn migrate_audit_events_table(connection: &Connection) -> Result<(), 
 }
 
 /// Adds `workspace_files` table for multi-file workspace support (schema v15).
-pub(crate) fn migrate_workspace_files_table(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+pub(crate) fn migrate_workspace_files_table(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 15)? {
         return Ok(());
     }

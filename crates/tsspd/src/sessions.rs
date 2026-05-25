@@ -142,7 +142,10 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             },
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
-            creator_id: session.creator_id.as_ref().map(|id| id.as_str().to_string()),
+            creator_id: session
+                .creator_id
+                .as_ref()
+                .map(|id| id.as_str().to_string()),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
             received_file: session
                 .received_file
@@ -179,7 +182,10 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             },
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
-            creator_id: session.creator_id.as_ref().map(|id| id.as_str().to_string()),
+            creator_id: session
+                .creator_id
+                .as_ref()
+                .map(|id| id.as_str().to_string()),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
             received_file: session
                 .received_file
@@ -210,7 +216,10 @@ impl<R: SessionRepository + Send + Sync, C: Clock + Send + Sync> SessionProvider
             },
             created_at: session.created_at.seconds(),
             expires_at: session.expires_at.seconds(),
-            creator_id: session.creator_id.as_ref().map(|id| id.as_str().to_string()),
+            creator_id: session
+                .creator_id
+                .as_ref()
+                .map(|id| id.as_str().to_string()),
             source_file: session.source_file.as_ref().map(|f| f.as_str().to_string()),
             received_file: session
                 .received_file
@@ -389,8 +398,8 @@ pub async fn create_send_session(
     Json(payload): Json<CreateSendSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionResponse>), HttpSessionError> {
     // Verify the user owns the file they're trying to share
-    let file_id = tssp_domain::FileId::new(&payload.file_id)
-        .map_err(|_| HttpSessionError::InvalidToken)?;
+    let file_id =
+        tssp_domain::FileId::new(&payload.file_id).map_err(|_| HttpSessionError::InvalidToken)?;
 
     let file = state
         .stats_provider
@@ -400,9 +409,7 @@ pub async fn create_send_session(
 
     // Only admin or file owner can create send sessions
     if !auth.is_admin() && file.owner_id.as_ref() != Some(&auth.user_id) {
-        return Err(HttpSessionError::InternalError(
-            "Access denied".to_string(),
-        ));
+        return Err(HttpSessionError::InternalError("Access denied".to_string()));
     }
 
     let urls = state.public_urls().clone();

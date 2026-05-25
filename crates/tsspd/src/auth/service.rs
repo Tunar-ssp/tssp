@@ -455,10 +455,7 @@ impl AuthService {
     pub fn get_device(&self, token: &str) -> Result<TrustedDevice, AuthError> {
         // Get all devices and find the one matching the token
         // This is a workaround since DeviceStore doesn't expose find_any method
-        let store = self
-            .devices
-            .as_ref()
-            .ok_or(AuthError::NotConfigured)?;
+        let store = self.devices.as_ref().ok_or(AuthError::NotConfigured)?;
 
         // Use a far-future timestamp to get all devices including expired
         let all_devices = store

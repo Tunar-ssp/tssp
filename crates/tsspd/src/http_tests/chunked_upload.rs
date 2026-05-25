@@ -1,6 +1,5 @@
 //! Chunked upload system tests covering security, reliability, and correctness.
 
-
 use super::common::*;
 use super::imports::*;
 
@@ -19,7 +18,9 @@ async fn start_upload_validates_session_id_format() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .body(Body::from(
+                    serde_json::to_string(&req).expect("should succeed"),
+                ))
                 .expect("should succeed"),
         )
         .await
@@ -83,7 +84,9 @@ async fn upload_chunk_rejects_oversized_chunks() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .body(Body::from(
+                    serde_json::to_string(&req).expect("should succeed"),
+                ))
                 .expect("should succeed"),
         )
         .await
@@ -108,7 +111,10 @@ async fn upload_chunk_rejects_oversized_chunks() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "invalid_chunk_size");
+    assert_eq!(
+        body["error"]["code"].as_str().expect("should succeed"),
+        "invalid_chunk_size"
+    );
 }
 
 #[tokio::test]
@@ -127,7 +133,9 @@ async fn upload_chunk_rejects_out_of_range_index() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .body(Body::from(
+                    serde_json::to_string(&req).expect("should succeed"),
+                ))
                 .expect("should succeed"),
         )
         .await
@@ -151,7 +159,10 @@ async fn upload_chunk_rejects_out_of_range_index() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "invalid_chunk");
+    assert_eq!(
+        body["error"]["code"].as_str().expect("should succeed"),
+        "invalid_chunk"
+    );
 }
 
 #[tokio::test]
@@ -171,8 +182,7 @@ async fn cancel_upload_rejects_invalid_session_id() {
 
     // Invalid format returns either 400 or 404 depending on route matching
     assert!(
-        response.status() == StatusCode::BAD_REQUEST
-            || response.status() == StatusCode::NOT_FOUND
+        response.status() == StatusCode::BAD_REQUEST || response.status() == StatusCode::NOT_FOUND
     );
 }
 
@@ -192,7 +202,9 @@ async fn complete_upload_rejects_incomplete_chunks() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .body(Body::from(
+                    serde_json::to_string(&req).expect("should succeed"),
+                ))
                 .expect("should succeed"),
         )
         .await
@@ -216,7 +228,10 @@ async fn complete_upload_rejects_incomplete_chunks() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "incomplete_upload");
+    assert_eq!(
+        body["error"]["code"].as_str().expect("should succeed"),
+        "incomplete_upload"
+    );
 }
 
 #[tokio::test]
@@ -239,7 +254,10 @@ async fn session_not_found_returns_404() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let body = response_json(response).await;
-    assert_eq!(body["error"]["code"].as_str().expect("should succeed"), "session_not_found");
+    assert_eq!(
+        body["error"]["code"].as_str().expect("should succeed"),
+        "session_not_found"
+    );
 }
 
 #[tokio::test]
@@ -250,8 +268,7 @@ async fn cancel_upload_cleans_up_resources() {
             .unwrap_or_else(|e| panic!("repository open failed: {e}")),
     );
     let app = build_router(
-        HttpState::test_http_state(temp.path().join("http-upload-tmp"))
-            .with_repository(repository),
+        HttpState::test_http_state(temp.path().join("http-upload-tmp")).with_repository(repository),
     );
 
     let req = serde_json::json!({
@@ -266,7 +283,9 @@ async fn cancel_upload_cleans_up_resources() {
                 .method("POST")
                 .uri("/api/v1/files/upload/start")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&req).expect("should succeed")))
+                .body(Body::from(
+                    serde_json::to_string(&req).expect("should succeed"),
+                ))
                 .expect("should succeed"),
         )
         .await

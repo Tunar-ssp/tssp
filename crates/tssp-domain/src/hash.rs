@@ -6,7 +6,9 @@ use std::fmt;
 const BLAKE3_HEX_LEN: usize = 64;
 
 /// Lowercase BLAKE3 content hash encoded as 64 hexadecimal characters.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct ContentHash(String);
 
 impl ContentHash {

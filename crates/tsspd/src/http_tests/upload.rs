@@ -2,7 +2,6 @@
 
 //! HTTP integration tests.
 
-
 use super::common::*;
 use super::imports::*;
 
@@ -419,7 +418,10 @@ async fn concurrent_uploads_succeed_without_global_lock() {
     );
 
     // Build shared upload infrastructure
-    let stats_provider = Arc::new(RepositoryMetadataStatsProvider::new(repository.clone(), SystemClock));
+    let stats_provider = Arc::new(RepositoryMetadataStatsProvider::new(
+        repository.clone(),
+        SystemClock,
+    ));
     let upload_service_1 = UploadService::new(
         storage.clone(),
         repository.clone(),
@@ -437,7 +439,9 @@ async fn concurrent_uploads_succeed_without_global_lock() {
         HttpState::test_http_state(temp.path().join("upload-tmp-1"))
             .with_repository(repository.clone())
             .with_stats_provider(stats_provider.clone())
-            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service_1)))
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(
+                upload_service_1,
+            )))
             .with_blob_reader(storage.clone()),
     );
 
@@ -445,7 +449,9 @@ async fn concurrent_uploads_succeed_without_global_lock() {
         HttpState::test_http_state(temp.path().join("upload-tmp-2"))
             .with_repository(repository)
             .with_stats_provider(stats_provider)
-            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service_2)))
+            .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(
+                upload_service_2,
+            )))
             .with_blob_reader(storage),
     );
 
@@ -458,15 +464,22 @@ async fn concurrent_uploads_succeed_without_global_lock() {
     let response1 = result1.unwrap_or_else(|error| panic!("first upload failed: {error}"));
     let response2 = result2.unwrap_or_else(|error| panic!("second upload failed: {error}"));
 
-    assert_eq!(response1.status(), StatusCode::CREATED, "first upload should succeed");
-    assert_eq!(response2.status(), StatusCode::CREATED, "second upload should succeed");
+    assert_eq!(
+        response1.status(),
+        StatusCode::CREATED,
+        "first upload should succeed"
+    );
+    assert_eq!(
+        response2.status(),
+        StatusCode::CREATED,
+        "second upload should succeed"
+    );
 
     let body1 = response_json(response1).await;
     let body2 = response_json(response2).await;
 
     assert_ne!(
-        body1["id"],
-        body2["id"],
+        body1["id"], body2["id"],
         "concurrent uploads should create different files"
     );
 }

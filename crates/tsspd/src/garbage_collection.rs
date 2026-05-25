@@ -10,10 +10,7 @@ use tssp_ports::FileRepository;
 /// # Errors
 ///
 /// Returns an error string if cleanup fails.
-pub fn collect_garbage(
-    blob_root: &Path,
-    repository: &dyn FileRepository,
-) -> Result<u64, String> {
+pub fn collect_garbage(blob_root: &Path, repository: &dyn FileRepository) -> Result<u64, String> {
     let blob_dir = blob_root.join("blobs");
     if !blob_dir.exists() {
         return Ok(0);
@@ -23,13 +20,21 @@ pub fn collect_garbage(
 
     if let Ok(first_dirs) = std::fs::read_dir(&blob_dir) {
         for first_entry in first_dirs.flatten() {
-            if !first_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            if !first_entry
+                .file_type()
+                .map(|ft| ft.is_dir())
+                .unwrap_or(false)
+            {
                 continue;
             }
 
             if let Ok(second_dirs) = std::fs::read_dir(first_entry.path()) {
                 for second_entry in second_dirs.flatten() {
-                    if !second_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                    if !second_entry
+                        .file_type()
+                        .map(|ft| ft.is_dir())
+                        .unwrap_or(false)
+                    {
                         continue;
                     }
 
@@ -37,7 +42,8 @@ pub fn collect_garbage(
                         for blob_entry in blob_files.flatten() {
                             if let Some(filename) = blob_entry.file_name().to_str() {
                                 match check_and_delete_orphan(
-                                    &blob_entry.path(),                                    filename,
+                                    &blob_entry.path(),
+                                    filename,
                                     repository,
                                 ) {
                                     Ok(was_deleted) => {
@@ -69,14 +75,13 @@ fn check_and_delete_orphan(
         return Ok(false);
     }
 
-    let content_hash = ContentHash::new(filename)
-        .map_err(|e| format!("invalid content hash in filename: {e}"))?;
+    let content_hash =
+        ContentHash::new(filename).map_err(|e| format!("invalid content hash in filename: {e}"))?;
 
     match repository.find_file_by_content_hash(&content_hash) {
         Ok(Some(_)) => Ok(false),
         Ok(None) => {
-            std::fs::remove_file(path)
-                .map_err(|e| format!("failed to delete orphan blob: {e}"))?;
+            std::fs::remove_file(path).map_err(|e| format!("failed to delete orphan blob: {e}"))?;
             Ok(true)
         }
         Err(e) => Err(format!("repository error while checking blob: {e}")),

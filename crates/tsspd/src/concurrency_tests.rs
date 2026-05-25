@@ -229,6 +229,9 @@ mod tests {
 
         let final_count = *cleanup_count.lock().expect("lock poisoned");
         println!("Final cleanup count: {final_count}");
-        assert_eq!(final_count, 0, "Blob cleanup is now deferred to background job");
+        assert_eq!(
+            final_count, 0,
+            "Blob cleanup is now deferred to background job"
+        );
     }
 }

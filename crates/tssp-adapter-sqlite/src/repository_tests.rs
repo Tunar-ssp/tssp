@@ -1,6 +1,5 @@
 //! Integration tests for [`SqliteFileRepository`].
 
-
 use tempfile::tempdir;
 use tssp_domain::{
     ContentHash, Cursor, FileId, FileName, FileSize, MimeType, StorageHandle, Tag, TagKey,

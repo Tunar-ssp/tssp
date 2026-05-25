@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use tssp_app::{PinError, PinService, AuditAction, log_audit_event};
+use tssp_app::{log_audit_event, AuditAction, PinError, PinService};
 use tssp_domain::FileRecord;
 use tssp_ports::{FileRepository, PinOutcome, RepositoryError};
 
@@ -134,11 +134,7 @@ impl HttpPinError {
             Self::NotFound { message } => {
                 (StatusCode::NOT_FOUND, "file_not_found", message.clone())
             }
-            Self::Forbidden { message } => (
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                message.clone(),
-            ),
+            Self::Forbidden { message } => (StatusCode::FORBIDDEN, "forbidden", message.clone()),
             Self::Busy { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "metadata_busy",
@@ -224,7 +220,11 @@ pub(crate) async fn list_pins(
                     .filter(|f| f.owner_id.as_ref() == Some(&user_id))
                     .collect()
             };
-            (StatusCode::OK, Json(PinListResponse::from_records(&filtered))).into_response()
+            (
+                StatusCode::OK,
+                Json(PinListResponse::from_records(&filtered)),
+            )
+                .into_response()
         }
         Ok(Err(error)) => error.response(),
         Err(error) => HttpPinError::Internal {
@@ -263,12 +263,7 @@ pub(crate) async fn pin(
             }
             .response()
         }
-        Err(e) => {
-            return HttpPinError::Internal {
-                message: e,
-            }
-            .response()
-        }
+        Err(e) => return HttpPinError::Internal { message: e }.response(),
     };
 
     if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
@@ -298,7 +293,7 @@ pub(crate) async fn pin(
                 );
             }
             pin_mutation_response(outcome)
-        },
+        }
         Ok(Err(error)) => error.response(),
         Err(error) => HttpPinError::Internal {
             message: format!("pin worker failed: {error}"),
@@ -330,12 +325,7 @@ pub(crate) async fn unpin(
             }
             .response()
         }
-        Err(e) => {
-            return HttpPinError::Internal {
-                message: e,
-            }
-            .response()
-        }
+        Err(e) => return HttpPinError::Internal { message: e }.response(),
     };
 
     if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
@@ -364,7 +354,7 @@ pub(crate) async fn unpin(
                 );
             }
             pin_mutation_response(outcome)
-        },
+        }
         Ok(Err(error)) => error.response(),
         Err(error) => HttpPinError::Internal {
             message: format!("pin worker failed: {error}"),
@@ -406,12 +396,7 @@ pub(crate) async fn reorder(
                 }
                 .response()
             }
-            Err(e) => {
-                return HttpPinError::Internal {
-                    message: e,
-                }
-                .response()
-            }
+            Err(e) => return HttpPinError::Internal { message: e }.response(),
         };
 
         if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
@@ -687,8 +672,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_pins_endpoint_returns_error_from_provider() {
-        use crate::HttpState;
         use crate::auth::AuthContext;
+        use crate::HttpState;
         use axum::extract::State;
         use std::sync::Arc;
 
@@ -702,8 +687,8 @@ mod tests {
 
     #[tokio::test]
     async fn pin_endpoint_returns_not_found_error() {
-        use crate::HttpState;
         use crate::auth::AuthContext;
+        use crate::HttpState;
         use axum::extract::State;
         use std::sync::Arc;
 
@@ -723,8 +708,8 @@ mod tests {
 
     #[tokio::test]
     async fn unpin_endpoint_returns_error_from_provider() {
-        use crate::HttpState;
         use crate::auth::AuthContext;
+        use crate::HttpState;
         use axum::extract::State;
         use std::sync::Arc;
 
@@ -732,14 +717,19 @@ mod tests {
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_pin_provider(provider);
 
-        let response = super::unpin(State(state), AuthContext::open_access(), axum::extract::Path("file-1".to_string())).await;
+        let response = super::unpin(
+            State(state),
+            AuthContext::open_access(),
+            axum::extract::Path("file-1".to_string()),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
     async fn reorder_endpoint_handles_empty_ids() {
-        use crate::HttpState;
         use crate::auth::AuthContext;
+        use crate::HttpState;
         use axum::extract::State;
         use axum::Json;
         use std::sync::Arc;
@@ -747,8 +737,12 @@ mod tests {
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_pin_provider(Arc::new(StaticFilePinProvider));
 
-        let response =
-            super::reorder(State(state), AuthContext::open_access(), Json(super::ReorderRequest { ids: vec![] })).await;
+        let response = super::reorder(
+            State(state),
+            AuthContext::open_access(),
+            Json(super::ReorderRequest { ids: vec![] }),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
     }
 }

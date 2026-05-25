@@ -265,7 +265,10 @@ impl FileRepository for SqliteFileRepository {
         }
     }
 
-    fn list_deleted_files(&self, older_than: UnixTimestamp) -> Result<Vec<FileRecord>, RepositoryError> {
+    fn list_deleted_files(
+        &self,
+        older_than: UnixTimestamp,
+    ) -> Result<Vec<FileRecord>, RepositoryError> {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
@@ -566,8 +569,16 @@ impl FileRepository for SqliteFileRepository {
             )
             .map_err(map_rusqlite_repository_error)?;
         Ok(RepositoryStats {
-            file_count: count(&connection, "SELECT COUNT(*) FROM files WHERE deleted_at IS NULL", [])?,
-            note_count: count(&connection, "SELECT COUNT(*) FROM notes WHERE deleted_at IS NULL", [])?,
+            file_count: count(
+                &connection,
+                "SELECT COUNT(*) FROM files WHERE deleted_at IS NULL",
+                [],
+            )?,
+            note_count: count(
+                &connection,
+                "SELECT COUNT(*) FROM notes WHERE deleted_at IS NULL",
+                [],
+            )?,
             tag_count: count(&connection, "SELECT COUNT(*) FROM tags", [])?,
             pinned_count: count(
                 &connection,

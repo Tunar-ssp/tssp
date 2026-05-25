@@ -581,9 +581,9 @@ async fn write_field_to_temp(
     mut field: axum::extract::multipart::Field<'_>,
     temp_file: &mut NamedTempFile,
 ) -> Result<(tssp_domain::ContentHash, tssp_domain::FileSize), HttpUploadError> {
+    const CHUNK_TIMEOUT_SECS: u64 = 30;
     let mut hasher = blake3::Hasher::new();
     let mut size = 0_u64;
-    const CHUNK_TIMEOUT_SECS: u64 = 30;
 
     loop {
         let chunk_result = tokio::time::timeout(
