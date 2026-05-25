@@ -675,15 +675,23 @@ pub async fn complete_upload(
         .map_err(|e| format!("spawn error: {e}"))
         .and_then(|r| r.map_err(|e| format!("upload error: {:?}", e)));
 
-    // Cleanup assembled file if upload failed
+    // Cleanup assembled file if upload failed (in spawn_blocking)
     if result.is_err() {
-        let _ = std::fs::remove_file(&assembled_path_cleanup);
+        let _ = tokio::task::spawn_blocking({
+            let path = assembled_path_cleanup.clone();
+            move || std::fs::remove_file(path)
+        })
+        .await;
     }
 
     // Cleanup chunk directory after upload attempt (success or failure)
-    // Do this asynchronously to avoid blocking handler
-    tokio::spawn(async move {
-        let _ = tokio::fs::remove_dir_all(&chunk_dir_cleanup).await;
+    // Do this in spawn_blocking to avoid blocking handler
+    tokio::spawn({
+        let dir = chunk_dir_cleanup.clone();
+        async move {
+            let _ = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(dir))
+                .await;
+        }
     });
 
     state.upload_session_manager.delete_session(&session_id).await;
