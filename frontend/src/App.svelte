@@ -5,6 +5,7 @@
   import TopBar from '$lib/components/TopBar.svelte';
   import Dock from '$lib/components/Dock.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import NotificationCenter from '$lib/components/NotificationCenter.svelte';
   import HomeView from './views/home/HomeView.svelte';
   import DriveView from './views/drive/DriveView.svelte';
   import NotesView from './views/notes/NotesView.svelte';
@@ -42,6 +43,7 @@
 
   <Dock />
   <CommandPalette />
+  <NotificationCenter />
 </div>
 
 <style>
