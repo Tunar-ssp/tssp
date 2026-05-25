@@ -1,289 +1,343 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import Kbd from './Kbd.svelte';
 
-  interface ConsoleOutput {
+  interface ConsoleCommand {
     id: string;
-    type: 'command' | 'output' | 'error' | 'info';
-    text: string;
-    timestamp: number;
+    name: string;
+    description: string;
+    category: string;
   }
 
   interface $$Props {
     isOpen?: boolean;
     onClose?: () => void;
-    onCommand?: (command: string) => void;
-    height?: number;
-    class?: string;
+    onExecuteCommand?: (command: string) => Promise<string>;
+    commands?: ConsoleCommand[];
   }
 
   let {
     isOpen = false,
-    onClose,
-    onCommand,
-    height = 300,
-    class: className,
+    onClose = () => {},
+    onExecuteCommand = async () => '',
+    commands = [],
   } = $props<$$Props>();
 
-  let outputs = $state<ConsoleOutput[]>([
-    {
-      id: '1',
-      type: 'info',
-      text: 'Safe Console v1.0 - Type "help" for available commands',
-      timestamp: Date.now(),
-    },
-  ]);
-
   let input = $state('');
-  let consoleEl: HTMLElement;
+  let history: Array<{ type: 'input' | 'output' | 'error'; text: string }> = $state([]);
+  let isExecuting = $state(false);
+  let consoleElement: HTMLDivElement;
+  let inputElement: HTMLInputElement;
 
-  const allowedCommands = [
-    'help',
-    'status',
-    'uptime',
-    'version',
-    'logs',
-    'users',
-    'stats',
-    'backup',
+  const defaultCommands: ConsoleCommand[] = [
+    { id: 'help', name: 'help', description: 'Show available commands', category: 'System' },
+    { id: 'status', name: 'status', description: 'Show system status', category: 'System' },
+    { id: 'clear', name: 'clear', description: 'Clear console output', category: 'System' },
+    { id: 'version', name: 'version', description: 'Show version information', category: 'System' },
   ];
 
-  function executeCommand(cmd: string) {
+  let availableCommands = $derived(commands.length > 0 ? commands : defaultCommands);
+
+  function scrollToBottom() {
+    if (consoleElement) {
+      consoleElement.scrollTop = consoleElement.scrollHeight;
+    }
+  }
+
+  async function executeCommand(cmd: string) {
     const trimmed = cmd.trim();
     if (!trimmed) return;
 
-    outputs = [
-      ...outputs,
-      {
-        id: Date.now().toString(),
-        type: 'command',
-        text: `> ${trimmed}`,
-        timestamp: Date.now(),
-      },
-    ];
-
-    const command = trimmed.split(' ')[0].toLowerCase();
-
-    if (!allowedCommands.includes(command)) {
-      outputs = [
-        ...outputs,
-        {
-          id: Date.now().toString(),
-          type: 'error',
-          text: `Unknown command: ${command}. Type "help" for available commands.`,
-          timestamp: Date.now(),
-        },
-      ];
-    } else {
-      if (onCommand) {
-        onCommand(trimmed);
-      }
-
-      let response = '';
-      switch (command) {
-        case 'help':
-          response = `Available commands:\n  ${allowedCommands.join(', ')}\n\nType a command followed by Enter to execute.`;
-          break;
-        case 'status':
-          response = 'System status: OK';
-          break;
-        case 'uptime':
-          response = 'System uptime: 45 days, 12 hours, 30 minutes';
-          break;
-        case 'version':
-          response = 'TSSP v2.0.0';
-          break;
-        default:
-          response = `Executed: ${command}`;
-      }
-
-      outputs = [
-        ...outputs,
-        {
-          id: Date.now().toString(),
-          type: 'output',
-          text: response,
-          timestamp: Date.now(),
-        },
-      ];
-    }
-
+    history = [...history, { type: 'input', text: trimmed }];
     input = '';
-    setTimeout(() => {
-      if (consoleEl) {
-        consoleEl.scrollTop = consoleEl.scrollHeight;
-      }
-    }, 0);
+    isExecuting = true;
+
+    try {
+      const output = await onExecuteCommand(trimmed);
+      history = [...history, { type: 'output', text: output }];
+    } catch (err) {
+      history = [...history, { type: 'error', text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` }];
+    } finally {
+      isExecuting = false;
+      scrollToBottom();
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       executeCommand(input);
+    } else if (e.key === 'Escape') {
+      onClose();
     }
   }
+
+  function insertCommand(cmd: string) {
+    input = cmd + ' ';
+    if (inputElement) inputElement.focus();
+  }
+
+  $effect(() => {
+    if (isOpen && inputElement) {
+      inputElement.focus();
+    }
+  });
+
+  $effect(() => {
+    scrollToBottom();
+  });
 </script>
 
 {#if isOpen}
-  <div class="safe-console {className || ''}" style="height: {height}px">
+  <div class="safe-console">
     <div class="console-header">
-      <div>
-        <h3>Safe Console</h3>
-        <span class="console-info">Admin commands only</span>
-      </div>
-      {#if onClose}
-        <button class="console-close" on:click={onClose} aria-label="Close">
-          <Icons.ChevronDown size={16} />
-        </button>
-      {/if}
+      <h3>Safe Console</h3>
+      <p class="subtitle">Execute whitelisted commands</p>
+      <button
+        class="console-close"
+        onclick={onClose}
+        title="Close (Escape)"
+      >
+        <Icons.X size={16} />
+      </button>
     </div>
 
-    <div class="console-output" bind:this={consoleEl}>
-      {#each outputs as output (output.id)}
-        <div class="output-line" class:error={output.type === 'error'} class:command={output.type === 'command'} class:info={output.type === 'info'}>
-          {#if output.type === 'command'}
-            <span class="prompt">$</span>
-          {:else if output.type === 'error'}
-            <span class="error-icon">!</span>
-          {:else if output.type === 'info'}
-            <span class="info-icon">ℹ</span>
-          {/if}
-          <span class="output-text">{output.text}</span>
-        </div>
+    <div class="console-quick-commands">
+      {#each availableCommands.slice(0, 4) as cmd (cmd.id)}
+        <button
+          class="quick-cmd"
+          onclick={() => insertCommand(cmd.name)}
+          title={cmd.description}
+        >
+          <Icons.Terminal size={12} />
+          <span>{cmd.name}</span>
+        </button>
       {/each}
     </div>
 
-    <div class="console-input">
+    <div class="console-output" bind:this={consoleElement}>
+      {#each history as item, i (i)}
+        <div class="console-line" class:input={item.type === 'input'} class:error={item.type === 'error'}>
+          {#if item.type === 'input'}
+            <span class="prompt">$</span>
+          {:else if item.type === 'error'}
+            <span class="error-icon">!</span>
+          {:else}
+            <span class="output-icon">›</span>
+          {/if}
+          <span class="line-text">{item.text}</span>
+        </div>
+      {/each}
+      {#if isExecuting}
+        <div class="console-line executing">
+          <span class="prompt">$</span>
+          <span class="spinner"></span>
+        </div>
+      {/if}
+    </div>
+
+    <div class="console-input-area">
       <span class="prompt">$</span>
       <input
+        bind:this={inputElement}
         type="text"
+        class="console-input"
         bind:value={input}
-        on:keydown={handleKeydown}
-        placeholder="Type a command..."
-        class="input-field"
+        onkeydown={handleKeydown}
+        placeholder="Type command or press Escape to close"
+        disabled={isExecuting}
       />
-      <div class="input-hint">
-        <Kbd>Enter</Kbd>
-        <span class="hint-text">to execute</span>
-      </div>
     </div>
+
+    {#if availableCommands.length > 4}
+      <div class="console-commands">
+        <h4>Available Commands:</h4>
+        <div class="commands-grid">
+          {#each availableCommands as cmd (cmd.id)}
+            <div class="command-item">
+              <button
+                class="cmd-button"
+                onclick={() => insertCommand(cmd.name)}
+                disabled={isExecuting}
+              >
+                {cmd.name}
+              </button>
+              <span class="cmd-desc">{cmd.description}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 {/if}
 
 <style>
   .safe-console {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60vh;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
     font-family: var(--ff-mono);
-    flex-shrink: 0;
+    font-size: var(--fs-12);
+    z-index: 1000;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
   }
 
   .console-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     padding: var(--s-3) var(--s-4);
     border-bottom: 1px solid var(--border);
-    background: var(--surface-2);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    flex-shrink: 0;
   }
 
   .console-header h3 {
     margin: 0;
-    font-size: var(--fs-13);
+    font-size: var(--fs-14);
     font-weight: 600;
     color: var(--text);
-    font-family: var(--ff-sans);
   }
 
-  .console-info {
-    display: block;
+  .subtitle {
+    margin: 0;
     font-size: var(--fs-11);
     color: var(--muted);
-    margin-top: 2px;
-    font-family: var(--ff-sans);
   }
 
   .console-close {
+    margin-left: auto;
     width: 28px;
     height: 28px;
     padding: 0;
     border: none;
+    border-radius: var(--r-1);
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
-    border-radius: var(--r-1);
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all var(--duration-quick) var(--ease-smooth);
+    flex-shrink: 0;
   }
 
   .console-close:hover {
-    background: var(--surface);
+    background: var(--surface-2);
     color: var(--text);
+  }
+
+  .console-quick-commands {
+    display: flex;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-4);
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .quick-cmd {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-1);
+    background: transparent;
+    color: var(--blue);
+    font-size: var(--fs-11);
+    font-family: var(--ff-mono);
+    cursor: pointer;
+    transition: all var(--duration-quick) var(--ease-smooth);
+  }
+
+  .quick-cmd:hover {
+    background: var(--blue-subtle);
+    border-color: var(--blue);
   }
 
   .console-output {
     flex: 1;
     overflow-y: auto;
-    padding: var(--s-3);
+    padding: var(--s-3) var(--s-4);
     background: var(--bg);
-    font-size: var(--fs-12);
-    line-height: var(--lh-relaxed);
-    color: var(--text-2);
+    line-height: 1.5;
   }
 
-  .output-line {
+  .console-line {
     display: flex;
     gap: var(--s-2);
-    margin-bottom: 4px;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    margin-bottom: var(--s-1);
+    word-break: break-all;
   }
 
-  .output-line.command {
-    color: var(--green);
+  .console-line.input {
+    color: var(--blue);
+    font-weight: 500;
   }
 
-  .output-line.error {
+  .console-line.error {
     color: var(--danger);
   }
 
-  .output-line.info {
-    color: var(--blue);
+  .console-line.executing {
+    color: var(--muted);
   }
 
   .prompt {
     color: var(--muted);
-    flex-shrink: 0;
-  }
-
-  .error-icon,
-  .info-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    flex-shrink: 0;
     font-weight: 600;
+    flex-shrink: 0;
   }
 
-  .output-text {
+  .error-icon {
+    color: var(--danger);
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .output-icon {
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .line-text {
     flex: 1;
-    word-wrap: break-word;
+    color: var(--text);
   }
 
-  .console-input {
+  .spinner {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-2);
+    animation: blink 1s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .console-input-area {
+    padding: var(--s-2) var(--s-4);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
     display: flex;
     align-items: center;
     gap: var(--s-2);
-    padding: var(--s-3);
-    border-top: 1px solid var(--border);
-    background: var(--surface);
+    flex-shrink: 0;
   }
 
-  .input-field {
+  .console-input {
     flex: 1;
     border: none;
     background: transparent;
@@ -293,20 +347,64 @@
     outline: none;
   }
 
-  .input-field::placeholder {
+  .console-input::placeholder {
     color: var(--muted);
   }
 
-  .input-hint {
+  .console-commands {
+    padding: var(--s-3) var(--s-4);
+    border-top: 1px solid var(--hairline);
+    background: var(--surface-2);
+    max-height: 40%;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .console-commands h4 {
+    margin: 0 0 var(--s-2) 0;
+    font-size: var(--fs-11);
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .commands-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--s-2);
+  }
+
+  .command-item {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
+    flex-direction: column;
+    gap: var(--s-1);
+  }
+
+  .cmd-button {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-1);
+    background: var(--bg);
+    color: var(--blue);
+    font-family: var(--ff-mono);
+    font-size: var(--fs-11);
+    cursor: pointer;
+    transition: all var(--duration-quick) var(--ease-smooth);
+  }
+
+  .cmd-button:hover:not(:disabled) {
+    background: var(--blue-subtle);
+    border-color: var(--blue);
+  }
+
+  .cmd-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .cmd-desc {
     font-size: var(--fs-10);
     color: var(--muted);
-  }
-
-  .hint-text {
-    font-family: var(--ff-sans);
   }
 </style>

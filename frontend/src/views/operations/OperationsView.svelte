@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
+  import SafeConsole from '$lib/components/SafeConsole.svelte';
   import { success, error } from '$lib/stores/notifications';
   import { onMount } from 'svelte';
 
@@ -11,6 +12,7 @@
   let commandOutput = '';
   let selectedCommand = '';
   let isExecuting = false;
+  let showConsole = $state(false);
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Icons.BarChart3 },
@@ -99,12 +101,16 @@
     success('System status refreshed');
   }
 
-  $: storagePercent = systemStatus
-    ? Math.round((systemStatus.disk_used / systemStatus.disk_total) * 100)
-    : 0;
-  $: memoryPercent = systemStatus
-    ? Math.round((systemStatus.memory_used / systemStatus.memory_total) * 100)
-    : 0;
+  let storagePercent = $derived(
+    systemStatus
+      ? Math.round((systemStatus.disk_used / systemStatus.disk_total) * 100)
+      : 0
+  );
+  let memoryPercent = $derived(
+    systemStatus
+      ? Math.round((systemStatus.memory_used / systemStatus.memory_total) * 100)
+      : 0
+  );
 </script>
 
 <div class="ops-view">
@@ -113,12 +119,18 @@
       <h2>Operations Console</h2>
       <p class="subtitle">System monitoring, maintenance, and administration</p>
     </div>
-    <button class="refresh-btn" on:click={refreshSystemStatus} disabled={isLoading}>
-      <div class="refresh-icon" class:spinning={isLoading}>
-        <Icons.RotateCw size={16} />
-      </div>
-      Refresh
-    </button>
+    <div class="header-buttons">
+      <button class="refresh-btn" on:click={refreshSystemStatus} disabled={isLoading}>
+        <div class="refresh-icon" class:spinning={isLoading}>
+          <Icons.RotateCw size={16} />
+        </div>
+        Refresh
+      </button>
+      <button class="console-btn" on:click={() => (showConsole = !showConsole)}>
+        <Icons.Terminal size={16} />
+        Console
+      </button>
+    </div>
   </div>
 
   <div class="tabs-bar">
@@ -330,6 +342,22 @@
   </div>
 </div>
 
+<SafeConsole
+  isOpen={showConsole}
+  onClose={() => (showConsole = false)}
+  onExecuteCommand={async (cmd) => {
+    return await fetch('/api/v1/admin/console/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: cmd }),
+    })
+      .then(r => r.json())
+      .then(d => d.output || 'Command executed')
+      .catch(e => `Error: ${e.message}`);
+  }}
+  {commands}
+/>
+
 <style>
   .ops-view {
     flex: 1;
@@ -382,6 +410,30 @@
   .refresh-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .header-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .console-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-2);
+    background: var(--blue);
+    color: #0a1228;
+    cursor: pointer;
+    font-size: var(--fs-12);
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .console-btn:hover {
+    opacity: 0.9;
   }
 
   .refresh-icon {
