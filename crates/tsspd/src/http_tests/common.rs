@@ -181,6 +181,7 @@ pub fn remove_tag_request(id: &str, tag: &str) -> Request<Body> {
         .unwrap_or_else(|e| panic!("request build failed: {e}"))
 }
 
+#[allow(dead_code)]
 pub fn pin_request(id: &str) -> Request<Body> {
     Request::builder()
         .method("PUT")

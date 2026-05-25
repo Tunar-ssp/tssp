@@ -51,22 +51,22 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::chunked_upload::start_upload).options(options_response),
         )
         .route(
-            "/api/v1/files/upload/:session_id/chunk/:chunk_index",
+            "/api/v1/files/upload/{session_id}/chunk/{chunk_index}",
             post(crate::chunked_upload::upload_chunk)
                 .options(options_response)
                 .layer(upload_body_limit),
         )
         .route(
-            "/api/v1/files/upload/:session_id/complete",
+            "/api/v1/files/upload/{session_id}/complete",
             post(crate::chunked_upload::complete_upload).options(options_response),
         )
         .route(
-            "/api/v1/files/upload/:session_id",
+            "/api/v1/files/upload/{session_id}",
             axum::routing::delete(crate::chunked_upload::cancel_upload).options(options_response),
         )
         .route(
-            "/api/v1/pins",
-            get(crate::pins::list_pins).options(options_response),
+            "/api/v1/auth/devices/{device_token}",
+            axum::routing::delete(crate::auth::revoke_user_device).options(options_response),
         )
         .route(
             "/api/v1/pins/reorder",
@@ -87,12 +87,6 @@ pub fn build_router(state: HttpState) -> Router {
             axum::routing::delete(crate::tags::remove_tag).options(options_response),
         )
         .route(
-            "/api/v1/files/{id}/pin",
-            axum::routing::put(crate::pins::pin)
-                .delete(crate::pins::unpin)
-                .options(options_response),
-        )
-        .route(
             "/api/v1/files/{id}/content",
             get(crate::content::get_file_content).options(options_response),
         )
@@ -101,6 +95,18 @@ pub fn build_router(state: HttpState) -> Router {
             get(crate::file::get_file)
                 .delete(crate::delete::delete_file)
                 .patch(crate::rename::rename_file)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/files/{id}/pin",
+            axum::routing::put({
+                tracing::error!("PUT PIN ROUTE HIT");
+                crate::pins::pin
+            })
+                .delete({
+                    tracing::error!("DELETE PIN ROUTE HIT");
+                    crate::pins::unpin
+                })
                 .options(options_response),
         )
         .route(
@@ -235,10 +241,6 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/auth/devices",
             get(crate::auth::list_user_devices).options(options_response),
-        )
-        .route(
-            "/api/v1/auth/devices/:device_token",
-            axum::routing::delete(crate::auth::revoke_user_device).options(options_response),
         )
         .route(
             "/api/v1/admin/overview",
@@ -379,7 +381,10 @@ pub fn build_router(state: HttpState) -> Router {
         .route("/app-v2/", get(crate::web::serve_web_v2_index))
         .route("/app-v2/{*path}", get(crate::web::serve_web_v2_path))
         .route("/assets/{*path}", get(crate::web::serve_asset))
-        .fallback(crate::web::web_fallback)
+        .fallback({
+            tracing::error!("FALLBACK ROUTE HIT");
+            crate::web::web_fallback
+        })
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::auth_middleware,

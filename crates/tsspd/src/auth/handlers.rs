@@ -76,6 +76,27 @@ fn now_seconds() -> i64 {
     SystemClock.now().seconds()
 }
 
+#[derive(Debug)]
+pub enum LoginError {
+    RateLimited,
+    Auth(AuthError),
+}
+
+fn map_login_error(error: LoginError) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        LoginError::RateLimited => (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "rate_limited",
+                    message: "too many login attempts, try again later".to_owned(),
+                },
+            }),
+        ),
+        LoginError::Auth(error) => map_auth_error(error),
+    }
+}
+
 fn map_auth_error(error: AuthError) -> (StatusCode, Json<ErrorResponse>) {
     match error {
         AuthError::NotConfigured => (
@@ -252,14 +273,20 @@ pub async fn auth_me(
     StatusCode::UNAUTHORIZED.into_response()
 }
 
-fn perform_login(
+async fn perform_login(
     state: &HttpState,
     body: &LoginRequest,
     kind: &str,
     peer: SocketAddr,
     headers: &HeaderMap,
     set_cookie: bool,
-) -> Response {
+) -> Result<Response, LoginError> {
+    let ip = peer.ip();
+
+    if !state.rate_limiter.check_and_record_attempt(ip).await {
+        return Err(LoginError::RateLimited);
+    }
+
     let now = now_seconds();
     let client_ip = Some(peer.ip().to_string());
     let user_agent = headers
@@ -308,8 +335,14 @@ fn perform_login(
     };
 
     let session = match session {
-        Ok(value) => value,
-        Err(error) => return map_auth_error(error).into_response(),
+        Ok(value) => {
+            state.rate_limiter.record_success(ip).await;
+            value
+        }
+        Err(error) => {
+            state.rate_limiter.record_failure(ip).await;
+            return Err(LoginError::Auth(error));
+        }
     };
 
     let mut response = (
@@ -341,7 +374,7 @@ fn perform_login(
             }
         }
     }
-    response
+    Ok(response)
 }
 
 fn legacy_session_info(token: String) -> Result<super::service::SessionInfo, AuthError> {
@@ -365,7 +398,10 @@ pub async fn auth_login(
     headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Response {
-    perform_login(&state, &body, "web", peer, &headers, true)
+    match perform_login(&state, &body, "web", peer, &headers, true).await {
+        Ok(response) => response,
+        Err(error) => map_login_error(error).into_response(),
+    }
 }
 
 /// CLI token exchange (Bearer only, no cookie).
@@ -375,7 +411,10 @@ pub async fn auth_token(
     headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    perform_login(&state, &body, "api", peer, &headers, false)
+    match perform_login(&state, &body, "api", peer, &headers, false).await {
+        Ok(response) => response,
+        Err(error) => map_login_error(error).into_response(),
+    }
 }
 
 /// Logout: revokes cookie/bearer token when present.

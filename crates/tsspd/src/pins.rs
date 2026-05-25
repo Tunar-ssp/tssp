@@ -206,6 +206,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub(crate) async fn list_pins(
     State(state): State<HttpState>,
     auth: crate::auth::AuthContext,
@@ -428,13 +429,15 @@ fn map_pin_error(error: PinError) -> HttpPinError {
 }
 
 #[derive(Debug, Serialize)]
-struct PinListResponse {
+#[allow(dead_code)]
+pub(crate) struct PinListResponse {
     schema_version: u8,
     files: Vec<FileRecordResponse>,
 }
 
 impl PinListResponse {
-    fn from_records(records: &[FileRecord]) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_records(records: &[FileRecord]) -> Self {
         Self {
             schema_version: 1,
             files: records

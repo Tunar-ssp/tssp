@@ -12,6 +12,7 @@ use crate::content::StaticBlobReader;
 use crate::delete::{FileDeleteProvider, StaticFileDeleteProvider};
 use crate::notes::{NoteProvider, StaticNoteProvider};
 use crate::pins::{FilePinProvider, StaticFilePinProvider};
+use crate::rate_limit::RateLimiter;
 use crate::search::{FileSearchProvider, StaticFileSearchProvider};
 use crate::sessions::{SessionProvider, StaticSessionProvider};
 use crate::settings::DaemonSettings;
@@ -28,6 +29,7 @@ pub struct HttpState {
     pub(crate) upload_temp_dir: PathBuf,
     pub(crate) storage_mutation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(crate) auth: AuthService,
+    pub(crate) rate_limiter: RateLimiter,
     pub(crate) workspaces: Option<Arc<workspaces::WorkspaceStore>>,
     pub(crate) settings: Arc<DaemonSettings>,
     pub(crate) public_urls: PublicUrlBuilder,
@@ -60,6 +62,7 @@ impl HttpState {
             upload_temp_dir,
             storage_mutation_lock: Arc::new(tokio::sync::Mutex::new(())),
             auth: AuthService::disabled(),
+            rate_limiter: RateLimiter::new(),
             workspaces: None,
             settings,
             public_urls,

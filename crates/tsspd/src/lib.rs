@@ -35,6 +35,7 @@ mod public_api;
 mod public_link_tests;
 mod public_sessions;
 mod qr;
+mod rate_limit;
 mod rename;
 mod router;
 mod search;

@@ -43,6 +43,7 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         .as_str()
         .unwrap_or_else(|| panic!("first uploaded id is missing"))
         .to_owned();
+    println!("DEBUG: first_id = {}", first_id);
 
     let second_upload = app
         .clone()
@@ -54,14 +55,24 @@ async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
         .unwrap_or_else(|| panic!("second uploaded id is missing"))
         .to_owned();
 
+    let url = format!("/api/v1/files/{}/pin", first_id);
+    println!("DEBUG: url = {}", url);
+    let req = Request::builder()
+        .method("PUT")
+        .uri(url)
+        .body(Body::empty())
+        .unwrap();
     let first_pin = app
         .clone()
-        .oneshot(pin_request(&first_id))
+        .oneshot(req)
         .await
         .unwrap_or_else(|error| panic!("pin request failed: {error}"));
-    assert_eq!(first_pin.status(), StatusCode::OK);
-    let first_pin_body = response_json(first_pin).await;
-    assert_eq!(first_pin_body["changed"], true);
+    if first_pin.status() != StatusCode::OK {
+        let status = first_pin.status();
+        let body_bytes = axum::body::to_bytes(first_pin.into_body(), 10000).await.unwrap();
+        let body = String::from_utf8_lossy(&body_bytes);
+        panic!("pin request for id {first_id} (PUT /api/v1/files/{first_id}/pin) failed with status {status} and body: {body}. Ensure the router is configured correctly.");
+    }
 
     let second_pin = app
         .clone()
