@@ -20,7 +20,7 @@
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
   import HomeView from './views/home/HomeView.svelte';
   import DriveView from './views/drive/DriveView.svelte';
-  import NotesView from './views/notes/NotesView.svelte';
+  import NotesViewP4 from './views/notes/NotesViewP4.svelte';
   import WorkspaceView from './views/workspace/WorkspaceView.svelte';
   import OperationsView from './views/operations/OperationsView.svelte';
 
@@ -45,7 +45,7 @@
   const viewMap = {
     home: HomeView,
     drive: DriveView,
-    notes: NotesView,
+    notes: NotesViewP4,
     workspace: WorkspaceView,
     operations: OperationsView,
   };
