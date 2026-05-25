@@ -250,13 +250,12 @@ fn start_auth_service(
     Ok(auth_service)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 fn build_http_state(
     settings: &Arc<DaemonSettings>,
     paths: RuntimePaths,
     pool: Pool<SqliteConnectionManager>,
-    #[allow(clippy::needless_pass_by_value)]
-    repository: Arc<SqliteFileRepository>,
+    #[allow(clippy::needless_pass_by_value)] repository: Arc<SqliteFileRepository>,
     storage: Arc<FilesystemBlobStore>,
     session_service: SessionService<SqliteSessionRepository>,
     auth_service: AuthService,
