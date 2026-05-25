@@ -4,12 +4,17 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tssp_app::{TagError, TagService};
 use tssp_domain::FileId;
 use tssp_ports::{FileRepository, RepositoryError, TagSummary};
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTagBody {
+    pub name: String,
+}
 
 /// Handles HTTP tag operations through the application layer.
 pub trait FileTagProvider: Send + Sync {
@@ -83,6 +88,11 @@ pub enum HttpTagError {
         /// Short client-facing message.
         message: String,
     },
+    /// User does not have permission.
+    Forbidden {
+        /// Short client-facing message.
+        message: String,
+    },
     /// Metadata store is busy.
     Busy {
         /// Short client-facing message.
@@ -109,6 +119,11 @@ impl HttpTagError {
             Self::NotFound { message } => {
                 (StatusCode::NOT_FOUND, "file_not_found", message.clone())
             }
+            Self::Forbidden { message } => (
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                message.clone(),
+            ),
             Self::Busy { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "metadata_busy",
@@ -180,6 +195,43 @@ where
     }
 }
 
+pub(crate) async fn create_tag(
+    Json(body): Json<CreateTagBody>,
+) -> Response {
+    let tag_name = body.name.trim();
+    if tag_name.is_empty() {
+        return HttpTagError::InvalidRequest {
+            message: "tag name cannot be empty".to_owned(),
+        }
+        .response();
+    }
+
+    if tag_name.len() > 50 {
+        return HttpTagError::InvalidRequest {
+            message: "tag name must be 50 characters or less".to_owned(),
+        }
+        .response();
+    }
+
+    if !tag_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return HttpTagError::InvalidRequest {
+            message: "tag name must contain only alphanumeric characters, hyphens, and underscores"
+                .to_owned(),
+        }
+        .response();
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "schema_version": 1,
+            "name": tag_name,
+            "file_count": 0,
+        })),
+    )
+        .into_response()
+}
+
 pub(crate) async fn list_tags(State(state): State<HttpState>) -> Response {
     let provider = state.tag_provider.clone();
     match tokio::task::spawn_blocking(move || provider.list_tags()).await {
@@ -194,6 +246,7 @@ pub(crate) async fn list_tags(State(state): State<HttpState>) -> Response {
 
 pub(crate) async fn add_tags(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
     Json(tags): Json<Vec<String>>,
 ) -> Response {
@@ -212,6 +265,30 @@ pub(crate) async fn add_tags(
             .response()
         }
     };
+
+    let file = match state.stats_provider.find_file(&file_id) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return HttpTagError::NotFound {
+                message: "file not found".to_owned(),
+            }
+            .response()
+        }
+        Err(e) => {
+            return HttpTagError::Internal {
+                message: e,
+            }
+            .response()
+        }
+    };
+
+    if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpTagError::Forbidden {
+            message: "you do not have permission to tag this file".to_owned(),
+        }
+        .response();
+    }
+
     let provider = state.tag_provider.clone();
 
     match tokio::task::spawn_blocking(move || provider.add_tags(file_id, tags)).await {
@@ -226,6 +303,7 @@ pub(crate) async fn add_tags(
 
 pub(crate) async fn remove_tag(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path((id, tag)): Path<(String, String)>,
 ) -> Response {
     let file_id = match FileId::new(id) {
@@ -237,6 +315,30 @@ pub(crate) async fn remove_tag(
             .response()
         }
     };
+
+    let file = match state.stats_provider.find_file(&file_id) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return HttpTagError::NotFound {
+                message: "file not found".to_owned(),
+            }
+            .response()
+        }
+        Err(e) => {
+            return HttpTagError::Internal {
+                message: e,
+            }
+            .response()
+        }
+    };
+
+    if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpTagError::Forbidden {
+            message: "you do not have permission to tag this file".to_owned(),
+        }
+        .response();
+    }
+
     let provider = state.tag_provider.clone();
 
     match tokio::task::spawn_blocking(move || provider.remove_tag(file_id, tag)).await {

@@ -585,15 +585,30 @@ async fn write_field_to_temp(
 ) -> Result<(tssp_domain::ContentHash, tssp_domain::FileSize), HttpUploadError> {
     let mut hasher = blake3::Hasher::new();
     let mut size = 0_u64;
+    const CHUNK_TIMEOUT_SECS: u64 = 30;
 
-    while let Some(chunk) =
-        field
-            .chunk()
-            .await
-            .map_err(|error| HttpUploadError::InvalidRequest {
-                message: format!("invalid file field: {error}"),
-            })?
-    {
+    loop {
+        let chunk_result = tokio::time::timeout(
+            tokio::time::Duration::from_secs(CHUNK_TIMEOUT_SECS),
+            field.chunk(),
+        )
+        .await;
+
+        let chunk = match chunk_result {
+            Ok(Ok(Some(c))) => c,
+            Ok(Ok(None)) => break,
+            Ok(Err(error)) => {
+                return Err(HttpUploadError::InvalidRequest {
+                    message: format!("invalid file field: {error}"),
+                })
+            }
+            Err(_timeout) => {
+                return Err(HttpUploadError::InvalidRequest {
+                    message: format!("upload timeout: no data received for {CHUNK_TIMEOUT_SECS}s"),
+                })
+            }
+        };
+
         hasher.update(&chunk);
         size = size
             .checked_add(chunk.len() as u64)

@@ -64,6 +64,8 @@ pub struct NewNoteRecord {
     pub pinned_at: Option<u32>,
     /// Virtual folder path.
     pub folder_path: String,
+    /// Owning user id.
+    pub owner_id: Option<UserId>,
 }
 
 /// Durable result of writing a blob.

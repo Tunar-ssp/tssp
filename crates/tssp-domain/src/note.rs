@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{text, DomainError, Tag, UnixTimestamp};
+use crate::{text, DomainError, Tag, UnixTimestamp, UserId};
 
 /// Maximum note body size (1 MiB), per specification.
 pub const MAX_NOTE_BODY_BYTES: usize = 1_048_576;
@@ -130,6 +130,8 @@ pub struct NoteRecord {
     pub pinned_at: Option<u32>,
     /// Virtual folder path for note organization.
     pub folder_path: String,
+    /// Owning user id.
+    pub owner_id: Option<UserId>,
 }
 
 /// Derives a title from Markdown when the caller did not supply one.
@@ -217,6 +219,7 @@ mod tests {
             tags: vec![],
             pinned_at: None,
             folder_path: String::new(),
+            owner_id: None,
         };
         assert_eq!(record.title.as_str(), "Title");
     }

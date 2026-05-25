@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import QRCodeGenerator from './QRCodeGenerator.svelte';
   import Btn from './Btn.svelte';
   import Kbd from './Kbd.svelte';
 
@@ -107,11 +108,8 @@
               </button>
 
               {#if showQR}
-                <div class="qr-placeholder">
-                  <div class="qr-box">
-                    <Icons.QrCode size={80} />
-                  </div>
-                  <p>QR code would be displayed here</p>
+                <div class="qr-generator">
+                  <QRCodeGenerator data={shareLink} size={256} />
                 </div>
               {/if}
             </div>

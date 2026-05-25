@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import DeviceManager from './DeviceManager.svelte';
 
   interface $$Props {
     isOpen?: boolean;
@@ -100,6 +101,10 @@
             </div>
             <input type="checkbox" class="setting-checkbox" />
           </label>
+        </div>
+
+        <div class="device-section">
+          <DeviceManager />
         </div>
       </div>
 
@@ -292,5 +297,11 @@
 
   .tray-link:hover {
     background: var(--surface-2);
+  }
+
+  .device-section {
+    margin-top: var(--s-2);
+    padding-top: var(--s-4);
+    border-top: 1px solid var(--border);
   }
 </style>

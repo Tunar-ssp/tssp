@@ -38,23 +38,28 @@ export async function updateFileTags(id: string, tags: string[]) {
   }
 }
 
-export async function togglePin(id: string) {
+export async function togglePin(id: string, currentlyPinned: boolean) {
   try {
-    await api.toggleFilePin(id);
+    if (currentlyPinned) {
+      await api.unpinFile(id);
+      success('Unpinned', 'File unpinned from top');
+    } else {
+      await api.pinFile(id);
+      success('Pinned', 'File pinned to top');
+    }
     await loadFiles();
-    success('Pinned', 'File pinned to top');
     return true;
   } catch (err: any) {
-    error('Pin Failed', err.message || 'Could not pin file');
+    error('Pin Failed', err.message || 'Could not change pin state');
     return false;
   }
 }
 
-export async function togglePublic(id: string) {
+export async function togglePublic(id: string, isPublic: boolean) {
   try {
-    await api.toggleFilePublic(id);
+    await api.setFileVisibility(id, isPublic);
     await loadFiles();
-    success('Visibility Updated', 'File visibility changed');
+    success('Visibility Updated', isPublic ? 'File shared' : 'File made private');
     return true;
   } catch (err: any) {
     error('Update Failed', err.message || 'Could not update visibility');

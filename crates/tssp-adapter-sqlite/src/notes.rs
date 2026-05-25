@@ -6,6 +6,7 @@ use std::fmt::Write as _;
 use rusqlite::{params, types::Value, Connection, Row, Transaction};
 use tssp_domain::{
     search_terms, FileRecord, NoteBody, NoteId, NoteRecord, NoteTitle, Tag, TagKey, UnixTimestamp,
+    UserId,
 };
 use tssp_ports::{
     NewNoteRecord, NoteListQuery, NoteListSort, NoteRepository, PagedNotes, PinOutcome,
@@ -41,7 +42,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path
+                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id
                  FROM notes
                  WHERE id = ?1",
             )
@@ -122,7 +123,7 @@ impl NoteRepository for SqliteFileRepository {
 
         let connection = self.connect()?;
         let mut sql = String::from(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path
+            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
              FROM notes n",
         );
         let mut where_clauses = Vec::new();
@@ -347,7 +348,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path
+                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
                  FROM note_search s
                  JOIN notes n ON n.id = s.note_id
                  WHERE note_search MATCH ?1
@@ -467,7 +468,7 @@ fn fuzzy_note_candidates(
     let like_prefix = format!("{prefix}%");
     let mut statement = connection
         .prepare(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path
+            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
              FROM notes n
              WHERE n.title LIKE ?1 COLLATE NOCASE
                 OR EXISTS (
@@ -751,6 +752,12 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
             })
         })
         .transpose()?;
+    let owner_id_raw: Option<String> = row
+        .get(7)
+        .map_err(map_rusqlite_repository_error)?;
+    let owner_id = owner_id_raw
+        .map(|value| UserId::new(value).map_err(|error| map_domain_repository_error(&error)))
+        .transpose()?;
 
     Ok(NoteRecord {
         id,
@@ -761,6 +768,7 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
         tags: Vec::new(),
         pinned_at,
         folder_path: row.get(6).map_err(map_rusqlite_repository_error)?,
+        owner_id,
     })
 }
 
@@ -795,8 +803,8 @@ fn insert_note_row(
 ) -> Result<(), RepositoryError> {
     transaction
         .execute(
-            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 new_note.id.as_str(),
                 new_note.title.as_str(),
@@ -805,6 +813,7 @@ fn insert_note_row(
                 new_note.updated_at.seconds(),
                 new_note.pinned_at,
                 new_note.folder_path,
+                new_note.owner_id.as_ref().map(|id| id.as_str()),
             ],
         )
         .map(|_rows| ())
@@ -884,6 +893,8 @@ mod tests {
                 updated_at: now,
                 tags: vec![Tag::new("ideas").unwrap_or_else(|error| panic!("{error}"))],
                 pinned_at: None,
+                folder_path: String::new(),
+                owner_id: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -917,6 +928,8 @@ mod tests {
                 updated_at: now,
                 tags: vec![],
                 pinned_at: None,
+                folder_path: String::new(),
+                owner_id: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
         assert_eq!(created.body.as_str(), "Body text");

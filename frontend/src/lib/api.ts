@@ -81,13 +81,18 @@ export const api = {
     }),
   updateFileTags: (id: string, tags: string[]) =>
     request(`/files/${encodeURIComponent(id)}/tags`, {
-      method: 'PUT',
-      body: JSON.stringify({ tags }),
+      method: 'POST',
+      body: JSON.stringify(tags),
     }),
-  toggleFilePin: (id: string) =>
-    request(`/files/${encodeURIComponent(id)}/pin`, { method: 'POST' }),
-  toggleFilePublic: (id: string) =>
-    request(`/files/${encodeURIComponent(id)}/visibility`, { method: 'POST' }),
+  pinFile: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}/pin`, { method: 'PUT' }),
+  unpinFile: (id: string) =>
+    request(`/files/${encodeURIComponent(id)}/pin`, { method: 'DELETE' }),
+  setFileVisibility: (id: string, isPublic: boolean) =>
+    request(`/files/${encodeURIComponent(id)}/visibility`, {
+      method: 'PATCH',
+      body: JSON.stringify({ visibility: isPublic ? 'public' : 'private' }),
+    }),
 
   // Notes
   listNotes: () => request<{ notes: Note[] }>('/notes'),

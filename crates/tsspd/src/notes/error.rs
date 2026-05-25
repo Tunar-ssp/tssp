@@ -26,6 +26,11 @@ pub enum HttpNoteError {
         /// Short client-facing message.
         message: String,
     },
+    /// User does not have permission.
+    Forbidden {
+        /// Short client-facing message.
+        message: String,
+    },
     /// Note service is not configured.
     Unavailable {
         /// Short client-facing message.
@@ -54,6 +59,11 @@ impl HttpNoteError {
             Self::NotFound { message } => {
                 (StatusCode::NOT_FOUND, "note_not_found", message.clone())
             }
+            Self::Forbidden { message } => (
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                message.clone(),
+            ),
             Self::Unavailable { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "note_unavailable",

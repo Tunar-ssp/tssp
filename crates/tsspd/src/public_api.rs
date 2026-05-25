@@ -57,6 +57,20 @@ pub async fn public_download(
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    if file.visibility != Visibility::Public {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "not_found",
+                    message: "file not found or access denied".to_owned(),
+                },
+            }),
+        )
+            .into_response();
+    }
+
     let blob = match content::open_blob(state, file.storage_handle.clone()).await {
         Ok(value) => value,
         Err(error) => {

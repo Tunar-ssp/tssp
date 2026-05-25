@@ -29,11 +29,12 @@ pub(crate) struct CreateNoteBody {
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateNoteBody {
     pub(crate) title: Option<String>,
-    pub(crate) body: String,
+    pub(crate) body: Option<String>,
 }
 
 pub(crate) async fn create_note(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Json(body): Json<CreateNoteBody>,
 ) -> Response {
     if let Err(error) = validate_note_body(&body.body) {
@@ -46,6 +47,7 @@ pub(crate) async fn create_note(
         body: body.body,
         tags: body.tags,
         pin: body.pin,
+        owner_id: Some(auth.user_id.clone()),
     };
 
     match run_blocking(provider, move |provider| provider.create_note(request)).await {
@@ -106,21 +108,50 @@ pub(crate) async fn get_note(State(state): State<HttpState>, Path(id): Path<Stri
 
 pub(crate) async fn update_note(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
     Json(body): Json<UpdateNoteBody>,
 ) -> Response {
-    if let Err(error) = validate_note_body(&body.body) {
-        return error.response();
-    }
-
     let note_id = match parse_note_id(id) {
         Ok(value) => value,
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
+
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to update this note".to_owned(),
+        }
+        .response();
+    }
+
+    // If body is provided, validate it
+    if let Some(ref b) = body.body {
+        if let Err(error) = validate_note_body(b) {
+            return error.response();
+        }
+    }
+
+    let final_body = if let Some(b) = body.body {
+        b
+    } else {
+        existing.body.as_str().to_owned()
+    };
+
     let request = UpdateNoteRequest {
         title: body.title,
-        body: body.body,
+        body: final_body,
     };
 
     match run_blocking(provider, move |provider| {
@@ -139,6 +170,7 @@ pub(crate) async fn update_note(
 
 pub(crate) async fn delete_note(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
 ) -> Response {
     let note_id = match parse_note_id(id) {
@@ -146,6 +178,24 @@ pub(crate) async fn delete_note(
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
+
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to delete this note".to_owned(),
+        }
+        .response();
+    }
 
     match run_blocking(provider, move |provider| provider.delete_note(note_id)).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -155,6 +205,7 @@ pub(crate) async fn delete_note(
 
 pub(crate) async fn duplicate_note(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
 ) -> Response {
     let note_id = match parse_note_id(id) {
@@ -169,6 +220,13 @@ pub(crate) async fn duplicate_note(
             Err(response) => return response,
         };
 
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to duplicate this note".to_owned(),
+        }
+        .response();
+    }
+
     let request = CreateNoteRequest {
         title: Some(format!("{} copy", existing.title.as_str())),
         body: existing.body.as_str().to_owned(),
@@ -178,6 +236,7 @@ pub(crate) async fn duplicate_note(
             .map(|tag| tag.display().to_owned())
             .collect(),
         pin: false,
+        owner_id: Some(auth.user_id.clone()),
     };
 
     match run_blocking(provider, move |provider| provider.create_note(request)).await {
@@ -192,6 +251,7 @@ pub(crate) async fn duplicate_note(
 
 pub(crate) async fn add_note_tags(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
     Json(tags): Json<Vec<String>>,
 ) -> Response {
@@ -207,6 +267,24 @@ pub(crate) async fn add_note_tags(
     };
     let provider = state.note_provider.clone();
 
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to tag this note".to_owned(),
+        }
+        .response();
+    }
+
     match run_blocking(provider, move |provider| provider.add_tags(note_id, tags)).await {
         Ok(_changed) => StatusCode::NO_CONTENT.into_response(),
         Err(response) => response,
@@ -215,6 +293,7 @@ pub(crate) async fn add_note_tags(
 
 pub(crate) async fn replace_note_tags(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
     Json(tags): Json<Vec<String>>,
 ) -> Response {
@@ -223,6 +302,24 @@ pub(crate) async fn replace_note_tags(
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
+
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to tag this note".to_owned(),
+        }
+        .response();
+    }
 
     match run_blocking(provider, move |provider| {
         provider.replace_tags(note_id, tags)
@@ -236,6 +333,7 @@ pub(crate) async fn replace_note_tags(
 
 pub(crate) async fn remove_note_tag(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path((id, tag)): Path<(String, String)>,
 ) -> Response {
     let note_id = match parse_note_id(id) {
@@ -244,22 +342,66 @@ pub(crate) async fn remove_note_tag(
     };
     let provider = state.note_provider.clone();
 
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to tag this note".to_owned(),
+        }
+        .response();
+    }
+
     match run_blocking(provider, move |provider| provider.remove_tag(note_id, tag)).await {
         Ok(_changed) => StatusCode::NO_CONTENT.into_response(),
         Err(response) => response,
     }
 }
 
-pub(crate) async fn pin_note(State(state): State<HttpState>, Path(id): Path<String>) -> Response {
-    pin_with_position(state, id, None).await
+pub(crate) async fn pin_note(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    pin_with_position(state, auth, id, None).await
 }
 
-pub(crate) async fn unpin_note(State(state): State<HttpState>, Path(id): Path<String>) -> Response {
+pub(crate) async fn unpin_note(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
     let note_id = match parse_note_id(id) {
         Ok(value) => value,
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
+
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to unpin this note".to_owned(),
+        }
+        .response();
+    }
 
     match run_blocking(provider, move |provider| provider.unpin_note(note_id)).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -267,12 +409,35 @@ pub(crate) async fn unpin_note(State(state): State<HttpState>, Path(id): Path<St
     }
 }
 
-async fn pin_with_position(state: HttpState, id: String, position: Option<u32>) -> Response {
+async fn pin_with_position(
+    state: HttpState,
+    auth: crate::auth::AuthContext,
+    id: String,
+    position: Option<u32>,
+) -> Response {
     let note_id = match parse_note_id(id) {
         Ok(value) => value,
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
+
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to pin this note".to_owned(),
+        }
+        .response();
+    }
 
     match run_blocking(provider, move |provider| {
         provider.pin_note(note_id, position)

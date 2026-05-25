@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import { workspaces, activeWorkspace, loadWorkspaces, setActiveWorkspace, createNewWorkspace, deleteWorkspace, updateActiveWorkspace, isSaving } from '$lib/stores/workspace';
   import { success, error } from '$lib/stores/notifications';
+  import MonacoEditor from '$lib/components/MonacoEditor.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
   import FileExplorer from '$lib/components/FileExplorer.svelte';
   import FindWidget from '$lib/components/FindWidget.svelte';
@@ -19,7 +20,6 @@
   let cursorLine = $state(1);
   let cursorColumn = $state(1);
   let isModified = $state(false);
-  let editorElement: HTMLTextAreaElement | null = null;
 
   let openTabs: any[] = $state([]);
   let activeTabId: string | null = $state(null);
@@ -267,17 +267,18 @@
           </div>
         </div>
 
-        <textarea
-          bind:this={editorElement}
-          class="code-editor"
-          placeholder="Start coding..."
-          bind:value={bodyDraft}
-          onchange={handleSaveWorkspace}
-          oninput={(e) => handleEditorInput(e.currentTarget.value)}
-          onkeydown={handleEditorKeydown}
-          onclick={handleEditorClick}
-          onkeyup={updateCursorPosition}
-        ></textarea>
+        {#await import('$lib/components/MonacoEditor.svelte') then { default: Monaco }}
+          <svelte:component
+            this={Monaco}
+            value={bodyDraft}
+            language={selectedLanguage}
+            onChange={(newValue) => {
+              handleEditorInput(newValue);
+              handleSaveWorkspace();
+            }}
+            height="calc(100% - 120px)"
+          />
+        {/await}
       </div>
 
       <StatusBar

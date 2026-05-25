@@ -17,9 +17,12 @@
   let previewFile: any = null;
   let shareFile: any = null;
   let fileInput: HTMLInputElement;
-  let filterQuery = '';
+  let filterQuery = $state('');
   let viewMode: 'list' | 'grid' = (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'grid') || 'grid';
   let uploads: any[] = $state([]);
+  let searchResults: any[] = $state([]);
+  let isSearching = $state(false);
+  let searchTimeout: NodeJS.Timeout | null = null;
 
   function toggleViewMode(mode: 'list' | 'grid') {
     viewMode = mode;
@@ -68,7 +71,7 @@
   }
 
   async function handlePin(file: any) {
-    await FileService.togglePin(file.id);
+    await FileService.togglePin(file.id, !!file.pinned_at);
   }
 
   async function handleShare(file: any) {
@@ -80,13 +83,47 @@
   }
 
   async function handleShareToggle(fileId: string, isPublic: boolean) {
-    await FileService.togglePublic(fileId);
-    success(isPublic ? 'File shared' : 'File made private');
+    await FileService.togglePublic(fileId, isPublic);
   }
 
-  let filteredFiles = $derived(filterQuery
-    ? $visibleFiles.filter(f => f.name.toLowerCase().includes(filterQuery.toLowerCase()))
-    : $visibleFiles);
+  async function performSearch(query: string) {
+    if (!query.trim()) {
+      searchResults = [];
+      isSearching = false;
+      return;
+    }
+
+    isSearching = true;
+    try {
+      const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+
+      // Filter to only files (not notes/workspaces)
+      searchResults = (data.results || []).filter((r: any) => r.type === 'file');
+      isSearching = false;
+    } catch (err) {
+      error('Search failed');
+      isSearching = false;
+    }
+  }
+
+  function handleSearchInput(e: any) {
+    filterQuery = e.target.value;
+
+    // Clear previous timeout
+    if (searchTimeout) clearTimeout(searchTimeout);
+
+    // Debounce search by 300ms
+    if (filterQuery.trim()) {
+      isSearching = true;
+      searchTimeout = setTimeout(() => performSearch(filterQuery), 300);
+    } else {
+      searchResults = [];
+      isSearching = false;
+    }
+  }
+
+  let filteredFiles = $derived(searchResults.length > 0 ? searchResults : $visibleFiles);
 
   function getContextItems(file: any) {
     return [
@@ -126,7 +163,15 @@
 
     <div class="search-bar">
       <Icons.Search size={16} />
-      <input type="text" placeholder="Search files..." bind:value={filterQuery} />
+      <input
+        type="text"
+        placeholder="Search files... (server-side)"
+        value={filterQuery}
+        on:input={handleSearchInput}
+      />
+      {#if isSearching}
+        <div style="color: var(--muted); font-size: 12px;">Searching...</div>
+      {/if}
       <div style="flex: 1" />
       <div class="view-toggle">
         <button

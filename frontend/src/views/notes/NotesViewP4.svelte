@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import { sortedNotes, activeNote, loadNotes, setActiveNote, updateActiveNote, createNewNote, deleteNote, isSaving } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
+  import RichEditor from '$lib/components/RichEditor.svelte';
   import Outline from '$lib/components/Outline.svelte';
   import SlashMenu from '$lib/components/SlashMenu.svelte';
   import ColorPicker from '$lib/components/ColorPicker.svelte';
@@ -18,7 +19,6 @@
   let showColorPicker = $state(false);
   let showSlashMenu = $state(false);
   let slashMenuPos = { x: 0, y: 0 };
-  let editorElement: HTMLTextAreaElement;
 
   onMount(async () => {
     await loadNotes();
@@ -68,30 +68,6 @@
     };
   }
 
-  function handleEditorKeydown(e: KeyboardEvent) {
-    if (e.key === '/' && e.ctrlKey) {
-      e.preventDefault();
-      const rect = editorElement.getBoundingClientRect();
-      showSlashMenu = true;
-      slashMenuPos = { x: rect.left, y: rect.top + 40 };
-    }
-  }
-
-  function insertText(text: string) {
-    if (!editorElement) return;
-    const start = editorElement.selectionStart;
-    const end = editorElement.selectionEnd;
-    bodyDraft = bodyDraft.substring(0, start) + text + bodyDraft.substring(end);
-    editorElement.focus();
-    editorElement.setSelectionRange(start + text.length, start + text.length);
-  }
-
-  window.addEventListener('insert', (e: any) => {
-    if (showSlashMenu) {
-      insertText(e.detail.text);
-      showSlashMenu = false;
-    }
-  });
 
   let filteredNotes = $derived(searchQuery
     ? $sortedNotes.filter(n =>
@@ -209,27 +185,16 @@
 
       <div class="editor-main">
         <div class="editor-column">
-          <textarea
-            bind:this={editorElement}
-            bind:value={bodyDraft}
-            on:change={handleSaveNote}
-            on:keydown={handleEditorKeydown}
-            class="editor-textarea"
-            placeholder="Start typing... (Ctrl+/ for formatting)"
-          ></textarea>
+          <RichEditor
+            content={bodyDraft}
+            onChange={(html) => {
+              bodyDraft = html;
+              handleSaveNote();
+            }}
+          />
         </div>
 
-        <Outline
-          content={bodyDraft}
-          onSelectItem={(lineNum) => {
-            if (editorElement) {
-              const lines = bodyDraft.substring(0, bodyDraft.split('\n').slice(0, lineNum).join('\n').length).split('\n');
-              const pos = lines.join('\n').length;
-              editorElement.focus();
-              editorElement.setSelectionRange(pos, pos);
-            }
-          }}
-        />
+        <Outline content={bodyDraft} onSelectItem={() => {}} />
       </div>
 
       <div class="editor-footer">

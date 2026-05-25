@@ -103,6 +103,11 @@ pub enum HttpPinError {
         /// Short client-facing message.
         message: String,
     },
+    /// User does not have permission.
+    Forbidden {
+        /// Short client-facing message.
+        message: String,
+    },
     /// Metadata store is busy.
     Busy {
         /// Short client-facing message.
@@ -129,6 +134,11 @@ impl HttpPinError {
             Self::NotFound { message } => {
                 (StatusCode::NOT_FOUND, "file_not_found", message.clone())
             }
+            Self::Forbidden { message } => (
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                message.clone(),
+            ),
             Self::Busy { message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "metadata_busy",
@@ -217,9 +227,43 @@ pub(crate) struct PinRequest {
 
 pub(crate) async fn pin(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
     payload: Option<Json<PinRequest>>,
 ) -> Response {
+    let file_id = match tssp_domain::FileId::new(id.clone()) {
+        Ok(f) => f,
+        Err(e) => {
+            return HttpPinError::InvalidRequest {
+                message: e.to_string(),
+            }
+            .response()
+        }
+    };
+
+    let file = match state.stats_provider.find_file(&file_id) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return HttpPinError::NotFound {
+                message: "file not found".to_owned(),
+            }
+            .response()
+        }
+        Err(e) => {
+            return HttpPinError::Internal {
+                message: e,
+            }
+            .response()
+        }
+    };
+
+    if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpPinError::Forbidden {
+            message: "you do not have permission to pin this file".to_owned(),
+        }
+        .response();
+    }
+
     let provider = state.pin_provider.clone();
     let position = payload.and_then(|Json(p)| p.position);
     match tokio::task::spawn_blocking(move || provider.pin(id, position)).await {
@@ -232,7 +276,44 @@ pub(crate) async fn pin(
     }
 }
 
-pub(crate) async fn unpin(State(state): State<HttpState>, Path(id): Path<String>) -> Response {
+pub(crate) async fn unpin(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    let file_id = match tssp_domain::FileId::new(id.clone()) {
+        Ok(f) => f,
+        Err(e) => {
+            return HttpPinError::InvalidRequest {
+                message: e.to_string(),
+            }
+            .response()
+        }
+    };
+
+    let file = match state.stats_provider.find_file(&file_id) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return HttpPinError::NotFound {
+                message: "file not found".to_owned(),
+            }
+            .response()
+        }
+        Err(e) => {
+            return HttpPinError::Internal {
+                message: e,
+            }
+            .response()
+        }
+    };
+
+    if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpPinError::Forbidden {
+            message: "you do not have permission to unpin this file".to_owned(),
+        }
+        .response();
+    }
+
     let provider = state.pin_provider.clone();
     match tokio::task::spawn_blocking(move || provider.unpin(id)).await {
         Ok(Ok(outcome)) => pin_mutation_response(outcome),
@@ -251,12 +332,49 @@ pub(crate) struct ReorderRequest {
 
 pub(crate) async fn reorder(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Json(payload): Json<ReorderRequest>,
 ) -> Response {
-    let provider = state.pin_provider.clone();
     if payload.ids.is_empty() {
         return (StatusCode::OK, Json(ReorderResponse { schema_version: 1 })).into_response();
     }
+
+    for id_str in &payload.ids {
+        let file_id = match tssp_domain::FileId::new(id_str.clone()) {
+            Ok(f) => f,
+            Err(e) => {
+                return HttpPinError::InvalidRequest {
+                    message: e.to_string(),
+                }
+                .response()
+            }
+        };
+
+        let file = match state.stats_provider.find_file(&file_id) {
+            Ok(Some(f)) => f,
+            Ok(None) => {
+                return HttpPinError::NotFound {
+                    message: "file not found".to_owned(),
+                }
+                .response()
+            }
+            Err(e) => {
+                return HttpPinError::Internal {
+                    message: e,
+                }
+                .response()
+            }
+        };
+
+        if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+            return HttpPinError::Forbidden {
+                message: "you do not have permission to reorder pins for this file".to_owned(),
+            }
+            .response();
+        }
+    }
+
+    let provider = state.pin_provider.clone();
     match tokio::task::spawn_blocking(move || provider.reorder(payload.ids)).await {
         Ok(Ok(())) => (StatusCode::OK, Json(ReorderResponse { schema_version: 1 })).into_response(),
         Ok(Err(error)) => error.response(),
@@ -535,6 +653,7 @@ mod tests {
     #[tokio::test]
     async fn pin_endpoint_returns_not_found_error() {
         use crate::HttpState;
+        use crate::auth::AuthContext;
         use axum::extract::State;
         use std::sync::Arc;
 
@@ -544,6 +663,7 @@ mod tests {
 
         let response = super::pin(
             State(state),
+            AuthContext::open_access(),
             axum::extract::Path("file-1".to_string()),
             None,
         )
@@ -554,6 +674,7 @@ mod tests {
     #[tokio::test]
     async fn unpin_endpoint_returns_error_from_provider() {
         use crate::HttpState;
+        use crate::auth::AuthContext;
         use axum::extract::State;
         use std::sync::Arc;
 
@@ -561,13 +682,14 @@ mod tests {
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_pin_provider(provider);
 
-        let response = super::unpin(State(state), axum::extract::Path("file-1".to_string())).await;
+        let response = super::unpin(State(state), AuthContext::open_access(), axum::extract::Path("file-1".to_string())).await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
     async fn reorder_endpoint_handles_empty_ids() {
         use crate::HttpState;
+        use crate::auth::AuthContext;
         use axum::extract::State;
         use axum::Json;
         use std::sync::Arc;
@@ -576,7 +698,7 @@ mod tests {
             .with_pin_provider(Arc::new(StaticFilePinProvider));
 
         let response =
-            super::reorder(State(state), Json(super::ReorderRequest { ids: vec![] })).await;
+            super::reorder(State(state), AuthContext::open_access(), Json(super::ReorderRequest { ids: vec![] })).await;
         assert_eq!(response.status(), StatusCode::OK);
     }
 }

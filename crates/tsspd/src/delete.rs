@@ -134,12 +134,19 @@ where
 
 pub(crate) async fn delete_file(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
 ) -> Response {
     let file_id = match FileId::new(id) {
         Ok(value) => value,
         Err(error) => return invalid_file_id_response(error.to_string()),
     };
+
+    if let Ok(Some(file)) = state.stats_provider.find_file(&file_id) {
+        if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+            return forbidden_response();
+        }
+    }
 
     let delete_provider = state.delete_provider.clone();
     let _mutation_guard = state.storage_mutation_lock.lock().await;
@@ -160,6 +167,20 @@ fn invalid_file_id_response(message: String) -> Response {
             error: ErrorBody {
                 code: "invalid_file_id",
                 message,
+            },
+        }),
+    )
+        .into_response()
+}
+
+
+fn forbidden_response() -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: "forbidden",
+                message: "you do not have permission to delete this file".to_owned(),
             },
         }),
     )

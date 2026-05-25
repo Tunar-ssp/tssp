@@ -58,7 +58,7 @@ impl Default for DaemonSettings {
             session_ttl_seconds: 86_400,
             storage_reserve_bytes: 500 * 1024 * 1024,
             storage_reserve_percent: 1,
-            max_upload_bytes: 0,
+            max_upload_bytes: 100 * 1024 * 1024,
             log_level: None,
         }
     }

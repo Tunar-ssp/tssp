@@ -1,7 +1,7 @@
 //! Note lifecycle use cases.
 
 use thiserror::Error;
-use tssp_domain::{derive_note_title, DomainError, NoteBody, NoteId, NoteRecord, NoteTitle, Tag};
+use tssp_domain::{derive_note_title, DomainError, NoteBody, NoteId, NoteRecord, NoteTitle, Tag, UserId};
 use tssp_ports::{
     Clock, IdGenerator, NewNoteRecord, NoteListQuery, NoteRepository, PagedNotes, PinOutcome,
     RepositoryError, TagMutationOutcome,
@@ -37,6 +37,8 @@ pub struct CreateNoteRequest {
     pub tags: Vec<String>,
     /// Pin immediately when `Some(position)` or at end when `Some` with default.
     pub pin: bool,
+    /// Owning user id.
+    pub owner_id: Option<UserId>,
 }
 
 /// Input for replacing a note.
@@ -85,6 +87,7 @@ where
                 tags,
                 pinned_at,
                 folder_path: String::new(),
+                owner_id: request.owner_id,
             })
             .map_err(NoteError::Repository)
     }
@@ -268,6 +271,7 @@ mod tests {
                 body: "# Weekly\n\nTasks".to_owned(),
                 tags: vec!["journal".to_owned()],
                 pin: false,
+                owner_id: None,
             })
             .unwrap_or_else(|error| panic!("create failed: {error}"));
 
@@ -291,6 +295,8 @@ mod tests {
                 updated_at: now,
                 tags: vec![],
                 pinned_at: None,
+                folder_path: String::new(),
+                owner_id: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -324,6 +330,8 @@ mod tests {
                 updated_at: now,
                 tags: vec![],
                 pinned_at: None,
+                folder_path: String::new(),
+                owner_id: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -353,6 +361,8 @@ mod tests {
                     updated_at: now,
                     tags: vec![],
                     pinned_at: None,
+                    folder_path: String::new(),
+                    owner_id: None,
                 })
                 .unwrap_or_else(|error| panic!("insert failed: {error}"));
         }

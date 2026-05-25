@@ -48,6 +48,11 @@ pub struct FolderMoveBody {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct FolderCreateBody {
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct FolderDeleteBody {
     pub path: String,
 }
@@ -56,6 +61,48 @@ pub struct FolderDeleteBody {
 pub struct FolderEntry {
     pub path: String,
     pub file_count: u64,
+}
+
+/// `POST /api/v1/folders` — create a new folder.
+pub async fn create_folder(
+    Json(body): Json<FolderCreateBody>,
+) -> Response {
+    let path = normalize_folder_path(&body.path);
+
+    if path.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "invalid_request",
+                    message: "folder path cannot be empty".to_owned(),
+                },
+            }),
+        )
+            .into_response();
+    }
+
+    if let Err(message) = validate_folder_path(&path) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "invalid_request",
+                    message: format!("invalid folder path: {message}"),
+                },
+            }),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(FolderEntry {
+            path,
+            file_count: 0,
+        }),
+    )
+        .into_response()
 }
 
 /// `GET /api/v1/folders` — list virtual folder counts for the drive browser.

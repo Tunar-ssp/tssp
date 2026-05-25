@@ -5,6 +5,8 @@
 //! services.
 
 mod admin;
+pub mod error_handler;
+pub mod validators;
 pub mod auth;
 #[cfg(test)]
 mod concurrency_tests;

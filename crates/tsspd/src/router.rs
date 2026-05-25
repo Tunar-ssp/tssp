@@ -56,7 +56,9 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/tags",
-            get(crate::tags::list_tags).options(options_response),
+            post(crate::tags::create_tag)
+                .get(crate::tags::list_tags)
+                .options(options_response),
         )
         .route(
             "/api/v1/files/{id}/tags",
@@ -98,7 +100,9 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/folders",
-            get(crate::folders::list_folders).options(options_response),
+            post(crate::folders::create_folder)
+                .get(crate::folders::list_folders)
+                .options(options_response),
         )
         .route(
             "/api/v1/folders/move",

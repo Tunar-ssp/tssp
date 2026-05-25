@@ -25,6 +25,7 @@ pub struct RenameResponse {
 
 pub async fn rename_file(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
     Json(request): Json<RenameRequest>,
 ) -> Result<(StatusCode, Json<RenameResponse>), (StatusCode, Json<Value>)> {
@@ -53,6 +54,47 @@ pub async fn rename_file(
             })),
         )
     })?;
+
+    let existing = match state.stats_provider.find_file(&file_id) {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "schema_version": 1,
+                    "error": {
+                        "code": "not_found",
+                        "message": "file not found"
+                    }
+                })),
+            ))
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "schema_version": 1,
+                    "error": {
+                        "code": "internal_error",
+                        "message": e
+                    }
+                })),
+            ))
+        }
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "schema_version": 1,
+                "error": {
+                    "code": "forbidden",
+                    "message": "you do not have permission to rename this file"
+                }
+            })),
+        ));
+    }
 
     match state.stats_provider.rename_file(&file_id, &new_name) {
         Ok(Some(record)) => {
@@ -283,7 +325,7 @@ mod tests {
         }
 
         fn find_file(&self, _id: &FileId) -> Result<Option<FileRecord>, String> {
-            Ok(None)
+            Err("database locked".to_owned())
         }
 
         fn list_files_by_tag(
@@ -354,6 +396,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_ok_with_renamed_record() {
+        use crate::auth::AuthContext;
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(SuccessfulStatsProvider {
                 record: test_record(),
@@ -361,6 +404,7 @@ mod tests {
 
         let response = rename_file(
             State(state),
+            AuthContext::open_access(),
             Path("test-file-id-00000000".to_string()),
             Json(RenameRequest {
                 name: "newname.txt".to_string(),
@@ -382,10 +426,12 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_id() {
+        use crate::auth::AuthContext;
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
+            AuthContext::open_access(),
             Path("invalid@file#id".to_string()),
             Json(RenameRequest {
                 name: "newname.txt".to_string(),
@@ -403,10 +449,12 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_bad_request_for_invalid_filename() {
+        use crate::auth::AuthContext;
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"));
 
         let response = rename_file(
             State(state),
+            AuthContext::open_access(),
             Path("test-file-id-00000000".to_string()),
             Json(RenameRequest {
                 name: String::new(),
@@ -424,11 +472,13 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_not_found_when_file_missing() {
+        use crate::auth::AuthContext;
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(NotFoundStatsProvider));
 
         let response = rename_file(
             State(state),
+            AuthContext::open_access(),
             Path("test-file-id-00000000".to_string()),
             Json(RenameRequest {
                 name: "newname.txt".to_string(),
@@ -446,11 +496,13 @@ mod tests {
 
     #[tokio::test]
     async fn rename_file_returns_internal_error_on_stats_provider_error() {
+        use crate::auth::AuthContext;
         let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
             .with_stats_provider(Arc::new(ErrorStatsProvider));
 
         let response = rename_file(
             State(state),
+            AuthContext::open_access(),
             Path("test-file-id-00000000".to_string()),
             Json(RenameRequest {
                 name: "newname.txt".to_string(),
@@ -463,6 +515,6 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         let response = body.0;
         assert_eq!(response["error"]["code"], "internal_error");
-        assert_eq!(response["error"]["message"], "rename failed");
+        assert_eq!(response["error"]["message"], "database locked");
     }
 }
