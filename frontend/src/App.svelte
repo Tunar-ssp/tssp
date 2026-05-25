@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { get } from 'svelte/store';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { uploadFiles } from '$lib/services/fileService';
@@ -43,6 +44,19 @@
         e.preventDefault();
         toggleCommandPalette();
       }
+      if (e.key === 'Escape') {
+        if (get(commandPaletteOpen)) {
+          commandPaletteOpen.set(false);
+          return;
+        }
+        if (get(settingsTrayOpen)) {
+          settingsTrayOpen.set(false);
+          return;
+        }
+        if (get(shortcutsOverlayOpen)) {
+          shortcutsOverlayOpen.set(false);
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
         toggleSettingsTray();
@@ -50,6 +64,15 @@
       if ((e.ctrlKey || e.metaKey) && e.key === '?') {
         e.preventDefault();
         toggleShortcutsOverlay();
+      }
+      if ((e.ctrlKey || e.metaKey) && /^[1-5]$/.test(e.key)) {
+        e.preventDefault();
+        const mapping: AppView[] = ['home', 'drive', 'notes', 'workspace', 'admin'];
+        const nextView = mapping[Number(e.key) - 1];
+        if (nextView === 'admin' && !get(isAdmin)) {
+          return;
+        }
+        navigateTo(nextView);
       }
     };
 

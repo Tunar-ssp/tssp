@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn custom_port_in_valid_range() {
         let port = 8080u16;
-        assert!(port > 0 && port <= u16::MAX);
+        assert!(port > 0);
     }
 
     #[test]

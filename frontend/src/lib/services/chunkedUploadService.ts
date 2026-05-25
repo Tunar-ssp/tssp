@@ -66,15 +66,9 @@ async function uploadChunk(
 async function completeUpload(
   uploadId: string,
   sessionId: string,
-  file: File
 ): Promise<boolean> {
   try {
-    await api.completeUpload(sessionId, [
-      {
-        name: file.name,
-        mime_type: file.type || 'application/octet-stream',
-      },
-    ]);
+    await api.completeUpload(sessionId);
 
     await uploadQueue.setStatus(uploadId, 'completed');
     return true;
@@ -127,7 +121,7 @@ async function uploadFile(
     }
 
     // Complete the upload
-    const completed = await completeUpload(uploadId, sessionId, file);
+    const completed = await completeUpload(uploadId, sessionId);
     return completed;
   } catch (err) {
     console.error('Error uploading file:', err);

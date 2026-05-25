@@ -103,7 +103,7 @@ mod tests {
     fn retention_days_zero_returns_zero_files() {
         // This is a unit test that doesn't need a service
         // Just verify the logic that zero retention returns zero
-        assert_eq!(0 * 86_400, 0);
+        assert_eq!(0, 0);
     }
 
     #[test]

@@ -1,15 +1,15 @@
-import { derived, get, writable } from 'svelte/store';
+/**
+ * User Preferences Store
+ *
+ * Persisted user settings: theme, density, accent, dock configuration.
+ */
 
-export type AppView = 'home' | 'drive' | 'notes' | 'workspace' | 'admin';
-export type BannerType = 'success' | 'error' | 'info';
-export type DockMode = 'always' | 'autohide' | 'compact' | 'hidden';
+import { derived, writable } from 'svelte/store';
+
+export type DockMode = 'always' | 'autohide' | 'compact';
 export type DensityMode = 'comfortable' | 'compact';
 export type AccentMode = 'green' | 'blue' | 'violet';
-
-export interface SelectionIntent {
-  kind: 'file' | 'note' | 'workspace';
-  id: string;
-}
+export type AppView = 'home' | 'drive' | 'notes' | 'workspace' | 'admin';
 
 export interface ShellPreferences {
   theme: 'dark' | 'light';
@@ -19,11 +19,6 @@ export interface ShellPreferences {
   density: DensityMode;
   defaultDriveView: 'grid' | 'list';
   landingApp: AppView;
-}
-
-export interface BannerMessage {
-  message: string;
-  type: BannerType;
 }
 
 const STORAGE_KEY = 'tssp.shell.preferences.v2';
@@ -39,34 +34,6 @@ const defaultPreferences: ShellPreferences = {
 
 function isBrowser() {
   return typeof window !== 'undefined';
-}
-
-function parseViewFromHash(): AppView | null {
-  if (!isBrowser()) return null;
-
-  const raw = window.location.hash.replace(/^#/, '').trim().toLowerCase();
-  switch (raw) {
-    case 'home':
-    case 'drive':
-    case 'notes':
-    case 'workspace':
-    case 'admin':
-      return raw;
-    default:
-      return null;
-  }
-}
-
-function readInitialView(): AppView {
-  return parseViewFromHash() || readPreferences().landingApp;
-}
-
-function syncHash(view: AppView) {
-  if (!isBrowser()) return;
-  const nextHash = `#${view}`;
-  if (window.location.hash !== nextHash) {
-    window.location.hash = nextHash;
-  }
 }
 
 function readPreferences(): ShellPreferences {
@@ -99,14 +66,8 @@ function applyDocumentPreferences(preferences: ShellPreferences) {
 }
 
 export const preferences = writable<ShellPreferences>(readPreferences());
-export const currentView = writable<AppView>(readInitialView());
-export const banner = writable<BannerMessage | null>(null);
-export const bannerState = banner;
-export const commandPaletteOpen = writable(false);
-export const commandQuery = writable('');
-export const settingsTrayOpen = writable(false);
-export const shortcutsOverlayOpen = writable(false);
-export const selectionIntent = writable<SelectionIntent | null>(null);
+export const dockMode = derived(preferences, ($preferences) => $preferences.dockMode);
+export const dockOrder = derived(preferences, ($preferences) => $preferences.dockOrder);
 
 preferences.subscribe((value) => {
   applyDocumentPreferences(value);
@@ -116,60 +77,6 @@ preferences.subscribe((value) => {
 });
 
 applyDocumentPreferences(readPreferences());
-
-if (isBrowser()) {
-  window.addEventListener('hashchange', () => {
-    const view = parseViewFromHash();
-    if (view) {
-      currentView.set(view);
-    }
-  });
-}
-
-export const dockMode = derived(preferences, ($preferences) => $preferences.dockMode);
-export const dockOrder = derived(preferences, ($preferences) => $preferences.dockOrder);
-
-export function navigateTo(view: AppView, intent?: SelectionIntent | null) {
-  currentView.set(view);
-  syncHash(view);
-  if (intent) {
-    selectionIntent.set(intent);
-  }
-}
-
-export function consumeSelectionIntent(): SelectionIntent | null {
-  const current = get(selectionIntent);
-  selectionIntent.set(null);
-  return current;
-}
-
-export function showBanner(message: string, type: BannerType = 'info') {
-  banner.set({ message, type });
-  if (type !== 'error') {
-    setTimeout(() => banner.set(null), 3000);
-  }
-}
-
-export function openCommandPalette(initialQuery = '') {
-  commandQuery.set(initialQuery);
-  commandPaletteOpen.set(true);
-}
-
-export function closeCommandPalette() {
-  commandPaletteOpen.set(false);
-}
-
-export function toggleCommandPalette() {
-  commandPaletteOpen.update((value) => !value);
-}
-
-export function toggleSettingsTray() {
-  settingsTrayOpen.update((value) => !value);
-}
-
-export function toggleShortcutsOverlay() {
-  shortcutsOverlayOpen.update((value) => !value);
-}
 
 export function updatePreferences(next: Partial<ShellPreferences>) {
   preferences.update((current) => {

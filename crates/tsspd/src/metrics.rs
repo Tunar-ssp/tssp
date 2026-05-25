@@ -172,12 +172,11 @@ mod tests {
         let uptime_secs = 3600u64;
 
         let metrics = format!(
-            "tssp_files_total {}\n\
-             tssp_tags_total {}\n\
-             tssp_pinned_files_total {}\n\
-             tssp_recent_uploads_24h {}\n\
-             tssp_uptime_seconds {}\n",
-            file_count, tag_count, pinned_count, recent_uploads, uptime_secs
+            "tssp_files_total {file_count}\n\
+             tssp_tags_total {tag_count}\n\
+             tssp_pinned_files_total {pinned_count}\n\
+             tssp_recent_uploads_24h {recent_uploads}\n\
+             tssp_uptime_seconds {uptime_secs}\n"
         );
 
         assert!(metrics.contains("tssp_files_total 100"));
@@ -198,7 +197,7 @@ mod tests {
     #[test]
     fn metric_value_large_number() {
         let value = u64::MAX;
-        let formatted = format!("tssp_files_total {}", value);
+        let formatted = format!("tssp_files_total {value}");
         assert!(formatted.contains(&value.to_string()));
     }
 
@@ -237,7 +236,7 @@ mod tests {
     fn metrics_error_response_text() {
         let error_text = "# ERROR: Failed to retrieve metrics\n";
         assert!(error_text.starts_with("# ERROR"));
-        assert!(error_text.ends_with("\n"));
+        assert!(error_text.ends_with('\n'));
     }
 
     #[test]

@@ -35,6 +35,19 @@ let stateCache: UploadQueueStore = { items: [], totalUploadingCount: 0 };
 let isProcessing = false;
 const fileMap = new Map<string, File>();
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelay(attempt: number) {
+  return 500 * 2 ** Math.min(attempt, 4);
+}
+
+function dispatchQueueEvent(name: string, detail?: Record<string, unknown>) {
+  if (typeof document === 'undefined') return;
+  document.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
 async function initDb(): Promise<IDBDatabase> {
   if (db) return db;
 
@@ -187,7 +200,25 @@ async function uploadSingleItem(itemId: string) {
       const start = index * effectiveChunkSize;
       const end = Math.min(start + effectiveChunkSize, file.size);
       const chunk = file.slice(start, end);
-      await api.uploadChunk(session_id, index, chunk);
+      let uploaded = false;
+      let attempt = 0;
+
+      while (!uploaded) {
+        try {
+          await api.uploadChunk(session_id, index, chunk);
+          uploaded = true;
+        } catch (err) {
+          attempt += 1;
+          if (attempt > MAX_RETRIES) {
+            throw err;
+          }
+          updateItemLocally(itemId, (current) => ({
+            ...current,
+            lastError: `Retrying chunk ${index + 1}/${totalChunks} (${attempt}/${MAX_RETRIES})`,
+          }));
+          await delay(retryDelay(attempt));
+        }
+      }
 
       updateItemLocally(itemId, (current) => {
         const uploadedChunks = new Set(current.uploadedChunks);
@@ -200,21 +231,26 @@ async function uploadSingleItem(itemId: string) {
       });
     }
 
-    await api.completeUpload(session_id, [
-      {
-        name: file.name,
-        mime_type: file.type || 'application/octet-stream',
-      },
-    ]);
+    await api.completeUpload(session_id);
 
     updateItemLocally(itemId, (current) => ({
       ...current,
       status: 'completed',
       completedAt: Date.now(),
       uploadedBytes: current.fileSize,
+      lastError: undefined,
     }));
+    dispatchQueueEvent('tssp:drive-refresh', {
+      reason: 'upload-complete',
+      fileName: file.name,
+      folder: item.folder,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload failed';
+    const activeSessionId = stateCache.items.find((entry) => entry.id === itemId)?.sessionId;
+    if (activeSessionId) {
+      void api.cancelUpload(activeSessionId).catch(() => undefined);
+    }
     updateItemLocally(itemId, (current) => ({
       ...current,
       status: 'failed',
@@ -321,11 +357,48 @@ export const uploadQueue = {
     uploadQueueState.set(refreshTotals([]));
   },
 
+  async clearTerminal() {
+    const terminalIds = stateCache.items
+      .filter((item) => item.status === 'completed' || item.status === 'failed')
+      .map((item) => item.id);
+
+    await Promise.all(
+      terminalIds.map((id) =>
+        deleteItemFromDb(id).catch((err) => {
+          console.error('Failed to delete upload item:', err);
+        }),
+      ),
+    );
+
+    terminalIds.forEach((id) => fileMap.delete(id));
+    uploadQueueState.update((current) =>
+      refreshTotals(
+        current.items.filter((item) => !terminalIds.includes(item.id)),
+      ),
+    );
+  },
+
+  async cancelItem(id: string) {
+    const item = stateCache.items.find((entry) => entry.id === id);
+    if (!item) return;
+
+    if (item.sessionId) {
+      await api.cancelUpload(item.sessionId).catch(() => undefined);
+    }
+
+    fileMap.delete(id);
+    await deleteItemFromDb(id).catch((err) => {
+      console.error('Failed to delete upload item:', err);
+    });
+    uploadQueueState.update((current) => refreshTotals(current.items.filter((entry) => entry.id !== id)));
+  },
+
   async retryItem(id: string) {
     updateItemLocally(id, (item) => ({
       ...item,
       status: 'pending',
       retries: Math.min(item.retries + 1, MAX_RETRIES),
+      sessionId: undefined,
       lastError: undefined,
       uploadedBytes: 0,
       uploadedChunks: new Set(),

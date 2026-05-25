@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import DeviceManager from './DeviceManager.svelte';
+  import { isAdmin } from '$lib/stores/auth';
   import {
     currentView,
     moveDockApp,
@@ -29,10 +30,14 @@
     class: className,
   }: $$Props = $props();
 
-  const dockModes: DockMode[] = ['always', 'autohide', 'compact'];
+  const dockModes: DockMode[] = ['always', 'autohide', 'compact', 'hidden'];
   const densityModes: DensityMode[] = ['comfortable', 'compact'];
   const accentModes: AccentMode[] = ['green', 'blue', 'violet'];
   const landingApps: AppView[] = ['home', 'drive', 'notes', 'workspace', 'admin'];
+
+  let visibleLandingApps = $derived(
+    $isAdmin ? landingApps : landingApps.filter((appId) => appId !== 'admin'),
+  );
 
   function handleBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget && onClose) {
@@ -120,7 +125,7 @@
           <label class="setting-item">
             <div class="setting-info">
               <div class="setting-label">Visibility</div>
-              <div class="setting-desc">Always visible, compact, or auto-hide</div>
+              <div class="setting-desc">Always visible, compact, auto-hide, or fully hidden</div>
             </div>
             <select class="setting-select" value={$preferences.dockMode} onchange={(event) => setDockMode((event.currentTarget as HTMLSelectElement).value as DockMode)}>
               {#each dockModes as mode}
@@ -165,7 +170,7 @@
               <div class="setting-desc">Where the shell opens after auth</div>
             </div>
             <select class="setting-select" value={$preferences.landingApp} onchange={(event) => setLandingApp((event.currentTarget as HTMLSelectElement).value as AppView)}>
-              {#each landingApps as appId}
+              {#each visibleLandingApps as appId}
                 <option value={appId}>{appId}</option>
               {/each}
             </select>

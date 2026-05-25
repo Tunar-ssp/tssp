@@ -22,15 +22,29 @@
   let activityItems = $state<AdminActivityItem[]>([]);
   let commands = $state<Array<{ id: string; name: string; description?: string }>>([]);
 
-  const navItems = [
-    { id: 'overview' as const, label: 'Overview', icon: Icons.Activity },
-    { id: 'users' as const, label: 'Users', icon: Icons.Users },
-    { id: 'sessions' as const, label: 'Sessions', icon: Icons.BadgeCheck },
-    { id: 'devices' as const, label: 'Devices', icon: Icons.Smartphone },
-    { id: 'public' as const, label: 'Public links', icon: Icons.Globe },
-    { id: 'activity' as const, label: 'Activity log', icon: Icons.History },
-    { id: 'maintenance' as const, label: 'Maintenance', icon: Icons.Wrench },
+  const navGroups = [
+    {
+      label: 'System',
+      items: [
+        { id: 'overview' as const, label: 'Overview', icon: Icons.Activity },
+        { id: 'maintenance' as const, label: 'Maintenance', icon: Icons.Wrench },
+        { id: 'activity' as const, label: 'Activity log', icon: Icons.History },
+      ],
+    },
+    {
+      label: 'Access',
+      items: [
+        { id: 'users' as const, label: 'Users', icon: Icons.Users },
+        { id: 'sessions' as const, label: 'Sessions', icon: Icons.BadgeCheck },
+        { id: 'devices' as const, label: 'Devices', icon: Icons.Smartphone },
+      ],
+    },
+    {
+      label: 'Sharing',
+      items: [{ id: 'public' as const, label: 'Public links', icon: Icons.Globe }],
+    },
   ];
+  const navItems = navGroups.flatMap((group) => group.items);
 
   onMount(async () => {
     await loadAdmin();
@@ -133,6 +147,38 @@
     return navItems.find((item) => item.id === section)?.label || 'Admin';
   }
 
+  function navCount(section: AdminSection) {
+    switch (section) {
+      case 'users':
+        return users.length;
+      case 'sessions':
+        return sessions.length;
+      case 'devices':
+        return devices.length;
+      case 'public':
+        return publicFiles.length;
+      case 'activity':
+        return activityItems.length;
+      default:
+        return null;
+    }
+  }
+
+  function healthTone() {
+    const statusValue = status?.status?.toLowerCase() || '';
+    if (statusValue.includes('ok') || statusValue.includes('healthy') || statusValue.includes('ready')) {
+      return 'good';
+    }
+    if (statusValue.includes('warn') || statusValue.includes('degraded')) {
+      return 'warn';
+    }
+    return 'neutral';
+  }
+
+  function healthLabel() {
+    return status?.status || 'Status unavailable';
+  }
+
   let primaryCommands = $derived(
     commands.filter((command) => ['cleanup_temp', 'cleanup_sessions', 'integrity_check'].includes(command.name))
   );
@@ -146,26 +192,25 @@
     </div>
 
     <nav class="admin-nav">
-      {#each navItems as item (item.id)}
-        {@const Icon = item.icon}
-        <button
-          type="button"
-          class="nav-item"
-          class:active={activeSection === item.id}
-          onclick={() => (activeSection = item.id)}
-        >
-          <Icon size={14} />
-          <span>{item.label}</span>
-          {#if item.id === 'users'}
-            <small>{users.length}</small>
-          {:else if item.id === 'sessions'}
-            <small>{sessions.length}</small>
-          {:else if item.id === 'devices'}
-            <small>{devices.length}</small>
-          {:else if item.id === 'public'}
-            <small>{publicFiles.length}</small>
-          {/if}
-        </button>
+      {#each navGroups as group (group.label)}
+        <div class="nav-group">
+          <div class="nav-group-label">{group.label}</div>
+          {#each group.items as item (item.id)}
+            {@const Icon = item.icon}
+            <button
+              type="button"
+              class="nav-item"
+              class:active={activeSection === item.id}
+              onclick={() => (activeSection = item.id)}
+            >
+              <Icon size={14} />
+              <span>{item.label}</span>
+              {#if navCount(item.id) !== null}
+                <small>{navCount(item.id)}</small>
+              {/if}
+            </button>
+          {/each}
+        </div>
       {/each}
     </nav>
   </aside>
@@ -176,6 +221,14 @@
         <div class="eyebrow">Operations</div>
         <h1>{sectionTitle(activeSection)}</h1>
         <p>Organized system control for users, sessions, sharing, maintenance, and diagnostics.</p>
+        <div class="header-meta">
+          <span class={`health-pill ${healthTone()}`}>
+            <span class="health-dot"></span>
+            {healthLabel()}
+          </span>
+          <span class="meta-pill">{formatBytes(status?.disk_used || 0)} disk used</span>
+          <span class="meta-pill">{sessions.length} live sessions</span>
+        </div>
       </div>
 
       <div class="header-actions">
@@ -198,26 +251,78 @@
       </div>
     {:else if activeSection === 'overview'}
       <div class="admin-content">
-        <div class="metrics-grid">
-          <article class="metric-card">
-            <span>Repository files</span>
-            <strong>{overview?.repository.file_count || 0}</strong>
-            <p>{formatBytes(overview?.repository.storage_bytes_used || 0)} in use</p>
+        <div class="overview-hero">
+          <article class="panel hero-card hero-primary">
+            <div class="panel-head hero-head">
+              <div>
+                <h2>System posture</h2>
+                <p class="panel-copy">Real machine health, repository volume, and persistence status.</p>
+              </div>
+              <span class={`health-pill ${healthTone()}`}>
+                <span class="health-dot"></span>
+                {healthLabel()}
+              </span>
+            </div>
+
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <span>Repository files</span>
+                <strong>{overview?.repository.file_count || 0}</strong>
+                <p>{formatBytes(overview?.repository.storage_bytes_used || 0)} in use</p>
+              </article>
+              <article class="metric-card">
+                <span>Notes</span>
+                <strong>{overview?.repository.note_count || 0}</strong>
+                <p>Knowledge base entries</p>
+              </article>
+              <article class="metric-card">
+                <span>CPU</span>
+                <strong>{overview?.system.cpu_percent ?? 0}%</strong>
+                <p>Live system load</p>
+              </article>
+              <article class="metric-card">
+                <span>Memory</span>
+                <strong>{overview?.system.memory_percent ?? 0}%</strong>
+                <p>RAM in use</p>
+              </article>
+            </div>
           </article>
-          <article class="metric-card">
-            <span>Notes</span>
-            <strong>{overview?.repository.note_count || 0}</strong>
-            <p>Knowledge base entries</p>
-          </article>
-          <article class="metric-card">
-            <span>CPU</span>
-            <strong>{overview?.system.cpu_percent ?? 0}%</strong>
-            <p>Live system load</p>
-          </article>
-          <article class="metric-card">
-            <span>Memory</span>
-            <strong>{overview?.system.memory_percent ?? 0}%</strong>
-            <p>RAM in use</p>
+
+          <article class="panel hero-card hero-secondary">
+            <div class="panel-head">
+              <h2>Operational lanes</h2>
+              <span class="panel-meta">Jump directly into active areas</span>
+            </div>
+            <div class="snapshot-list">
+              <button type="button" class="snapshot-card" onclick={() => (activeSection = 'users')}>
+                <div>
+                  <strong>Users</strong>
+                  <p>Access inventory and roles</p>
+                </div>
+                <span>{users.length}</span>
+              </button>
+              <button type="button" class="snapshot-card" onclick={() => (activeSection = 'sessions')}>
+                <div>
+                  <strong>Sessions</strong>
+                  <p>Browser and CLI presence</p>
+                </div>
+                <span>{sessions.length}</span>
+              </button>
+              <button type="button" class="snapshot-card" onclick={() => (activeSection = 'devices')}>
+                <div>
+                  <strong>Trusted devices</strong>
+                  <p>Remembered device access</p>
+                </div>
+                <span>{devices.length}</span>
+              </button>
+              <button type="button" class="snapshot-card" onclick={() => (activeSection = 'public')}>
+                <div>
+                  <strong>Public links</strong>
+                  <p>Externally visible objects</p>
+                </div>
+                <span>{publicFiles.length}</span>
+              </button>
+            </div>
           </article>
         </div>
 
@@ -249,6 +354,24 @@
                   </div>
                   <span>{formatRelative(item.occurred_at)}</span>
                 </div>
+              {/each}
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Maintenance queue</h2>
+              <span class="panel-meta">{primaryCommands.length} safe actions</span>
+            </div>
+            <div class="command-grid">
+              {#each primaryCommands as command (command.id)}
+                <button type="button" class="command-card" onclick={() => runCommand(command.name)} disabled={executing}>
+                  <div>
+                    <strong>{command.name}</strong>
+                    <p>{command.description || 'Safe backend maintenance command'}</p>
+                  </div>
+                  <Icons.ChevronRight size={16} />
+                </button>
               {/each}
             </div>
           </article>
@@ -447,7 +570,22 @@
   .admin-nav {
     display: flex;
     flex-direction: column;
+    gap: 14px;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
     gap: 4px;
+  }
+
+  .nav-group-label {
+    padding: 0 10px;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-family: var(--ff-mono);
   }
 
   .nav-item,
@@ -527,6 +665,48 @@
     font-size: 14px;
   }
 
+  .header-meta {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .health-pill,
+  .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .health-pill.good {
+    border-color: rgba(91, 227, 154, 0.22);
+    background: rgba(91, 227, 154, 0.1);
+    color: var(--green);
+  }
+
+  .health-pill.warn {
+    border-color: rgba(251, 191, 36, 0.24);
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--warning);
+  }
+
+  .health-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 10px currentColor;
+  }
+
   .header-actions {
     display: flex;
     gap: 10px;
@@ -583,6 +763,12 @@
     gap: 18px;
   }
 
+  .overview-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+    gap: 14px;
+  }
+
   .metrics-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -593,6 +779,23 @@
   .panel {
     border-radius: 18px;
     padding: 16px;
+  }
+
+  .hero-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .hero-head {
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .panel-copy {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 13px;
   }
 
   .metric-card span {
@@ -627,6 +830,54 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+  }
+
+  .snapshot-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .snapshot-card {
+    width: 100%;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: inherit;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    text-align: left;
+    cursor: pointer;
+    transition: transform var(--duration-quick) var(--ease-smooth), border-color var(--duration-quick) var(--ease-smooth), background var(--duration-quick) var(--ease-smooth);
+  }
+
+  .snapshot-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-2);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .snapshot-card p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .snapshot-card span {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(163, 148, 255, 0.12);
+    color: var(--violet);
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .panel-head {
@@ -813,6 +1064,7 @@
       display: none;
     }
 
+    .overview-hero,
     .metrics-grid,
     .split-grid {
       grid-template-columns: 1fr;
@@ -840,6 +1092,11 @@
 
     .metrics-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hero-head {
+      flex-direction: column;
+      align-items: flex-start;
     }
   }
 </style>

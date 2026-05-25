@@ -106,7 +106,7 @@ impl UploadSession {
             filename,
             total_size,
             chunk_size: CHUNK_SIZE,
-            uploaded_chunks: vec![false; num_chunks as usize],
+            uploaded_chunks: vec![false; usize::try_from(num_chunks).unwrap_or(0)],
             folder_path,
             owner_id,
             tags,
@@ -134,7 +134,7 @@ impl UploadSession {
             return 0;
         }
         let uploaded = self.uploaded_chunks.iter().filter(|&&u| u).count();
-        ((uploaded as u32 * 100) / self.uploaded_chunks.len() as u32).min(100)
+        ((u32::try_from(uploaded).unwrap_or(0) * 100) / u32::try_from(self.uploaded_chunks.len()).unwrap_or(0)).min(100)
     }
 }
 
@@ -267,15 +267,12 @@ pub async fn get_upload_session(
     auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
-    let session_id = match UploadSessionId::new(session_id_str) {
-        Ok(id) => id,
-        Err(_) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_session_id",
-                "session ID format is invalid",
-            )
-        }
+    let Ok(session_id) = UploadSessionId::new(session_id_str) else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_session_id",
+            "session ID format is invalid",
+        );
     };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {
@@ -378,21 +375,19 @@ pub async fn start_upload(
 }
 
 /// Upload a single chunk within a session.
+#[allow(clippy::too_many_lines)]
 pub async fn upload_chunk(
     State(state): State<HttpState>,
     auth: crate::auth::OptionalAuthContext,
     Path((session_id_str, chunk_index)): Path<(String, u32)>,
     body: axum::body::Bytes,
 ) -> Response {
-    let session_id = match UploadSessionId::new(session_id_str) {
-        Ok(id) => id,
-        Err(_) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_session_id",
-                "session ID format is invalid",
-            )
-        }
+    let Ok(session_id) = UploadSessionId::new(session_id_str) else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_session_id",
+            "session ID format is invalid",
+        );
     };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {
@@ -519,7 +514,7 @@ fn assemble_chunks_to_temp(
     let mut buffer = vec![0_u8; 64 * 1024];
 
     for chunk_idx in 0..total_chunks {
-        let chunk_path = chunk_file_path(chunk_dir, chunk_idx as u32);
+        let chunk_path = chunk_file_path(chunk_dir, u32::try_from(chunk_idx).unwrap_or(0));
         let mut chunk_file = File::open(&chunk_path)
             .map_err(|e| format!("could not read chunk {chunk_idx}: {e}"))?;
 
@@ -563,20 +558,18 @@ fn assemble_chunks_to_temp(
 }
 
 /// Complete an upload by assembling chunks and creating the file.
+#[allow(clippy::too_many_lines)]
 pub async fn complete_upload(
     State(state): State<HttpState>,
     auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
-    let session_id = match UploadSessionId::new(session_id_str) {
-        Ok(id) => id,
-        Err(_) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_session_id",
-                "session ID format is invalid",
-            )
-        }
+    let Ok(session_id) = UploadSessionId::new(session_id_str) else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_session_id",
+            "session ID format is invalid",
+        );
     };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {
@@ -722,15 +715,12 @@ pub async fn cancel_upload(
     auth: crate::auth::OptionalAuthContext,
     Path(session_id_str): Path<String>,
 ) -> Response {
-    let session_id = match UploadSessionId::new(session_id_str) {
-        Ok(id) => id,
-        Err(_) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_session_id",
-                "session ID format is invalid",
-            )
-        }
+    let Ok(session_id) = UploadSessionId::new(session_id_str) else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_session_id",
+            "session ID format is invalid",
+        );
     };
 
     let session = match state.upload_session_manager.get_session(&session_id).await {

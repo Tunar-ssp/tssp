@@ -7,6 +7,9 @@ use tssp_ports::FileRepository;
 /// Scans the blob directory and removes unreferenced blobs.
 ///
 /// Returns the number of blobs deleted.
+/// # Errors
+///
+/// Returns an error string if cleanup fails.
 pub fn collect_garbage(
     blob_root: &Path,
     repository: &dyn FileRepository,
@@ -34,8 +37,7 @@ pub fn collect_garbage(
                         for blob_entry in blob_files.flatten() {
                             if let Some(filename) = blob_entry.file_name().to_str() {
                                 match check_and_delete_orphan(
-                                    blob_entry.path(),
-                                    filename,
+                                    &blob_entry.path(),                                    filename,
                                     repository,
                                 ) {
                                     Ok(was_deleted) => {
@@ -59,7 +61,7 @@ pub fn collect_garbage(
 }
 
 fn check_and_delete_orphan(
-    path: std::path::PathBuf,
+    path: &std::path::PathBuf,
     filename: &str,
     repository: &dyn FileRepository,
 ) -> Result<bool, String> {
@@ -73,7 +75,7 @@ fn check_and_delete_orphan(
     match repository.find_file_by_content_hash(&content_hash) {
         Ok(Some(_)) => Ok(false),
         Ok(None) => {
-            std::fs::remove_file(&path)
+            std::fs::remove_file(path)
                 .map_err(|e| format!("failed to delete orphan blob: {e}"))?;
             Ok(true)
         }

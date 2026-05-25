@@ -71,27 +71,28 @@ export async function togglePublic(id: string, isPublic: boolean) {
 export async function uploadFiles(files: FileList, folder: string = '') {
   try {
     const count = files.length;
+    if (!count) return false;
 
-    // Queue files for chunked, resumable upload with persistence
     await uploadQueue.addFiles(files, folder);
-
     success('Uploads Queued', `${count} file(s) queued for resumable upload`);
 
-    // Wait for uploads to complete and reload file list
+    let timeout: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = uploadQueue.subscribe((state) => {
       const allDone = state.items.every((item) =>
         item.status === 'completed' || item.status === 'failed' || item.status === 'paused'
       );
-      if (allDone && state.items.length > 0 && state.items.some((item) => item.status === 'completed')) {
-        void loadFiles();
+      if (allDone && state.items.length > 0) {
+        if (state.items.some((item) => item.status === 'completed')) {
+          void loadFiles();
+        }
+        unsubscribe();
+        if (timeout) {
+          clearTimeout(timeout);
+        }
       }
     });
 
-    // Cleanup subscription after a timeout (e.g., 1 hour)
-    const timeout = setTimeout(() => unsubscribe(), 3600000);
-
-    // Files will be uploaded in background with progress tracking
-    // Queue persists across page refreshes for recovery
+    timeout = setTimeout(() => unsubscribe(), 3_600_000);
     return true;
   } catch (err: any) {
     error('Upload Failed', err.message || 'Could not queue files for upload');

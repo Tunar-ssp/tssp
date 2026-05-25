@@ -78,16 +78,16 @@
       <span>Upload</span>
     </button>
 
-    <button type="button" class="icon-btn" onclick={onSettings} aria-label="Open settings">
-      <Icons.Settings2 size={18} />
-    </button>
-
-    <button type="button" class="profile-chip" onclick={onLogout} aria-label="Sign out">
+    <button type="button" class="profile-chip" onclick={onSettings} aria-label="Open settings">
       <div class="avatar-orb">{userName.slice(0, 1).toUpperCase()}</div>
       <div class="profile-copy">
         <strong>{userName}</strong>
         <span>{role === 'admin' ? 'Admin' : currentView === 'home' ? title : `${title} • ${dockMode}`}</span>
       </div>
+    </button>
+
+    <button type="button" class="icon-btn" onclick={onLogout} aria-label="Sign out">
+      <Icons.LogOut size={18} />
     </button>
   </div>
 </header>

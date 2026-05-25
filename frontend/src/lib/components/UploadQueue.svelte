@@ -33,6 +33,8 @@
   });
 
   let isMinimized = $state(false);
+  let isDismissed = $state(false);
+  let previousCount = 0;
 
   const unsubscribe = uploadQueue.subscribe((value) => {
     queueState = value;
@@ -59,6 +61,22 @@
         })),
   );
 
+  let activeUploads = $derived(
+    queueUploads.filter((upload) => upload.status === 'pending' || upload.status === 'uploading'),
+  );
+
+  let terminalUploads = $derived(
+    queueUploads.filter((upload) => upload.status === 'success' || upload.status === 'error'),
+  );
+
+  $effect(() => {
+    const count = queueUploads.length;
+    if (count > previousCount) {
+      isDismissed = false;
+    }
+    previousCount = count;
+  });
+
   function formatBytes(bytes: number) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -68,11 +86,39 @@
   }
 
   function getProgress(upload: Upload) {
-    return (upload.progress / upload.total) * 100;
+    if (!upload.total) return 0;
+    return Math.min((upload.progress / upload.total) * 100, 100);
+  }
+
+  async function handleCancel(uploadId: string) {
+    if (onCancel) {
+      onCancel(uploadId);
+      return;
+    }
+    await uploadQueue.cancelItem(uploadId);
+  }
+
+  async function handleRetry(uploadId: string) {
+    if (onRetry) {
+      onRetry(uploadId);
+      return;
+    }
+    await uploadQueue.retryItem(uploadId);
+  }
+
+  async function handleRemove(uploadId: string) {
+    await uploadQueue.removeItem(uploadId);
+  }
+
+  async function handleClearTerminal() {
+    await uploadQueue.clearTerminal();
+    if (activeUploads.length === 0) {
+      isDismissed = true;
+    }
   }
 </script>
 
-{#if queueUploads.length > 0}
+{#if queueUploads.length > 0 && !isDismissed}
   <div class="upload-queue {className || ''}" class:minimized={isMinimized}>
     <div class="queue-header">
       <h3>
@@ -81,6 +127,16 @@
       </h3>
       <div class="header-actions">
         <span class="queue-count">{queueUploads.length}</span>
+        {#if terminalUploads.length > 0}
+          <button
+            class="clear-btn"
+            onclick={handleClearTerminal}
+            title="Clear completed and failed uploads"
+            aria-label="Clear completed and failed uploads"
+          >
+            <Icons.CheckCheck size={14} />
+          </button>
+        {/if}
         <button
           class="minimize-btn"
           onclick={() => (isMinimized = !isMinimized)}
@@ -92,6 +148,14 @@
           {:else}
             <Icons.ChevronDown size={16} />
           {/if}
+        </button>
+        <button
+          class="minimize-btn"
+          onclick={() => (isDismissed = true)}
+          title="Dismiss upload panel"
+          aria-label="Dismiss upload panel"
+        >
+          <Icons.X size={16} />
         </button>
       </div>
     </div>
@@ -124,21 +188,36 @@
           </div>
 
           <div class="item-actions">
-            {#if upload.status === 'uploading'}
+            {#if upload.status === 'uploading' || upload.status === 'pending'}
               <button
                 class="action-btn"
-                onclick={() => onCancel?.(upload.id)}
+                onclick={() => handleCancel(upload.id)}
                 title="Cancel"
               >
                 <Icons.X size={14} />
               </button>
-            {:else if upload.status === 'error' && onRetry}
+            {:else if upload.status === 'error'}
               <button
                 class="action-btn"
-                onclick={() => onRetry(upload.id)}
+                onclick={() => handleRetry(upload.id)}
                 title="Retry"
               >
                 <Icons.RotateCw size={14} />
+              </button>
+              <button
+                class="action-btn"
+                onclick={() => handleRemove(upload.id)}
+                title="Remove"
+              >
+                <Icons.Trash2 size={14} />
+              </button>
+            {:else if upload.status === 'success'}
+              <button
+                class="action-btn"
+                onclick={() => handleRemove(upload.id)}
+                title="Dismiss"
+              >
+                <Icons.Check size={14} />
               </button>
             {/if}
           </div>
@@ -223,6 +302,26 @@
 
   .minimize-btn:hover {
     background: var(--surface);
+    color: var(--text);
+  }
+
+  .clear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: rgba(91, 227, 154, 0.12);
+    color: var(--green);
+    cursor: pointer;
+    border-radius: var(--r-1);
+    transition: all var(--duration-quick) var(--ease-smooth);
+  }
+
+  .clear-btn:hover {
+    background: rgba(91, 227, 154, 0.18);
     color: var(--text);
   }
 

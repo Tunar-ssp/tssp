@@ -47,9 +47,25 @@
     file: null as FileRecord | null,
   });
 
-  onMount(async () => {
-    await loadLibrary(true);
-    await consumeIntent();
+  onMount(() => {
+    const handleExternalRefresh = () => {
+      void loadLibrary(true);
+      if (activeLens === 'trash') {
+        void loadTrash();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
+    }
+
+    void loadLibrary(true).then(() => consumeIntent());
+
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
+      }
+    };
   });
 
   let isTrashView = $derived(activeLens === 'trash');

@@ -7,14 +7,14 @@
   import Btn from '$lib/components/Btn.svelte';
 
   let name = $state('');
-  let password = $state('');
+  let secret = $state('');
   let localError = $state('');
 
   async function handleSignIn() {
     localError = '';
 
-    if (!password) {
-      localError = 'Password required';
+    if (!secret) {
+      localError = 'Access code or password required';
       return;
     }
 
@@ -22,7 +22,12 @@
     error.set(null);
 
     try {
-      const data = await api.login({ name: name.trim() || undefined, password });
+      const normalizedName = name.trim() || undefined;
+      const data = await api.login({
+        name: normalizedName,
+        code: secret,
+        password: secret,
+      });
       user.set({ id: '', name: data.name, role: data.role as 'admin' | 'user' });
       success(`Welcome back, ${data.name}!`);
       navigateTo($preferences.landingApp || 'home');
@@ -78,12 +83,12 @@
       </div>
 
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password">Access code or password</label>
         <input
           id="password"
           type="password"
           placeholder="••••••••"
-          bind:value={password}
+          bind:value={secret}
           onkeydown={handleKeydown}
           disabled={$isLoading}
           required
@@ -107,7 +112,7 @@
     </form>
 
     <div class="signin-footer">
-      <p>First time? Contact your administrator for an invite code</p>
+      <p>Use your account access code, or the shared password when the server is in password mode.</p>
     </div>
   </div>
 </div>

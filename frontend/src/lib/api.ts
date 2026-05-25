@@ -503,12 +503,11 @@ export const api = {
       }
       return res.json() as Promise<{ session_id: string; chunk_index: number }>;
     }),
-  completeUpload: (sessionId: string, files: Array<{ name: string; mime_type: string }>) =>
-    request<{ schema_version: number; files: FileRecord[] }>(
+  completeUpload: (sessionId: string) =>
+    request<{ session_id: string; status: string }>(
       `/files/upload/${encodeURIComponent(sessionId)}`,
       {
         method: 'POST',
-        body: JSON.stringify({ files }),
       }
     ),
   cancelUpload: (sessionId: string) =>

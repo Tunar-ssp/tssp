@@ -95,7 +95,7 @@ mod tests {
             storage_bytes_used: 1024,
         };
 
-        cache.store(stats.clone()).await;
+        cache.store(stats).await;
 
         let retrieved = cache.get().await;
         assert!(retrieved.is_some());

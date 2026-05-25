@@ -7,6 +7,7 @@ use super::common::*;
 use super::imports::*;
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn pin_endpoints_accept_bodyless_pin_and_support_reorder() {
     let temp = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
     let repository = Arc::new(
