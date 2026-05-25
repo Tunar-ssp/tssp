@@ -19,7 +19,7 @@
   import ShortcutsOverlay from '$lib/components/ShortcutsOverlay.svelte';
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
   import '$lib/responsive.css';
-  import HomeView from './views/home/HomeView.svelte';
+  import HomeView from './views/home/HomeLauncher.svelte';
   import DriveView from './views/drive/DriveView.svelte';
   import NotesViewP4 from './views/notes/NotesViewP4.svelte';
   import WorkspaceViewP5 from './views/workspace/WorkspaceViewP5.svelte';
@@ -54,10 +54,10 @@
   $: CurrentView = viewMap[$currentView as keyof typeof viewMap] || HomeView;
 
   const dockItems = [
-    { id: 'drive', label: 'Drive', icon: Icons.HardDrive, action: () => currentView.set('drive') },
-    { id: 'notes', label: 'Notes', icon: Icons.FileText, action: () => currentView.set('notes') },
-    { id: 'workspace', label: 'Workspace', icon: Icons.Code2, action: () => currentView.set('workspace') },
-    { id: 'ops', label: 'Operations', icon: Icons.Settings, action: () => currentView.set('operations') },
+    { id: 'drive', label: 'Cloud', icon: Icons.Cloud, accent: '#6ea8ff', action: () => currentView.set('drive') },
+    { id: 'notes', label: 'Notes', icon: Icons.BookOpen, accent: '#fbbf24', action: () => currentView.set('notes') },
+    { id: 'workspace', label: 'Workspace', icon: Icons.Code2, accent: '#5be39a', action: () => currentView.set('workspace') },
+    { id: 'operations', label: 'Admin', icon: Icons.Shield, accent: '#a394ff', action: () => currentView.set('operations') },
   ];
 
   const commands = [
@@ -123,7 +123,7 @@
     </main>
   </div>
 
-  <Dock items={dockItems} />
+  <Dock items={dockItems} activeId={$currentView} />
   <CommandPalette
     {commands}
     isOpen={$commandPaletteOpen}

@@ -232,11 +232,59 @@ pub(crate) async fn create_tag(
         .into_response()
 }
 
-pub(crate) async fn list_tags(State(state): State<HttpState>) -> Response {
-    let provider = state.tag_provider.clone();
-    match tokio::task::spawn_blocking(move || provider.list_tags()).await {
-        Ok(Ok(tags)) => (StatusCode::OK, Json(TagListResponse::from_tags(&tags))).into_response(),
-        Ok(Err(error)) => error.response(),
+pub(crate) async fn list_tags(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+) -> Response {
+    // For non-admin users, only show tags from their own files
+    // For admin users, show all tags
+    if auth.is_admin() {
+        let provider = state.tag_provider.clone();
+        return match tokio::task::spawn_blocking(move || provider.list_tags()).await {
+            Ok(Ok(tags)) => (StatusCode::OK, Json(TagListResponse::from_tags(&tags)))
+                .into_response(),
+            Ok(Err(error)) => error.response(),
+            Err(error) => HttpTagError::Internal {
+                message: format!("tag worker failed: {error}"),
+            }
+            .response(),
+        };
+    }
+
+    // Non-admin: get user's files and extract unique tags
+    let mut query = tssp_ports::ListQuery::default();
+    query.owner_id = Some(auth.user_id.clone());
+    query.limit = 10_000;
+
+    match tokio::task::spawn_blocking(move || state.stats_provider.list_files(&query)).await {
+        Ok(Ok(page)) => {
+            let mut tag_counts: std::collections::HashMap<String, u64> =
+                std::collections::HashMap::new();
+
+            for file in &page.files {
+                for tag in &file.tags {
+                    *tag_counts.entry(tag.key().to_string()).or_insert(0) += 1;
+                }
+            }
+
+            let tags: Vec<tssp_ports::TagSummary> = tag_counts
+                .into_iter()
+                .filter_map(|(key, count)| {
+                    tssp_domain::Tag::new(key).ok().map(|tag| {
+                        tssp_ports::TagSummary {
+                            tag,
+                            file_count: count,
+                        }
+                    })
+                })
+                .collect();
+
+            (StatusCode::OK, Json(TagListResponse::from_tags(&tags))).into_response()
+        }
+        Ok(Err(error)) => HttpTagError::Internal {
+            message: error.to_string(),
+        }
+        .response(),
         Err(error) => HttpTagError::Internal {
             message: format!("tag worker failed: {error}"),
         }

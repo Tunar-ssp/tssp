@@ -13,12 +13,14 @@
   import * as FileService from '$lib/services/fileService';
   import { onMount } from 'svelte';
 
-  let contextMenu = { visible: false, x: 0, y: 0, file: null as any };
-  let previewFile: any = null;
-  let shareFile: any = null;
+  let contextMenu = $state({ visible: false, x: 0, y: 0, file: null as any });
+  let previewFile: any = $state(null);
+  let shareFile: any = $state(null);
   let fileInput: HTMLInputElement;
   let filterQuery = $state('');
-  let viewMode: 'list' | 'grid' = (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'grid') || 'grid';
+  let viewMode: 'list' | 'grid' = $state(
+    (typeof localStorage !== 'undefined' ? (localStorage.getItem('driveViewMode') as any) : 'grid') || 'grid',
+  );
   let uploads: any[] = $state([]);
   let searchResults: any[] = $state([]);
   let isSearching = $state(false);
@@ -45,6 +47,7 @@
 
   function showContextMenu(event: MouseEvent, file: any) {
     event.preventDefault();
+    event.stopPropagation();
     contextMenu = {
       visible: true,
       x: event.clientX,
@@ -95,13 +98,15 @@
 
     isSearching = true;
     try {
-      const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}`, {
+        credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error(`Search failed with HTTP ${response.status}`);
       const data = await response.json();
 
-      // Filter to only files (not notes/workspaces)
       searchResults = (data.results || []).filter((r: any) => r.type === 'file');
       isSearching = false;
-    } catch (err) {
+    } catch {
       error('Search failed');
       isSearching = false;
     }
@@ -123,7 +128,13 @@
     }
   }
 
-  let filteredFiles = $derived(searchResults.length > 0 ? searchResults : $visibleFiles);
+  let filteredFiles = $derived(filterQuery.trim() ? searchResults : $visibleFiles);
+
+  function handleFileKeydown(event: KeyboardEvent, file: any) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    void handlePreview(file);
+  }
 
   function getContextItems(file: any) {
     return [
@@ -148,7 +159,7 @@
         <h2>Cloud Drive</h2>
         <p class="subtitle">Organize, share, and access your files</p>
       </div>
-      <button class="upload-btn" on:click={() => fileInput?.click()}>
+      <button type="button" class="upload-btn" onclick={() => fileInput?.click()}>
         <Icons.Upload size={16} />
         Upload
       </button>
@@ -156,7 +167,7 @@
         bind:this={fileInput}
         type="file"
         multiple
-        on:change={handleUpload}
+        onchange={handleUpload}
         style="display: none"
       />
     </div>
@@ -167,25 +178,27 @@
         type="text"
         placeholder="Search files... (server-side)"
         value={filterQuery}
-        on:input={handleSearchInput}
+        oninput={handleSearchInput}
       />
       {#if isSearching}
         <div style="color: var(--muted); font-size: 12px;">Searching...</div>
       {/if}
-      <div style="flex: 1" />
+      <div style="flex: 1"></div>
       <div class="view-toggle">
         <button
+          type="button"
           class="toggle-btn"
           class:active={viewMode === 'grid'}
-          on:click={() => toggleViewMode('grid')}
+          onclick={() => toggleViewMode('grid')}
           title="Grid view"
         >
           <Icons.Grid2x2 size={16} />
         </button>
         <button
+          type="button"
           class="toggle-btn"
           class:active={viewMode === 'list'}
-          on:click={() => toggleViewMode('list')}
+          onclick={() => toggleViewMode('list')}
           title="List view"
         >
           <Icons.List size={16} />
@@ -196,7 +209,7 @@
     <div class="files-container">
       {#if $isLoading}
         <div class="loading">
-          <div class="spinner" />
+          <div class="spinner"></div>
           Loading files...
         </div>
       {:else if filteredFiles.length === 0}
@@ -210,8 +223,9 @@
           {#each filteredFiles as file (file.id)}
             <div
               class="file-row"
-              on:click={() => handlePreview(file)}
-              on:contextmenu={(e) => showContextMenu(e, file)}
+              onclick={() => handlePreview(file)}
+              oncontextmenu={(e) => showContextMenu(e, file)}
+              onkeydown={(e) => handleFileKeydown(e, file)}
               role="button"
               tabindex="0"
             >
@@ -234,10 +248,23 @@
                 {#if file.public}
                   <Icons.Share2 size={14} style="color: var(--green)" title="Public" />
                 {/if}
-                <button class="action-btn" on:click={() => handleDownload(file)} title="Download">
+                <button
+                  type="button"
+                  class="action-btn"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    void handleDownload(file);
+                  }}
+                  title="Download"
+                >
                   <Icons.Download size={14} />
                 </button>
-                <button class="action-btn" on:click={(e) => showContextMenu(e, file)} title="More">
+                <button
+                  type="button"
+                  class="action-btn"
+                  onclick={(e) => showContextMenu(e, file)}
+                  title="More"
+                >
                   <Icons.MoreVertical size={14} />
                 </button>
               </div>
@@ -249,8 +276,9 @@
           {#each filteredFiles as file (file.id)}
             <div
               class="file-card"
-              on:click={() => handlePreview(file)}
-              on:contextmenu={(e) => showContextMenu(e, file)}
+              onclick={() => handlePreview(file)}
+              oncontextmenu={(e) => showContextMenu(e, file)}
+              onkeydown={(e) => handleFileKeydown(e, file)}
               role="button"
               tabindex="0"
             >
@@ -531,14 +559,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-
-  .pinned {
-    color: var(--orange);
-  }
-
-  .shared {
-    color: var(--green);
   }
 
   .action-btn {

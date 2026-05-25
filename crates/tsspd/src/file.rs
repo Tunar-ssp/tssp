@@ -5,12 +5,16 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
-use tssp_domain::FileId;
+use tssp_domain::{FileId, Visibility};
 
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
-pub(crate) async fn get_file(State(state): State<HttpState>, Path(id): Path<String>) -> Response {
+pub(crate) async fn get_file(
+    State(state): State<HttpState>,
+    crate::auth::OptionalAuthContext(auth): crate::auth::OptionalAuthContext,
+    Path(id): Path<String>,
+) -> Response {
     let file_id = match FileId::new(id) {
         Ok(value) => value,
         Err(error) => {
@@ -28,43 +32,84 @@ pub(crate) async fn get_file(State(state): State<HttpState>, Path(id): Path<Stri
     };
 
     let metadata = state.stats_provider.clone();
-    match tokio::task::spawn_blocking(move || metadata.find_file(&file_id)).await {
-        Ok(Ok(Some(record))) => (
-            StatusCode::OK,
-            Json(FileRecordResponse::from_record(&record)),
-        )
-            .into_response(),
-        Ok(Ok(None)) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "file_not_found",
-                    message: "file was not found".to_owned(),
-                },
-            }),
-        )
-            .into_response(),
-        Ok(Err(error)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "metadata_unavailable",
-                    message: error,
-                },
-            }),
-        )
-            .into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "internal_error",
-                    message: format!("metadata worker failed: {error}"),
-                },
-            }),
-        )
-            .into_response(),
+    let record = match tokio::task::spawn_blocking(move || metadata.find_file(&file_id)).await {
+        Ok(Ok(Some(record))) => record,
+        Ok(Ok(None)) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "file_not_found",
+                        message: "file was not found".to_owned(),
+                    },
+                }),
+            )
+                .into_response();
+        }
+        Ok(Err(error)) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "metadata_unavailable",
+                        message: error,
+                    },
+                }),
+            )
+                .into_response();
+        }
+        Err(error) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "internal_error",
+                        message: format!("metadata worker failed: {error}"),
+                    },
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Check authorization: public files accessible to all, private files only to owner/admin
+    if record.visibility != Visibility::Public {
+        match &auth {
+            Some(auth) if auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id) => {
+                // Admin or owner can access private files
+            }
+            Some(_) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "access_denied",
+                            message: "you do not have permission to access this file".to_owned(),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+            None => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "authentication_required",
+                            message: "authentication is required to access this file".to_owned(),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+        }
     }
+
+    (
+        StatusCode::OK,
+        Json(FileRecordResponse::from_record(&record)),
+    )
+        .into_response()
 }
 
 /// Query params for thumbnail size selection.
@@ -79,6 +124,7 @@ pub(crate) struct ThumbnailQuery {
 /// Returns 202 Accepted when the thumbnail is not yet generated (lazy mode).
 pub(crate) async fn get_file_thumbnail(
     State(state): State<HttpState>,
+    crate::auth::OptionalAuthContext(auth): crate::auth::OptionalAuthContext,
     Path(id): Path<String>,
     Query(query): Query<ThumbnailQuery>,
 ) -> Response {
@@ -140,6 +186,39 @@ pub(crate) async fn get_file_thumbnail(
                 .into_response();
         }
     };
+
+    // Check authorization: public files accessible to all, private files only to owner/admin
+    if record.visibility != Visibility::Public {
+        match &auth {
+            Some(auth) if auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id) => {
+                // Admin or owner can access private files
+            }
+            Some(_) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "access_denied",
+                            message: "you do not have permission to access this file".to_owned(),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+            None => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "authentication_required",
+                            message: "authentication is required to access this file".to_owned(),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+        }
+    }
 
     // Only images can have thumbnails
     if !record.mime_type.as_str().starts_with("image/") {

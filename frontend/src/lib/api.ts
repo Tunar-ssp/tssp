@@ -22,6 +22,11 @@ export interface FileRecord {
   public: boolean;
 }
 
+export interface FolderEntry {
+  path: string;
+  file_count: number;
+}
+
 export interface Note {
   id: string;
   title: string;
@@ -70,7 +75,7 @@ export const api = {
   // Files
   listFiles: (limit?: number) =>
     request<{ files: FileRecord[] }>(`/files${limit ? `?limit=${limit}` : ''}`),
-  listFolders: () => request<{ folders: string[] }>('/folders'),
+  listFolders: () => request<{ schema_version: number; folders: FolderEntry[] }>('/folders'),
   getFile: (id: string) => request<FileRecord>(`/files/${id}`),
   deleteFile: (id: string) =>
     request(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -130,9 +135,17 @@ export const api = {
   // Status
   getStatus: () =>
     request<{
+      schema_version: number;
+      version: string;
       status: string;
+      uptime_seconds: number;
       file_count: number;
+      note_count: number;
+      tag_count: number;
+      pinned_count: number;
+      recent_upload_count_24h: number;
       storage_bytes_used: number;
-      storage_total_bytes: number;
+      corrupt_file_count: number;
+      public_url?: string;
     }>('/status'),
 };

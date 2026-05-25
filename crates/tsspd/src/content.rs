@@ -15,7 +15,7 @@ use axum::Json;
 use serde::Deserialize;
 use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
-use tssp_domain::{FileId, FileRecord, StorageHandle};
+use tssp_domain::{FileId, FileRecord, StorageHandle, Visibility};
 use tssp_ports::{BlobReadError, BlobReader};
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
@@ -39,6 +39,7 @@ pub(crate) struct ContentQuery {
 
 pub(crate) async fn get_file_content(
     State(state): State<HttpState>,
+    crate::auth::OptionalAuthContext(auth): crate::auth::OptionalAuthContext,
     Path(id): Path<String>,
     Query(query): Query<ContentQuery>,
     headers: HeaderMap,
@@ -74,6 +75,30 @@ pub(crate) async fn get_file_content(
             );
         }
     };
+
+    // Check authorization: public files are accessible to all, private files only to owner/admin
+    if record.visibility != Visibility::Public {
+        match &auth {
+            Some(auth) if auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id) => {
+                // Admin or owner can access private files
+            }
+            Some(_) => {
+                return error_response(
+                    StatusCode::FORBIDDEN,
+                    "access_denied",
+                    "you do not have permission to access this file".to_owned(),
+                );
+            }
+            None => {
+                return error_response(
+                    StatusCode::UNAUTHORIZED,
+                    "authentication_required",
+                    "authentication is required to access this file".to_owned(),
+                );
+            }
+        }
+    }
+
     let Ok(byte_range) = parse_range_header(headers.get(RANGE), record.size.bytes()) else {
         return range_not_satisfiable(record.size.bytes());
     };

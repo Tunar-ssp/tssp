@@ -364,8 +364,26 @@ impl IntoResponse for HttpSessionError {
 /// Creates a new send session (POST /api/v1/sessions/send).
 pub async fn create_send_session(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Json(payload): Json<CreateSendSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionResponse>), HttpSessionError> {
+    // Verify the user owns the file they're trying to share
+    let file_id = tssp_domain::FileId::new(&payload.file_id)
+        .map_err(|_| HttpSessionError::InvalidToken)?;
+
+    let file = state
+        .stats_provider
+        .find_file(&file_id)
+        .map_err(|_| HttpSessionError::InternalError("Failed to look up file".to_string()))?
+        .ok_or(HttpSessionError::NotFound)?;
+
+    // Only admin or file owner can create send sessions
+    if !auth.is_admin() && file.owner_id.as_ref() != Some(&auth.user_id) {
+        return Err(HttpSessionError::InternalError(
+            "Access denied".to_string(),
+        ));
+    }
+
     let urls = state.public_urls().clone();
     state
         .session_provider
