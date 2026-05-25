@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tssp_domain::{FileName, Tag};
+use tssp_app::{AuditAction, log_audit_event};
 
 use crate::HttpState;
 
@@ -96,8 +97,18 @@ pub async fn rename_file(
         ));
     }
 
+    let repository = state.repository.clone();
     match state.stats_provider.rename_file(&file_id, &new_name) {
         Ok(Some(record)) => {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileRename,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "success",
+                Some(&format!("renamed to {}", record.name.original())),
+            );
             let file_json = json!({
                 "id": record.id.as_str(),
                 "name": record.name.original(),

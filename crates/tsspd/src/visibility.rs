@@ -8,6 +8,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use getrandom::getrandom;
 use serde::{Deserialize, Serialize};
 use tssp_domain::{FileId, Visibility};
+use tssp_app::{AuditAction, log_audit_event};
 
 use crate::auth::AuthContext;
 use crate::upload::FileRecordResponse;
@@ -133,19 +134,31 @@ pub async fn patch_file_visibility(
         Visibility::Private => (None, None),
     };
 
+    let repository = state.repository.clone();
     match state
         .stats_provider
         .set_file_visibility(&file_id, visibility, public_token.as_deref())
     {
-        Ok(Some(file)) => (
-            StatusCode::OK,
-            Json(VisibilityResponse {
-                schema_version: 1,
-                file: FileRecordResponse::from_record(&file),
-                public_url,
-            }),
-        )
-            .into_response(),
+        Ok(Some(file)) => {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileVisibilityChange,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "success",
+                Some(&format!("changed visibility to {}", visibility.as_str())),
+            );
+            (
+                StatusCode::OK,
+                Json(VisibilityResponse {
+                    schema_version: 1,
+                    file: FileRecordResponse::from_record(&file),
+                    public_url,
+                }),
+            )
+                .into_response()
+        }
         Ok(None) => not_found(),
         Err(message) => internal(message),
     }
@@ -186,6 +199,7 @@ pub async fn bulk_file_visibility(
         }
     };
 
+    let repository = state.repository.clone();
     let mut updated = Vec::new();
     for id_str in &body.ids {
         let Ok(file_id) = FileId::new(id_str) else {
@@ -212,6 +226,15 @@ pub async fn bulk_file_visibility(
                 .stats_provider
                 .set_file_visibility(&file_id, visibility, token.as_deref())
         {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileVisibilityChange,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "success",
+                Some(&format!("bulk changed visibility to {}", visibility.as_str())),
+            );
             updated.push(FileRecordResponse::from_record(&file));
         }
     }

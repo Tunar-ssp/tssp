@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_domain::FileId;
+use tssp_app::{AuditAction, log_audit_event};
 
 use crate::auth::AuthContext;
 use crate::upload::FileRecordResponse;
@@ -49,18 +50,30 @@ pub async fn move_file_to_folder(
         return forbidden();
     }
 
+    let repository = state.repository.clone();
     match state
         .stats_provider
         .set_file_folder_path(&file_id, &folder_path)
     {
-        Ok(Some(file)) => (
-            StatusCode::OK,
-            Json(MoveFileResponse {
-                schema_version: 1,
-                file: FileRecordResponse::from_record(&file),
-            }),
-        )
-            .into_response(),
+        Ok(Some(file)) => {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileMove,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "success",
+                Some(&format!("moved to folder {}", folder_path)),
+            );
+            (
+                StatusCode::OK,
+                Json(MoveFileResponse {
+                    schema_version: 1,
+                    file: FileRecordResponse::from_record(&file),
+                }),
+            )
+                .into_response()
+        }
         Ok(None) => not_found(),
         Err(message) => internal(message),
     }
