@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { PillProps } from './primitives.svelte';
+  import type { Snippet } from 'svelte';
 
   interface $$Props extends PillProps {
     class?: string;
+    children?: Snippet;
   }
 
   let {

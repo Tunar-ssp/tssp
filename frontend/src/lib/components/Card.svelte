@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { CardProps } from './primitives.svelte';
+  import type { Snippet } from 'svelte';
 
   interface $$Props extends CardProps {
     class?: string;
+    children?: Snippet;
   }
 
   let {

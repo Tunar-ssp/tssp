@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ModalProps } from './primitives.svelte';
+  import type { Snippet } from 'svelte';
 
   interface $$Props extends ModalProps {
     class?: string;
+    children?: Snippet;
   }
 
   let {

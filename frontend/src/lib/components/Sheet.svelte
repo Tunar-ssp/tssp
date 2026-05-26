@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { SheetProps } from './primitives.svelte';
+  import type { Snippet } from 'svelte';
 
   interface $$Props extends SheetProps {
     class?: string;
+    children?: Snippet;
   }
 
   let {
