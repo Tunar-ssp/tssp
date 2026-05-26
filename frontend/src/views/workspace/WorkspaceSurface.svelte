@@ -88,8 +88,7 @@
       isModified = false;
       syncOpenTabs();
       activeTabId = $activeWorkspace.id;
-      // TODO: Re-enable when /capabilities endpoint is implemented
-      // loadCapabilities($activeWorkspace.id);
+      loadCapabilities($activeWorkspace.id);
     } else {
       nameDraft = '';
       bodyDraft = '';
