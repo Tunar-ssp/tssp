@@ -3,7 +3,7 @@
  * Extracted from monolithic DriveView to improve testability and reusability
  */
 
-import { api, type FileRecord } from '$lib/api';
+import { api, type FileRecord, type VisibilityResponse } from '$lib/api';
 
 export interface DriveActionHandlers {
   onSuccess?: (message: string) => void;
@@ -83,29 +83,44 @@ export class DriveActions {
     }
   }
 
+  async moveFile(fileId: string, folderPath: string): Promise<boolean> {
+    try {
+      await api.moveFile(fileId, folderPath);
+      this.notifySuccess('File moved successfully');
+      return true;
+    } catch (err) {
+      this.notifyError('Failed to move file');
+      return false;
+    }
+  }
+
+  async setFileVisibility(fileId: string, isPublic: boolean): Promise<VisibilityResponse | null> {
+    try {
+      const response = await api.setFileVisibility(fileId, isPublic);
+      this.notifySuccess(isPublic ? 'File made public' : 'File made private');
+      return response;
+    } catch (err) {
+      this.notifyError('Failed to change visibility');
+      return null;
+    }
+  }
+
+  async emptyTrash(): Promise<boolean> {
+    try {
+      await api.emptyTrash();
+      this.notifySuccess('Trash emptied');
+      return true;
+    } catch (err) {
+      this.notifyError('Failed to empty trash');
+      return false;
+    }
+  }
+
   downloadFile(file: FileRecord): void {
     try {
       window.location.assign(`/api/v1/files/${encodeURIComponent(file.id)}/content`);
     } catch (err) {
       this.notifyError(`Failed to download ${file.name}`);
     }
-  }
-
-  formatBytes(bytes: number): string {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    const value = bytes / 1024 ** index;
-    return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-  }
-
-  formatRelative(timestamp?: number): string {
-    if (!timestamp) return 'just now';
-    const delta = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-    if (delta < 60) return 'just now';
-    if (delta < 3600) return `${Math.floor(delta / 60)}m`;
-    if (delta < 86400) return `${Math.floor(delta / 3600)}h`;
-    if (delta < 604800) return `${Math.floor(delta / 86400)}d`;
-    return `${Math.floor(delta / 604800)}w`;
   }
 }
