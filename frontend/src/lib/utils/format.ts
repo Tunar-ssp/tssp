@@ -49,3 +49,14 @@ export function formatRelative(timestamp?: number): string {
   if (delta < 604800) return `${Math.floor(delta / 86400)}d`;
   return `${Math.floor(delta / 604800)}w`;
 }
+
+export function formatDate(value: string | number | Date | undefined | null): string {
+  if (!value) return '—';
+  const date = toDate(value as any);
+  if (!date) return String(value);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function getWordCount(text: string): number {
+  return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
+}

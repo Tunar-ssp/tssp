@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import type { Note } from '$lib/api';
+  import { formatRelative } from '$lib/utils';
 
   interface $$Props {
     notes: Note[];
@@ -26,15 +27,6 @@
 
   let pinnedNotes = $derived(notes.filter((note) => !!note.pinned_at));
   let recentNotes = $derived(notes.slice(0, 8));
-
-  function formatRelative(timestamp: number): string {
-    const delta = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-    if (delta < 60) return 'just now';
-    if (delta < 3_600) return `${Math.floor(delta / 60)}m`;
-    if (delta < 86_400) return `${Math.floor(delta / 3_600)}h`;
-    if (delta < 604_800) return `${Math.floor(delta / 86_400)}d`;
-    return `${Math.floor(delta / 604_800)}w`;
-  }
 
   function noteSummary(text: string): string {
     return text

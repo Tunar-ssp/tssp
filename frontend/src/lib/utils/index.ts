@@ -4,7 +4,7 @@
  */
 
 // Formatting utilities
-export { formatBytes, formatRelative, formatRelativeDate, formatAbsoluteDate } from './format';
+export { formatBytes, formatRelative, formatDate, formatRelativeDate, formatAbsoluteDate, getWordCount } from './format';
 
 // Markdown utilities
 export { renderMarkdownLite } from './markdown';
@@ -27,11 +27,7 @@ export { registerShortcuts } from './keyboard';
 export type { WorkspaceTreeNode } from './workspace';
 export { inferLanguageFromPath, buildWorkspaceTree } from './workspace';
 
-
-export function getWordCount(text: string): number {
-  return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
-}
-
+// Text utilities
 export function getLineCount(text: string): number {
   return text.split('\n').length;
 }
