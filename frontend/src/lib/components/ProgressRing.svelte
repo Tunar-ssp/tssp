@@ -1,9 +1,19 @@
 <script lang="ts">
-  export let value: number = 0;
-  export let size: number = 64;
-  export let tone: 'blue' | 'green' | 'pink' | 'orange' | 'violet' | 'warn' = 'blue';
-  export let label: string = '';
-  export let sub: string = '';
+  interface $$Props {
+    value?: number;
+    size?: number;
+    tone?: 'blue' | 'green' | 'pink' | 'orange' | 'violet' | 'warn';
+    label?: string;
+    sub?: string;
+  }
+
+  let {
+    value = 0,
+    size = 64,
+    tone = 'blue',
+    label = '',
+    sub = '',
+  }: $$Props = $props();
 
   const colors: Record<string, string> = {
     blue: 'var(--blue)',
@@ -20,7 +30,7 @@
 </script>
 
 <div class="ring-container">
-  <svg {size} {size} style="transform: rotate(-90deg)">
+  <svg width={size} height={size} style="transform: rotate(-90deg)">
     <circle cx={size/2} cy={size/2} {r} fill="none" stroke="var(--surface-3)" stroke-width="4"/>
     <circle cx={size/2} cy={size/2} {r} fill="none" stroke={c} stroke-width="4" stroke-linecap="round"
       stroke-dasharray={cir} stroke-dashoffset={cir - (cir * value) / 100}/>

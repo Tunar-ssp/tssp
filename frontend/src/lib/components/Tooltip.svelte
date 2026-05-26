@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { TooltipProps } from './primitives.svelte';
+  import type { Snippet } from 'svelte';
 
   interface $$Props extends TooltipProps {
     class?: string;
+    children?: Snippet;
   }
 
   let {
@@ -32,14 +34,16 @@
 <div class="tooltip-wrapper {className || ''}" {...rest}>
   <div
     class="tooltip-trigger"
-    on:mouseenter={onMouseEnter}
-    on:mouseleave={onMouseLeave}
+    onmouseenter={onMouseEnter}
+    onmouseleave={onMouseLeave}
   >
-    <slot />
+    {#if children}
+      {@render children()}
+    {/if}
   </div>
 
   {#if showTooltip && content}
-    <div class="tooltip-content" on:mouseenter={onMouseEnter} on:mouseleave={onMouseLeave}>
+    <div class="tooltip-content" onmouseenter={onMouseEnter} onmouseleave={onMouseLeave}>
       <div class="tooltip-text">{content}</div>
       {#if kbd}
         <div class="tooltip-kbd">{kbd}</div>
