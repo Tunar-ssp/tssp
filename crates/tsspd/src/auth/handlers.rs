@@ -130,8 +130,13 @@ fn map_auth_error(error: AuthError) -> (StatusCode, Json<ErrorResponse>) {
     }
 }
 
-fn session_cookie_value(name: &str, token: &str, max_age_secs: u64) -> String {
-    format!("{name}={token}; HttpOnly; Path=/; Max-Age={max_age_secs}; SameSite=Strict")
+fn session_cookie_value(name: &str, token: &str, max_age_secs: u64, secure: bool) -> String {
+    let mut s =
+        format!("{name}={token}; HttpOnly; Path=/; Max-Age={max_age_secs}; SameSite=Strict");
+    if secure {
+        s.push_str("; Secure");
+    }
+    s
 }
 
 pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<String> {
@@ -274,6 +279,7 @@ pub async fn auth_me(
     StatusCode::UNAUTHORIZED.into_response()
 }
 
+#[allow(clippy::too_many_lines)]
 async fn perform_login(
     state: &HttpState,
     body: &LoginRequest,
@@ -296,6 +302,11 @@ async fn perform_login(
         .map(str::to_owned);
 
     let users_enabled = state.auth.users_enabled().unwrap_or(false);
+    let secure = state
+        .settings()
+        .public_url
+        .as_ref()
+        .is_some_and(|url| url.starts_with("https://"));
 
     let session = if users_enabled {
         let name = body
@@ -371,6 +382,7 @@ async fn perform_login(
             SESSION_COOKIE,
             &session.token,
             AuthService::web_cookie_max_age().as_secs(),
+            secure,
         )) {
             response.headers_mut().append(header::SET_COOKIE, value);
         }
@@ -379,6 +391,7 @@ async fn perform_login(
                 DEVICE_COOKIE,
                 device_token,
                 AuthService::trusted_device_max_age().as_secs(),
+                secure,
             )) {
                 response.headers_mut().append(header::SET_COOKIE, value);
             }
@@ -449,9 +462,18 @@ pub async fn auth_logout(State(state): State<HttpState>, headers: HeaderMap) -> 
     if let Some(device) = extract_cookie_token(&headers, DEVICE_COOKIE) {
         let _ = state.auth.revoke_device(&device);
     }
+
+    let secure = state
+        .settings()
+        .public_url
+        .as_ref()
+        .is_some_and(|url| url.starts_with("https://"));
+
     let mut response = StatusCode::NO_CONTENT.into_response();
     for cookie in [SESSION_COOKIE, DEVICE_COOKIE] {
-        if let Ok(value) = header::HeaderValue::from_str(&session_cookie_value(cookie, "", 0)) {
+        if let Ok(value) =
+            header::HeaderValue::from_str(&session_cookie_value(cookie, "", 0, secure))
+        {
             response.headers_mut().append(header::SET_COOKIE, value);
         }
     }
@@ -550,5 +572,25 @@ pub async fn revoke_user_device(
             })),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_cookie_value_secure_flag() {
+        let cookie_insecure = session_cookie_value("test", "token", 3600, false);
+        assert!(cookie_insecure.contains("test=token"));
+        assert!(cookie_insecure.contains("HttpOnly"));
+        assert!(cookie_insecure.contains("SameSite=Strict"));
+        assert!(!cookie_insecure.contains("Secure"));
+
+        let cookie_secure = session_cookie_value("test", "token", 3600, true);
+        assert!(cookie_secure.contains("test=token"));
+        assert!(cookie_secure.contains("HttpOnly"));
+        assert!(cookie_secure.contains("SameSite=Strict"));
+        assert!(cookie_secure.contains("Secure"));
     }
 }

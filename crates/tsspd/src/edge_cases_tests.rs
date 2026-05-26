@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod edge_cases {
-    use crate::folders::{normalize_folder_path, validate_folder_path};
+    use tssp_app::{normalize_folder_path, validate_folder_path};
 
     #[test]
     fn folder_path_empty_string() {

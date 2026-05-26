@@ -10,6 +10,8 @@ use tssp_ports::Clock;
 use tssp_ports::{ListQuery, NoteListQuery};
 
 use crate::admin::system::collect_system_snapshot;
+use tssp_app::{log_audit_event, AuditAction};
+
 use crate::upload::FileRecordResponse;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
@@ -395,6 +397,7 @@ pub async fn admin_list_files(
 /// `DELETE /api/v1/admin/files/{id}`
 pub async fn admin_delete_file(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let file_id = match tssp_domain::FileId::new(&id) {
@@ -412,17 +415,39 @@ pub async fn admin_delete_file(
                 .into_response();
         }
     };
-    match state.delete_provider.delete(file_id) {
-        Ok(outcome) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "schema_version": 1,
-                "existed": outcome.existed,
-                "blob_cleaned": outcome.blob_cleaned,
-            })),
-        )
-            .into_response(),
-        Err(error) => error.response(),
+    match state.delete_provider.delete(file_id.clone()) {
+        Ok(outcome) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileDelete,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "success",
+                Some("admin delete"),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "schema_version": 1,
+                    "existed": outcome.existed,
+                    "blob_cleaned": outcome.blob_cleaned,
+                })),
+            )
+                .into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::FileDelete,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "failure",
+                Some(&format!("admin delete failed: {error:?}")),
+            );
+            error.response()
+        }
     }
 }
 

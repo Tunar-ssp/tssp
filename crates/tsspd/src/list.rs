@@ -111,7 +111,7 @@ impl ListQueryParams {
 
         let folder_prefix = self
             .folder
-            .map(|value| crate::folders::normalize_folder_path(&value));
+            .map(|value| tssp_app::normalize_folder_path(&value));
 
         Ok(RepositoryListQuery {
             limit: self.limit,

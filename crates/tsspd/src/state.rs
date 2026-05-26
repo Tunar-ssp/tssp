@@ -12,6 +12,7 @@ use crate::content::StaticBlobReader;
 use crate::delete::{
     FileDeleteProvider, FileRestoreProvider, StaticFileDeleteProvider, StaticFileRestoreProvider,
 };
+use crate::folders::FolderProvider;
 use crate::notes::{NoteProvider, StaticNoteProvider};
 use crate::pins::{FilePinProvider, StaticFilePinProvider};
 use crate::rate_limit::RateLimiter;
@@ -43,6 +44,7 @@ pub struct HttpState {
     pub(crate) repository: Arc<dyn FileRepository + Send + Sync>,
     pub(crate) stats_provider: Arc<dyn MetadataStatsProvider>,
     pub(crate) upload_provider: Arc<dyn FileUploadProvider>,
+    pub(crate) folder_provider: Arc<dyn FolderProvider>,
     pub(crate) delete_provider: Arc<dyn FileDeleteProvider>,
     pub(crate) restore_provider: Arc<dyn FileRestoreProvider>,
     pub(crate) tag_provider: Arc<dyn FileTagProvider>,
@@ -78,6 +80,7 @@ impl HttpState {
             repository: Arc::new(StaticFileRepository),
             stats_provider: Arc::new(StaticMetadataStatsProvider),
             upload_provider: Arc::new(StaticFileUploadProvider),
+            folder_provider: Arc::new(StaticFolderProvider),
             delete_provider: Arc::new(StaticFileDeleteProvider),
             restore_provider: Arc::new(StaticFileRestoreProvider),
             tag_provider: Arc::new(StaticFileTagProvider),
@@ -107,6 +110,13 @@ impl HttpState {
     #[must_use]
     pub fn with_upload_provider(mut self, provider: Arc<dyn FileUploadProvider>) -> Self {
         self.upload_provider = provider;
+        self
+    }
+
+    /// Attaches the folder provider.
+    #[must_use]
+    pub fn with_folder_provider(mut self, provider: Arc<dyn FolderProvider>) -> Self {
+        self.folder_provider = provider;
         self
     }
 
@@ -246,6 +256,7 @@ impl Clone for HttpState {
             repository: self.repository.clone(),
             stats_provider: self.stats_provider.clone(),
             upload_provider: self.upload_provider.clone(),
+            folder_provider: self.folder_provider.clone(),
             delete_provider: self.delete_provider.clone(),
             restore_provider: self.restore_provider.clone(),
             tag_provider: self.tag_provider.clone(),
@@ -507,5 +518,31 @@ impl FileRepository for StaticFileRepository {
         Err(tssp_ports::RepositoryError::OperationFailed {
             message: "static repository is not configured".to_owned(),
         })
+    }
+}
+
+/// No-op folder provider for testing.
+pub struct StaticFolderProvider;
+
+impl crate::folders::FolderProvider for StaticFolderProvider {
+    fn move_folder(&self, _from: &str, _to: &str) -> Result<u64, crate::folders::HttpFolderError> {
+        Err(crate::folders::HttpFolderError::Internal(
+            "folder service is not configured".to_owned(),
+        ))
+    }
+
+    fn delete_folder(&self, _path: &str) -> Result<u64, crate::folders::HttpFolderError> {
+        Err(crate::folders::HttpFolderError::Internal(
+            "folder service is not configured".to_owned(),
+        ))
+    }
+
+    fn list_folders(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, crate::folders::HttpFolderError> {
+        Err(crate::folders::HttpFolderError::Internal(
+            "folder service is not configured".to_owned(),
+        ))
     }
 }

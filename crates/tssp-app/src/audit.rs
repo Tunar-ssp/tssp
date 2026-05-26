@@ -43,6 +43,8 @@ pub enum AuditAction {
     NoteDelete,
     /// Note tag event.
     NoteTag,
+    /// User role update event.
+    UserRoleUpdate,
     /// Admin user creation event.
     AdminUserCreate,
     /// Admin user deletion event.
@@ -76,6 +78,7 @@ impl AuditAction {
             Self::NoteUpdate => "note_update",
             Self::NoteDelete => "note_delete",
             Self::NoteTag => "note_tag",
+            Self::UserRoleUpdate => "user_role_update",
             Self::AdminUserCreate => "admin_user_create",
             Self::AdminUserDelete => "admin_user_delete",
             Self::AdminCodeReset => "admin_code_reset",

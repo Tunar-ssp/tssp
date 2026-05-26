@@ -6,6 +6,7 @@
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::folders::{FolderProvider, HttpFolderError};
 use axum::body::{to_bytes, Body};
 use axum::http::header::{CONTENT_RANGE, CONTENT_TYPE};
 use axum::http::{Request, StatusCode};
@@ -464,6 +465,25 @@ impl MetadataStatsProvider for FixedStatsProvider {
         _: &str,
     ) -> Result<Option<tssp_domain::FileRecord>, String> {
         Ok(None)
+    }
+}
+
+pub struct FixedFolderProvider;
+
+impl FolderProvider for FixedFolderProvider {
+    fn move_folder(&self, _from: &str, _to: &str) -> Result<u64, HttpFolderError> {
+        Ok(0)
+    }
+
+    fn delete_folder(&self, _path: &str) -> Result<u64, HttpFolderError> {
+        Ok(0)
+    }
+
+    fn list_folders(
+        &self,
+        _owner_id: Option<&tssp_domain::UserId>,
+    ) -> Result<Vec<(String, u64)>, HttpFolderError> {
+        Ok(Vec::new())
     }
 }
 
