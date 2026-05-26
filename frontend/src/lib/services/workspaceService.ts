@@ -387,4 +387,35 @@ export function hasUnsavedChanges(
   );
 }
 
+/**
+ * Get workspace capabilities (terminal, LSP, etc.)
+ */
+export async function getWorkspaceCapabilities(id: string) {
+  log('getWorkspaceCapabilities', 'Starting', { id });
+
+  try {
+    if (!id?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+
+    const capabilities = await api.getWorkspaceCapabilities(id);
+
+    log('getWorkspaceCapabilities', 'Success', {
+      id,
+      terminalStatus: capabilities.terminal?.status,
+      lspStatus: capabilities.lsp?.status,
+    });
+
+    return capabilities;
+  } catch (err) {
+    log('getWorkspaceCapabilities', 'Error', { error: err instanceof Error ? err.message : 'Unknown error', id });
+    // Return default unavailable state on error
+    return {
+      schema_version: 1,
+      terminal: { status: 'unavailable' as const, message: 'Failed to load capabilities' },
+      lsp: { status: 'unavailable' as const, message: 'Failed to load capabilities' },
+    };
+  }
+}
+
 export { WorkspaceServiceError };

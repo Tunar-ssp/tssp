@@ -1,9 +1,9 @@
 //! Language Server Protocol (LSP) support for workspaces.
 //!
-//! LSP provides real autocomplete, diagnostics, go-to-definition, etc.
+//! `LSP` provides real autocomplete, diagnostics, go-to-definition, etc.
 //! This module provides the foundation; real language server integration is deferred.
 
-#![allow(dead_code)]
+#![allow(dead_code, clippy::unused_self, clippy::unused_async)]
 
 use thiserror::Error;
 
@@ -75,8 +75,8 @@ impl LspManager {
         vec![]
     }
 
-    /// Creates an LSP session (currently deferred).
-    pub async fn create_session(
+    /// Creates an `LSP` session (currently deferred).
+    pub fn create_session(
         &self,
         _workspace_id: &str,
         _language: &str,

@@ -61,6 +61,19 @@ export interface Workspace {
   updated_at: number;
 }
 
+export interface WorkspaceCapabilities {
+  schema_version: number;
+  terminal: {
+    status: 'available' | 'disabled' | 'forbidden' | 'unavailable_sandbox' | 'unavailable';
+    message?: string;
+  };
+  lsp: {
+    status: 'available' | 'disabled' | 'unavailable' | 'not_implemented';
+    available_languages?: string[];
+    message?: string;
+  };
+}
+
 const BASE = '/api/v1';
 
 async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -366,6 +379,12 @@ export const api = {
     }),
   deleteWorkspace: (id: string) =>
     request(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  getWorkspaceCapabilities: (id: string) =>
+    request<WorkspaceCapabilities>(`/workspaces/${encodeURIComponent(id)}/capabilities`),
+  getWorkspaceTerminalStatus: (id: string) =>
+    request<{ status: 'available' | 'disabled' | 'forbidden' | 'unavailable_sandbox' | 'unavailable' }>(`/workspaces/${encodeURIComponent(id)}/terminal`),
+  getWorkspaceLspStatus: (id: string) =>
+    request<{ status: 'available' | 'disabled' | 'unavailable' | 'not_implemented'; languages?: string[] }>(`/workspaces/${encodeURIComponent(id)}/lsp`),
 
   // Status
   getStatus: () =>

@@ -1076,7 +1076,11 @@ pub(crate) async fn workspace_capabilities(
     };
 
     // Verify workspace exists and user has access
-    let owner_filter = if auth.is_admin() { None } else { Some(auth.user_id.as_str()) };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
     if store.get(&id, owner_filter).is_err() {
         return not_found();
     }
@@ -1174,7 +1178,11 @@ pub(crate) async fn lsp_status(
     };
 
     // Verify workspace exists and user has access
-    let owner_filter = if auth.is_admin() { None } else { Some(auth.user_id.as_str()) };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
     if store.get(&id, owner_filter).is_err() {
         return not_found();
     }

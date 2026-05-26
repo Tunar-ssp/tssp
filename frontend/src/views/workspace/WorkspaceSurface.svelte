@@ -19,6 +19,8 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { renderMarkdownLite } from '$lib/utils/markdown';
+  import { getWorkspaceCapabilities } from '$lib/services/workspaceService';
+  import type { WorkspaceCapabilities } from '$lib/api';
   import WorkspaceSidebar from './WorkspaceSidebar.svelte';
   import WorkspaceEditorHeader from './WorkspaceEditorHeader.svelte';
   import WorkspaceInspector from './WorkspaceInspector.svelte';
@@ -37,6 +39,7 @@
   let cursorLine = $state(1);
   let cursorColumn = $state(1);
   let isModified = $state(false);
+  let capabilities = $state<WorkspaceCapabilities | null>(null);
 
   let openTabs: Array<{ id: string; label: string; isDirty?: boolean; language?: string }> = $state([]);
   let activeTabId: string | null = $state(null);
@@ -80,13 +83,25 @@
       isModified = false;
       syncOpenTabs();
       activeTabId = $activeWorkspace.id;
+      loadCapabilities($activeWorkspace.id);
     } else {
       nameDraft = '';
       bodyDraft = '';
       selectedLanguage = 'text';
       isModified = false;
+      capabilities = null;
     }
   });
+
+  async function loadCapabilities(workspaceId: string) {
+    try {
+      const caps = await getWorkspaceCapabilities(workspaceId);
+      capabilities = caps;
+    } catch (err) {
+      console.error('Failed to load workspace capabilities:', err);
+      capabilities = null;
+    }
+  }
 
   let filteredWorkspaces = $derived.by(() =>
     $workspaces.filter((workspace) => {
@@ -453,6 +468,8 @@
           {previewHtml}
           content={bodyDraft}
           {selectedLanguage}
+          terminalCapability={capabilities?.terminal ?? null}
+          lspCapability={capabilities?.lsp ?? null}
           onTabChange={(t) => (inspectorTab = t)}
         />
       </div>

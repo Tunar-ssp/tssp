@@ -1,13 +1,13 @@
 //! Filesystem-backed workspace storage with safe path handling.
 //!
-//! Each workspace gets its own directory: data/workspaces/<workspace_id>/
-//! Files are stored directly on disk, not in SQLite.
+//! Each workspace gets its own directory: data/workspaces/`<workspace_id>`/
+//! Files are stored directly on disk, not in `SQLite`.
 //! Path security is enforced at every operation.
 
 #![allow(dead_code)]
 
-use std::path::{Path, PathBuf};
 use std::io;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 /// Workspace filesystem errors.
@@ -214,11 +214,7 @@ impl WorkspaceFilesystem {
     }
 
     /// Deletes a file or empty directory.
-    pub async fn delete(
-        &self,
-        workspace_id: &str,
-        rel_path: &str,
-    ) -> Result<(), WorkspaceFsError> {
+    pub async fn delete(&self, workspace_id: &str, rel_path: &str) -> Result<(), WorkspaceFsError> {
         let path = self.resolve_path(workspace_id, rel_path)?;
 
         if !path.exists() {
@@ -261,11 +257,16 @@ impl WorkspaceFilesystem {
 /// Validates workspace ID format (must be valid UUID or safe string).
 fn validate_workspace_id(id: &str) -> Result<(), WorkspaceFsError> {
     if id.is_empty() {
-        return Err(WorkspaceFsError::InvalidPath("id cannot be empty".to_string()));
+        return Err(WorkspaceFsError::InvalidPath(
+            "id cannot be empty".to_string(),
+        ));
     }
 
     // Only alphanumeric and hyphen/underscore
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(WorkspaceFsError::InvalidPath(
             "id contains invalid characters".to_string(),
         ));

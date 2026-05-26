@@ -2,11 +2,24 @@
   import * as Icons from 'lucide-svelte';
   import Outline from '$lib/components/Outline.svelte';
 
+  interface CapabilityStatus {
+    status: 'available' | 'disabled' | 'forbidden' | 'unavailable_sandbox' | 'unavailable';
+    message?: string;
+  }
+
+  interface LspStatus {
+    status: 'available' | 'disabled' | 'unavailable' | 'not_implemented';
+    available_languages?: string[];
+    message?: string;
+  }
+
   interface $$Props {
     tab: 'preview' | 'outline' | 'terminal';
     previewHtml: string;
     content: string;
     selectedLanguage: string;
+    terminalCapability: CapabilityStatus | null;
+    lspCapability: LspStatus | null;
     onTabChange: (tab: 'preview' | 'outline' | 'terminal') => void;
   }
 
@@ -15,8 +28,45 @@
     previewHtml,
     content,
     selectedLanguage,
+    terminalCapability,
+    lspCapability,
     onTabChange,
   }: $$Props = $props();
+
+  function getTerminalStatusLabel(status: CapabilityStatus | null): string {
+    if (!status) return 'Loading...';
+    switch (status.status) {
+      case 'available': return 'Terminal Ready';
+      case 'disabled': return 'Terminal Disabled';
+      case 'forbidden': return 'Admin Only';
+      case 'unavailable_sandbox': return 'Sandbox Unavailable';
+      case 'unavailable': return 'Not Available';
+      default: return 'Unknown Status';
+    }
+  }
+
+  function getTerminalStatusIcon(status: CapabilityStatus | null): any {
+    if (!status) return Icons.Loader;
+    switch (status.status) {
+      case 'available': return Icons.CheckCircle;
+      case 'disabled': return Icons.XCircle;
+      case 'forbidden': return Icons.Lock;
+      case 'unavailable_sandbox': return Icons.AlertTriangle;
+      case 'unavailable': return Icons.Slash;
+      default: return Icons.HelpCircle;
+    }
+  }
+
+  function getLspStatusLabel(status: LspStatus | null): string {
+    if (!status) return 'Loading...';
+    switch (status.status) {
+      case 'available': return 'LSP Available';
+      case 'disabled': return 'LSP Disabled';
+      case 'unavailable': return 'LSP Unavailable';
+      case 'not_implemented': return 'Coming Soon';
+      default: return 'Unknown Status';
+    }
+  }
 </script>
 
 <aside class="workspace-inspector">
@@ -50,16 +100,55 @@
     </div>
   {:else}
     <div class="terminal-panel">
-      <div class="terminal-warning">
-        <Icons.AlertTriangle size={18} />
-        <div>
-          <strong>Run is sandboxed</strong>
-          <p>Execution and terminal access stay locked until the backend exposes a safe sandbox. Admin maintenance tools remain available separately.</p>
+      {#if !terminalCapability}
+        <div class="capability-loading">
+          <Icons.Loader size={18} class="spinner" />
+          <span>Loading terminal status...</span>
         </div>
-      </div>
-      <div class="terminal-placeholder">
-        <code>// scratch: run requires sandbox unlock</code>
-      </div>
+      {:else if terminalCapability.status === 'available'}
+        <div class="terminal-ready">
+          <Icons.CheckCircle size={18} />
+          <div>
+            <strong>Terminal Ready</strong>
+            <p>This workspace can access a sandboxed terminal.</p>
+          </div>
+        </div>
+        <div class="terminal-placeholder">
+          <code>// Terminal connection coming in PHASE 5C</code>
+        </div>
+      {:else if terminalCapability.status === 'forbidden'}
+        <div class="terminal-disabled">
+          <Icons.Lock size={18} />
+          <div>
+            <strong>Admin Only</strong>
+            <p>Terminal access requires admin privileges.</p>
+          </div>
+        </div>
+      {:else if terminalCapability.status === 'unavailable_sandbox'}
+        <div class="terminal-warning">
+          <Icons.AlertTriangle size={18} />
+          <div>
+            <strong>Sandbox Unavailable</strong>
+            <p>Terminal requires bubblewrap or systemd-nspawn to be installed on the server.</p>
+          </div>
+        </div>
+      {:else if terminalCapability.status === 'disabled'}
+        <div class="terminal-disabled">
+          <Icons.Slash size={18} />
+          <div>
+            <strong>Terminal Disabled</strong>
+            <p>Terminal support is not enabled in the server configuration.</p>
+          </div>
+        </div>
+      {:else}
+        <div class="terminal-warning">
+          <Icons.HelpCircle size={18} />
+          <div>
+            <strong>Status Unknown</strong>
+            <p>Unable to determine terminal status. Check server logs.</p>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </aside>
@@ -195,6 +284,54 @@
     display: block;
     color: var(--text);
     margin-bottom: 6px;
+  }
+
+  .terminal-ready {
+    display: flex;
+    gap: 12px;
+    color: var(--green);
+  }
+
+  .terminal-ready strong {
+    display: block;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .terminal-disabled {
+    display: flex;
+    gap: 12px;
+    color: var(--muted);
+  }
+
+  .terminal-disabled strong {
+    display: block;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .capability-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: rgba(18, 21, 29, 0.98);
+    color: var(--text-2);
+  }
+
+  .capability-loading .spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .sidebar-label {
