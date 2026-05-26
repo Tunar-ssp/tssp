@@ -2,7 +2,13 @@
   import * as Icons from 'lucide-svelte';
   import { currentFolder } from '$lib/stores/drive';
 
-  export let onUpload: (files: FileList, folder: string) => void = () => {};
+  interface $$Props {
+    onUpload?: (files: FileList, folder: string) => void;
+  }
+
+  let {
+    onUpload = () => {},
+  }: $$Props = $props();
 
   let isDragging = false;
   let fileInput: HTMLInputElement;
@@ -38,11 +44,12 @@
 <div
   class="upload-area"
   class:dragging={isDragging}
-  on:drop={handleDrop}
-  on:dragover={handleDragOver}
-  on:dragleave={handleDragLeave}
+  ondrop={handleDrop}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
   role="button"
   tabindex="0"
+  aria-label="Upload files"
 >
   <div class="upload-content">
     <Icons.Upload size={28} />
@@ -56,10 +63,10 @@
     bind:this={fileInput}
     type="file"
     multiple
-    on:change={handleFileSelect}
+    onchange={handleFileSelect}
     style="display: none"
   />
-  <button on:click={() => fileInput?.click()} style="display: none" />
+  <button onclick={() => fileInput?.click()} style="display: none" aria-label="Browse files"></button>
 </div>
 
 <style>

@@ -1,12 +1,17 @@
 <script lang="ts">
+  interface ColorOption {
+    name: string;
+    value: string;
+  }
+
   interface $$Props {
     color?: string;
     onChange?: (color: string) => void;
-    colors?: string[];
+    colors?: ColorOption[];
     class?: string;
   }
 
-  const defaultColors = [
+  const defaultColors: ColorOption[] = [
     { name: 'gray', value: '#7c8190' },
     { name: 'red', value: '#ff6b6b' },
     { name: 'orange', value: '#ff8a3d' },
@@ -37,10 +42,10 @@
       class="color-option"
       class:selected={color === c.value}
       style="background: {c.value}"
-      on:click={() => handleColorSelect(c.value)}
+      onclick={() => handleColorSelect(c.value)}
       title={c.name}
       aria-label={c.name}
-    />
+    ></button>
   {/each}
 </div>
 

@@ -19,7 +19,7 @@
   };
 </script>
 
-<span class="status-dot {toneClasses[tone]} {className || ''}" {...rest} />
+<span class="status-dot {toneClasses[tone]} {className || ''}" {...rest}></span>
 
 <style>
   .status-dot {

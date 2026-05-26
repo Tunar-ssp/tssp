@@ -1,9 +1,25 @@
 <script lang="ts">
-  export let kind: 'primary' | 'accent' | 'ghost' | 'solid' | 'danger' = 'ghost';
-  export let size: 'sm' | 'md' | 'lg' = 'md';
-  export let disabled = false;
-  export let icon: any = null;
-  export let iconRight: any = null;
+  import type { Snippet } from 'svelte';
+
+  interface $$Props {
+    kind?: 'primary' | 'accent' | 'ghost' | 'solid' | 'danger';
+    size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
+    icon?: any;
+    iconRight?: any;
+    children?: Snippet;
+    onclick?: (e: MouseEvent) => void;
+  }
+
+  let {
+    kind = 'ghost',
+    size = 'md',
+    disabled = false,
+    icon = null,
+    iconRight = null,
+    children,
+    onclick,
+  }: $$Props = $props();
 
   const sizes = {
     sm: { h: 26, px: 10, fs: 12 },
@@ -32,12 +48,14 @@
   style:color={theme.fg}
   style:border="1px solid {theme.bd}"
   class="btn"
-  on:click
+  {onclick}
 >
   {#if icon}
     <span class="icon">{icon}</span>
   {/if}
-  <slot />
+  {#if children}
+    {@render children()}
+  {/if}
   {#if iconRight}
     <span class="icon">{iconRight}</span>
   {/if}

@@ -30,7 +30,7 @@
 <div class="system-status">
   {#if loading}
     <div class="loading">
-      <div class="spinner" />
+      <div class="spinner"></div>
       Loading system status...
     </div>
   {:else if status}
@@ -69,7 +69,7 @@
           <div
             class="progress-fill"
             style="width: {formatPercent(status.storage_bytes_used, status.storage_total_bytes)}%"
-          />
+          ></div>
         </div>
       </div>
 
@@ -79,7 +79,7 @@
           <span class="stat-title">Status</span>
         </div>
         <div class="status-badge ok">
-          <div class="status-dot" />
+          <div class="status-dot"></div>
           Healthy
         </div>
       </div>
