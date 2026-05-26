@@ -1,8 +1,6 @@
 //! Row mapping, mutation helpers, and query utilities for the file repository.
 
-use std::collections::HashMap;
-
-use rusqlite::{params, params_from_iter, types::Value, Connection, ErrorCode, Row};
+use rusqlite::{params, Connection, ErrorCode, Row};
 use tssp_domain::{
     ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
     UnixTimestamp, UserId, Visibility,
