@@ -19,7 +19,7 @@
   import TrashView from './TrashView.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
-  import { formatBytes, formatRelative } from '$lib/utils/formatters';
+  import { formatBytes, formatRelative } from '$lib/utils';
 
   type DriveLens = 'all' | 'images' | 'videos' | 'documents' | 'public' | 'trash';
   type Status = Awaited<ReturnType<typeof api.getStatus>>;
@@ -245,9 +245,11 @@
     if (!nextName || nextName === file.name) return;
 
     try {
-      await api.renameFile(file.id, nextName);
-      updateFileInState({ ...file, name: nextName });
-      success('Renamed', `${file.name} is now ${nextName}`);
+      const success_op = await driveStateManager.renameFile(file, nextName);
+      if (success_op) {
+        updateFileInState({ ...file, name: nextName });
+        success('Renamed', `${file.name} is now ${nextName}`);
+      }
     } catch (cause) {
       error('Rename Failed', cause instanceof Error ? cause.message : 'Could not rename file');
     }
@@ -255,15 +257,11 @@
 
   async function handlePin(file: FileRecord) {
     try {
-      if (file.pinned_at) {
-        await api.unpinFile(file.id);
-        updateFileInState({ ...file, pinned_at: undefined, pinned: false });
-        success('Unpinned', `${file.name} moved out of pinned`);
-      } else {
-        const pinnedAt = Math.floor(Date.now() / 1000);
-        await api.pinFile(file.id);
-        updateFileInState({ ...file, pinned_at: pinnedAt, pinned: true });
-        success('Pinned', `${file.name} will stay at the top`);
+      const success_op = await driveStateManager.togglePin(file);
+      if (success_op) {
+        const updated = { ...file, pinned_at: file.pinned_at ? undefined : Math.floor(Date.now() / 1000), pinned: !file.pinned_at };
+        updateFileInState(updated);
+        success(file.pinned_at ? 'Unpinned' : 'Pinned', file.pinned_at ? `${file.name} moved out of pinned` : `${file.name} will stay at the top`);
       }
     } catch (cause) {
       error('Pin Failed', cause instanceof Error ? cause.message : 'Could not update pin state');
@@ -274,11 +272,13 @@
     if (!confirm(`Move "${file.name}" to trash?`)) return;
 
     try {
-      await api.deleteFile(file.id);
-      files = files.filter((item) => item.id !== file.id);
-      if (selectedFile?.id === file.id) selectedFile = null;
-      await Promise.all([loadTrash(), refreshMetadata()]);
-      success('Moved to Trash', `${file.name} can be restored from trash`);
+      const success_op = await driveStateManager.deleteFile(file);
+      if (success_op) {
+        files = files.filter((item) => item.id !== file.id);
+        if (selectedFile?.id === file.id) selectedFile = null;
+        await Promise.all([loadTrash(), refreshMetadata()]);
+        success('Moved to Trash', `${file.name} can be restored from trash`);
+      }
     } catch (cause) {
       error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete file');
     }
@@ -286,10 +286,12 @@
 
   async function handleRestore(file: FileRecord) {
     try {
-      await api.restoreFile(file.id);
-      trash = trash.filter((item) => item.id !== file.id);
-      await Promise.all([loadLibrary(true), loadTrash()]);
-      success('Restored', `${file.name} is back in Drive`);
+      const success_op = await driveStateManager.restoreFile(file);
+      if (success_op) {
+        trash = trash.filter((item) => item.id !== file.id);
+        await Promise.all([loadLibrary(true), loadTrash()]);
+        success('Restored', `${file.name} is back in Drive`);
+      }
     } catch (cause) {
       error('Restore Failed', cause instanceof Error ? cause.message : 'Could not restore file');
     }
@@ -299,10 +301,12 @@
     if (!confirm(`Permanently purge "${file.name}" from trash?`)) return;
 
     try {
-      await api.permanentDeleteFile(file.id);
-      trash = trash.filter((item) => item.id !== file.id);
-      if (selectedFile?.id === file.id) selectedFile = null;
-      success('Purged', `${file.name} was permanently deleted`);
+      const success_op = await driveStateManager.permanentlyDeleteFile(file);
+      if (success_op) {
+        trash = trash.filter((item) => item.id !== file.id);
+        if (selectedFile?.id === file.id) selectedFile = null;
+        success('Purged', `${file.name} was permanently deleted`);
+      }
     } catch (cause) {
       error('Purge Failed', cause instanceof Error ? cause.message : 'Could not purge file');
     }
@@ -313,9 +317,11 @@
     if (!confirmed) return;
 
     try {
-      await api.emptyTrash();
-      await loadTrash();
-      success('Expired Trash Purged', 'Only items older than retention were removed');
+      const success_op = await driveStateManager.emptyTrash();
+      if (success_op) {
+        await loadTrash();
+        success('Expired Trash Purged', 'Only items older than retention were removed');
+      }
     } catch (cause) {
       error('Trash Purge Failed', cause instanceof Error ? cause.message : 'Could not purge expired trash');
     }
@@ -324,10 +330,11 @@
   async function handleMove(fileId: string, folderPath: string) {
     try {
       isMoving = true;
-      const response = await api.moveFile(fileId, folderPath);
-      updateFileInState(response.file);
-      await refreshMetadata();
-      success('Moved', `File moved to ${folderPath || 'Bucket root'}`);
+      const success_op = await driveStateManager.moveFile(fileId, folderPath);
+      if (success_op) {
+        await refreshMetadata();
+        success('Moved', `File moved to ${folderPath || 'Bucket root'}`);
+      }
     } catch (cause) {
       error('Move Failed', cause instanceof Error ? cause.message : 'Could not move file');
     } finally {
@@ -337,9 +344,10 @@
 
   async function handleShareChange(fileId: string, isPublic: boolean): Promise<VisibilityResponse | null> {
     try {
-      const response = await api.setFileVisibility(fileId, isPublic);
-      updateFileInState(response.file);
-      success(isPublic ? 'Public Link Enabled' : 'Made Private', response.file.name);
+      const response = await driveStateManager.setFileVisibility(fileId, isPublic);
+      if (response) {
+        success(isPublic ? 'Public Link Enabled' : 'Made Private', response.file?.name || 'File');
+      }
       return response;
     } catch (cause) {
       error('Share Failed', cause instanceof Error ? cause.message : 'Could not update visibility');
