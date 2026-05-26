@@ -3,8 +3,15 @@
   import type { Note } from '$lib/api';
   import { activeNoteId, searchQuery, createNewNote } from '$lib/stores/notes';
 
-  export let notes: Note[] = [];
-  export let onSelectNote: (id: string) => void = () => {};
+  interface $$Props {
+    notes?: Note[];
+    onSelectNote?: (id: string) => void;
+  }
+
+  let {
+    notes = [],
+    onSelectNote = () => {},
+  }: $$Props = $props();
 
   function formatDate(timestamp: number): string {
     const date = new Date(timestamp * 1000);
@@ -27,7 +34,7 @@
 <div class="notes-list-container">
   <div class="list-header">
     <h3>Notes</h3>
-    <button class="new-btn" on:click={handleNewNote}>
+    <button class="new-btn" onclick={handleNewNote}>
       <Icons.Plus size={16} />
     </button>
   </div>
@@ -53,7 +60,7 @@
         <button
           class="note-item"
           class:active={$activeNoteId === note.id}
-          on:click={() => {
+          onclick={() => {
             $activeNoteId = note.id;
             onSelectNote(note.id);
           }}
