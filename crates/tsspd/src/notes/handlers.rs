@@ -283,9 +283,18 @@ pub(crate) async fn add_note_tags(
     Path(id): Path<String>,
     Json(tags): Json<Vec<String>>,
 ) -> Response {
+    const MAX_TAGS_PER_REQUEST: usize = 100;
+
     if tags.is_empty() {
         return HttpNoteError::InvalidRequest {
             message: "request body must contain at least one tag".to_owned(),
+        }
+        .response();
+    }
+
+    if tags.len() > MAX_TAGS_PER_REQUEST {
+        return HttpNoteError::InvalidRequest {
+            message: format!("cannot add more than {MAX_TAGS_PER_REQUEST} tags at once"),
         }
         .response();
     }
@@ -325,6 +334,15 @@ pub(crate) async fn replace_note_tags(
     Path(id): Path<String>,
     Json(tags): Json<Vec<String>>,
 ) -> Response {
+    const MAX_TAGS_PER_REQUEST: usize = 100;
+
+    if tags.len() > MAX_TAGS_PER_REQUEST {
+        return HttpNoteError::InvalidRequest {
+            message: format!("cannot set more than {MAX_TAGS_PER_REQUEST} tags at once"),
+        }
+        .response();
+    }
+
     let note_id = match parse_note_id(id) {
         Ok(value) => value,
         Err(error) => return error.response(),

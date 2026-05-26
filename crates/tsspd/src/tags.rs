@@ -298,9 +298,18 @@ pub(crate) async fn add_tags(
     Path(id): Path<String>,
     Json(tags): Json<Vec<String>>,
 ) -> Response {
+    const MAX_TAGS_PER_REQUEST: usize = 100;
+
     if tags.is_empty() {
         return HttpTagError::InvalidRequest {
             message: "request body must contain at least one tag".to_owned(),
+        }
+        .response();
+    }
+
+    if tags.len() > MAX_TAGS_PER_REQUEST {
+        return HttpTagError::InvalidRequest {
+            message: format!("cannot add more than {MAX_TAGS_PER_REQUEST} tags at once"),
         }
         .response();
     }
