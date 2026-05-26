@@ -24,7 +24,7 @@ pub(crate) fn configure_connection(connection: &Connection) -> Result<(), Sqlite
         .pragma_update(None, "temp_store", 2_i32)
         .map_err(SqliteRepositoryError::Configure)?;
     connection
-        .busy_timeout(std::time::Duration::from_secs(30))
+        .busy_timeout(std::time::Duration::from_secs(60))
         .map_err(SqliteRepositoryError::Configure)?;
     // Improve write concurrency with increased cache and page size
     connection
