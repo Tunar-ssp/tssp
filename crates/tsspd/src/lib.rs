@@ -48,6 +48,7 @@ mod status;
 mod tags;
 pub mod temp_cleanup;
 mod terminal;
+mod terminal_pty;
 mod terminal_ws;
 pub mod trash_cleanup;
 mod upload;

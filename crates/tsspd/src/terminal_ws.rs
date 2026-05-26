@@ -1,78 +1,180 @@
-//! WebSocket handler for terminal sessions.
+//! WebSocket handler for real terminal sessions.
 //!
-//! Manages real-time bidirectional communication between client and terminal.
-//! Admin-only, workspace-scoped, with proper cleanup on disconnect.
+//! Manages bidirectional I/O between client and sandboxed shell process.
+//! Admin-only, workspace-scoped, with proper PTY lifecycle and cleanup.
 
 use axum::{
-    extract::{Path, State},
+    extract::{ws::WebSocketUpgrade, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde_json::json;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::{
-    auth::AuthContext,
-    state::HttpState,
-    terminal::{TerminalError, TerminalManager},
+    auth::AuthContext, state::HttpState, terminal::TerminalManager, terminal_pty::PtySession,
     workspace_features::SandboxStrategy,
 };
 
-/// WebSocket upgrade handler for terminal sessions (HTTP endpoint).
-/// This is a placeholder that properly validates access but returns not-implemented.
-/// Real PTY implementation will be added in a later phase.
+/// WebSocket upgrade handler for terminal sessions.
+/// Validates admin access, sandbox availability, creates PTY, streams I/O.
 pub async fn upgrade_terminal_ws(
     State(_state): State<HttpState>,
     Path(workspace_id): Path<String>,
     auth: AuthContext,
-) -> impl IntoResponse {
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Verify admin access
     if !auth.is_admin() {
-        return (StatusCode::FORBIDDEN, "Terminal access requires admin role").into_response();
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Terminal access requires admin role".to_string(),
+        ));
     }
 
-    // Validate workspace_id format (basic check)
+    // Validate workspace_id format
     if workspace_id.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, "Invalid workspace_id").into_response();
+        return Err((StatusCode::BAD_REQUEST, "Invalid workspace_id".to_string()));
     }
 
-    // Check if terminal is available (based on sandbox)
+    // Check if terminal is available
     let sandbox = SandboxStrategy::detect();
-    let terminal_manager = TerminalManager::new();
+    let terminal_manager = Arc::new(TerminalManager::new());
 
-    match terminal_manager
+    // Validate sandbox is available
+    if !sandbox.is_available() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Sandbox not available (bubblewrap or systemd-nspawn required)".to_string(),
+        ));
+    }
+
+    // Create terminal session
+    let session = terminal_manager
         .create_session(
             &workspace_id,
             auth.user_id.as_str(),
             crate::terminal::TerminalConfig {
-                workspace_dir: std::path::PathBuf::from(&workspace_id),
+                workspace_dir: PathBuf::from(&workspace_id),
                 sandbox,
                 env: std::collections::HashMap::new(),
-                idle_timeout: 1800,
-                max_lifetime: 3600,
+                idle_timeout: 1800, // 30 minutes
+                max_lifetime: 3600, // 1 hour
             },
         )
         .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let session_id = session.id.clone();
+
+    // Upgrade WebSocket and handle the connection
+    Ok(ws.on_upgrade(move |socket| {
+        handle_terminal_ws(socket, session_id, terminal_manager, workspace_id)
+    }))
+}
+
+/// Handle WebSocket connection for terminal I/O.
+async fn handle_terminal_ws(
+    mut socket: axum::extract::ws::WebSocket,
+    session_id: crate::terminal::TerminalSessionId,
+    terminal_manager: Arc<TerminalManager>,
+    workspace_id: String,
+) {
+    // Spawn PTY process in workspace
+    let workspace_path = PathBuf::from(&workspace_id);
+    let mut pty_session = match PtySession::spawn_in_workspace(&workspace_path).await {
+        Ok(pty) => {
+            // Mark session as started in manager
+            if terminal_manager.mark_started(&session_id).await.is_err() {
+                let msg_text = json!({"error": "Failed to mark session started"}).to_string();
+                let _ = socket
+                    .send(axum::extract::ws::Message::Text(msg_text.into()))
+                    .await;
+                return;
+            }
+            pty
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to start terminal: {e}");
+            let msg_text = json!({"error": error_msg}).to_string();
+            let _ = socket
+                .send(axum::extract::ws::Message::Text(msg_text.into()))
+                .await;
+            let _ = terminal_manager.close_session(&session_id).await;
+            return;
+        }
+    };
+
+    // Send connection established message
+    let connect_msg = json!({"type": "connected", "session_id": session_id.as_str()}).to_string();
+    if socket
+        .send(axum::extract::ws::Message::Text(connect_msg.into()))
+        .await
+        .is_err()
     {
-        Ok(_session) => {
-            // Session created successfully
-            // WebSocket upgrade would happen here in the real implementation
-            let msg = json!({
-                "status": "ready",
-                "message": "Terminal WebSocket upgrade not yet implemented - foundation in place"
-            });
-            (StatusCode::NOT_IMPLEMENTED, msg.to_string()).into_response()
-        }
-        Err(TerminalError::Unauthorized) => {
-            (StatusCode::FORBIDDEN, "Unauthorized to access terminal").into_response()
-        }
-        Err(TerminalError::Unavailable(msg)) => {
-            let response = json!({ "error": msg });
-            (StatusCode::SERVICE_UNAVAILABLE, response.to_string()).into_response()
-        }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to create terminal session",
-        )
-            .into_response(),
+        let _ = terminal_manager.close_session(&session_id).await;
+        return;
     }
+
+    // Main I/O loop
+    loop {
+        tokio::select! {
+            // Handle incoming WebSocket messages (input)
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(axum::extract::ws::Message::Text(text))) => {
+                        let _ = terminal_manager.update_activity(&session_id).await;
+
+                        if let Ok(input_msg) = serde_json::from_str::<serde_json::Value>(text.as_str()) {
+                            if let Some(input_data) = input_msg.get("input").and_then(|v| v.as_str()) {
+                                if let Err(e) = pty_session.write_input(input_data.as_bytes()).await {
+                                    let err_msg = json!({"error": format!("Write failed: {e}")}).to_string();
+                                    let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Some(Ok(axum::extract::ws::Message::Close(_))) => break,
+                    Some(Err(_)) | None => break,
+                    _ => {}
+                }
+            }
+
+            // Poll for output from PTY
+            () = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
+                match pty_session.read_output().await {
+                    Ok(data) if data.is_empty() => {
+                        // Process exited
+                        let _ = socket
+                            .send(axum::extract::ws::Message::Text(
+                                json!({"type": "exit", "code": 0}).to_string().into()
+                            ))
+                            .await;
+                        break;
+                    }
+                    Ok(data) => {
+                        let _ = terminal_manager.update_activity(&session_id).await;
+                        let output_msg = json!({
+                            "type": "output",
+                            "data": String::from_utf8_lossy(&data)
+                        }).to_string();
+                        if socket
+                            .send(axum::extract::ws::Message::Text(output_msg.into()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+    }
+
+    // Cleanup
+    let _ = pty_session.kill().await;
+    let _ = terminal_manager.close_session(&session_id).await;
 }

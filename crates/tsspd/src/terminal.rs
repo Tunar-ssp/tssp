@@ -14,6 +14,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::SystemTime;
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -97,10 +98,11 @@ pub struct TerminalSession {
 }
 
 /// Terminal session state.
-#[derive(Debug, Clone)]
-struct TerminalSessionState {
+#[derive(Debug)]
+pub struct TerminalSessionState {
     pub session: TerminalSession,
-    pub created_at: std::time::SystemTime,
+    pub created_at: SystemTime,
+    pub started_at: Option<SystemTime>,
 }
 
 /// Terminal session manager.
@@ -166,7 +168,8 @@ impl TerminalManager {
             session_id,
             TerminalSessionState {
                 session: session.clone(),
-                created_at: std::time::SystemTime::now(),
+                created_at: SystemTime::now(),
+                started_at: None,
             },
         );
 
@@ -202,8 +205,42 @@ impl TerminalManager {
     ) -> Result<(), TerminalError> {
         let mut sessions = self.sessions.lock().await;
         if let Some(state) = sessions.get_mut(session_id.as_str()) {
-            state.session.last_activity = std::time::SystemTime::now();
+            state.session.last_activity = SystemTime::now();
             Ok(())
+        } else {
+            Err(TerminalError::SessionNotFound)
+        }
+    }
+
+    /// Mark session as started (PTY process is running).
+    pub async fn mark_started(&self, session_id: &TerminalSessionId) -> Result<(), TerminalError> {
+        let mut sessions = self.sessions.lock().await;
+        if let Some(state) = sessions.get_mut(session_id.as_str()) {
+            state.started_at = Some(SystemTime::now());
+            Ok(())
+        } else {
+            Err(TerminalError::SessionNotFound)
+        }
+    }
+
+    /// Check if session is active (created and started).
+    pub async fn is_active(&self, session_id: &TerminalSessionId) -> Result<bool, TerminalError> {
+        let sessions = self.sessions.lock().await;
+        if let Some(state) = sessions.get(session_id.as_str()) {
+            Ok(state.started_at.is_some())
+        } else {
+            Err(TerminalError::SessionNotFound)
+        }
+    }
+
+    /// Get session creation time (for timeout calculations).
+    pub async fn get_created_at(
+        &self,
+        session_id: &TerminalSessionId,
+    ) -> Result<SystemTime, TerminalError> {
+        let sessions = self.sessions.lock().await;
+        if let Some(state) = sessions.get(session_id.as_str()) {
+            Ok(state.created_at)
         } else {
             Err(TerminalError::SessionNotFound)
         }
