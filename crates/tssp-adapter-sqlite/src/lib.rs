@@ -29,8 +29,8 @@ pub(crate) use migrations::{migration_applied, record_migration};
 pub(crate) use query::map_domain_repository_error;
 use query::{
     cleanup_orphaned_tags, count, ensure_file_exists, find_file_in_transaction, insert_file_row,
-    insert_tags, load_tags, map_file_row, map_rusqlite_repository_error, normalize_folder_prefix,
-    validate_list_limit,
+    insert_tags, load_tags, load_tags_batch, map_file_row, map_rusqlite_repository_error,
+    normalize_folder_prefix, validate_list_limit,
 };
 
 /// `SQLite` metadata repository.
@@ -406,10 +406,15 @@ impl FileRepository for SqliteFileRepository {
 
         let mut records = Vec::new();
         while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            let mut record = map_file_row(row)?;
-            let id = record.id.clone();
-            record.tags = load_tags(&connection, &id)?;
-            records.push(record);
+            records.push(map_file_row(row)?);
+        }
+
+        let ids: Vec<FileId> = records.iter().map(|f| f.id.clone()).collect();
+        let mut tags_by_id = load_tags_batch(&connection, &ids)?;
+        for file in &mut records {
+            if let Some(tags) = tags_by_id.remove(&file.id) {
+                file.tags = tags;
+            }
         }
 
         let has_more = records.len() > page_limit;
@@ -746,11 +751,17 @@ impl FileRepository for SqliteFileRepository {
         let mut rows = statement.query([]).map_err(map_rusqlite_repository_error)?;
         let mut records = Vec::new();
         while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            let mut record = map_file_row(row)?;
-            let id = record.id.clone();
-            record.tags = load_tags(&connection, &id)?;
-            records.push(record);
+            records.push(map_file_row(row)?);
         }
+
+        let ids: Vec<FileId> = records.iter().map(|f| f.id.clone()).collect();
+        let mut tags_by_id = load_tags_batch(&connection, &ids)?;
+        for file in &mut records {
+            if let Some(tags) = tags_by_id.remove(&file.id) {
+                file.tags = tags;
+            }
+        }
+
         Ok(records)
     }
 
@@ -799,11 +810,17 @@ impl FileRepository for SqliteFileRepository {
 
         let mut records = Vec::new();
         while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            let mut record = map_file_row(row)?;
-            let id = record.id.clone();
-            record.tags = load_tags(&connection, &id)?;
-            records.push(record);
+            records.push(map_file_row(row)?);
         }
+
+        let ids: Vec<FileId> = records.iter().map(|f| f.id.clone()).collect();
+        let mut tags_by_id = load_tags_batch(&connection, &ids)?;
+        for file in &mut records {
+            if let Some(tags) = tags_by_id.remove(&file.id) {
+                file.tags = tags;
+            }
+        }
+
         Ok(records)
     }
 

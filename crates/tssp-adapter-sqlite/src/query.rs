@@ -1,6 +1,8 @@
 //! Row mapping, mutation helpers, and query utilities for the file repository.
 
-use rusqlite::{params, Connection, ErrorCode, Row};
+use std::collections::HashMap;
+
+use rusqlite::{params, params_from_iter, types::Value, Connection, ErrorCode, Row};
 use tssp_domain::{
     ContentHash, FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle, Tag,
     UnixTimestamp, UserId, Visibility,
@@ -164,6 +166,59 @@ pub(crate) fn load_tags(connection: &Connection, id: &FileId) -> Result<Vec<Tag>
         tags.push(Tag::new(display).map_err(|error| map_domain_repository_error(&error))?);
     }
     Ok(tags)
+}
+
+pub(crate) fn load_tags_batch(
+    connection: &Connection,
+    ids: &[FileId],
+) -> Result<HashMap<FileId, Vec<Tag>>, RepositoryError> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut results = HashMap::with_capacity(ids.len());
+    for id in ids {
+        results.insert(id.clone(), Vec::new());
+    }
+
+    // SQLite has a limit on parameters, usually 999 or 32766.
+    // For TSSP, we usually load up to 500 records, so it fits in one query.
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT file_tags.file_id, tags.display
+         FROM tags
+         JOIN file_tags ON file_tags.tag_key = tags.key
+         WHERE file_tags.file_id IN ({placeholders})
+         ORDER BY file_tags.file_id, tags.key"
+    );
+
+    let parameters: Vec<Value> = ids
+        .iter()
+        .map(|id| Value::Text(id.as_str().to_owned()))
+        .collect();
+
+    let mut statement = connection
+        .prepare(&sql)
+        .map_err(map_rusqlite_repository_error)?;
+    let mut rows = statement
+        .query(params_from_iter(parameters))
+        .map_err(map_rusqlite_repository_error)?;
+
+    while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+        let file_id_str: String = row.get(0).map_err(map_rusqlite_repository_error)?;
+        let display: String = row.get(1).map_err(map_rusqlite_repository_error)?;
+
+        let file_id = FileId::new(file_id_str).map_err(|error| map_domain_repository_error(&error))?;
+        let tag = Tag::new(display).map_err(|error| map_domain_repository_error(&error))?;
+
+        if let Some(tags) = results.get_mut(&file_id) {
+            tags.push(tag);
+        }
+    }
+
+    Ok(results)
 }
 
 pub(crate) fn count<P>(
