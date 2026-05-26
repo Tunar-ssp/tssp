@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { slashCommands, filterCommands, groupCommands } from '$lib/blocks/slashCommands';
+  import { filterCommands, getCommandsWithCategories } from '$lib/blocks/slashCommands';
+  import type { ExtendedSlashCommand } from '$lib/blocks/slashCommands';
   import type { SlashCommand } from '$lib/blocks/types';
   import { onMount } from 'svelte';
 
@@ -13,18 +14,35 @@
   let { query = '', position = { top: 0, left: 0 }, onSelect, onClose }: Props = $props();
 
   let selectedIndex = $state(0);
-  let filteredCommands = $state<SlashCommand[]>([]);
+  let filteredCommands = $state<ExtendedSlashCommand[]>([]);
+  let displayItems = $state<Array<
+    { type: 'header'; label: string } | { type: 'command'; command: ExtendedSlashCommand }
+  >>([]);
+  let selectableItems = $state<ExtendedSlashCommand[]>([]);
   let menuElement: HTMLDivElement;
 
   $effect(() => {
     filteredCommands = filterCommands(query);
+
+    // If search query, show flat list. Otherwise show categorized
+    if (query.trim()) {
+      displayItems = filteredCommands.map(cmd => ({ type: 'command' as const, command: cmd }));
+    } else {
+      displayItems = getCommandsWithCategories();
+    }
+
+    // Track selectable items (skip headers)
+    selectableItems = displayItems
+      .filter(item => item.type === 'command')
+      .map(item => (item as any).command);
+
     selectedIndex = 0;
   });
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      selectedIndex = Math.min(selectedIndex + 1, filteredCommands.length - 1);
+      selectedIndex = Math.min(selectedIndex + 1, selectableItems.length - 1);
       scrollToSelected();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -32,8 +50,8 @@
       scrollToSelected();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filteredCommands[selectedIndex]) {
-        onSelect?.(filteredCommands[selectedIndex]);
+      if (selectableItems[selectedIndex]) {
+        onSelect?.(selectableItems[selectedIndex]);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -66,25 +84,44 @@
   tabindex="0"
   onkeydown={handleKeyDown}
 >
-  {#if filteredCommands.length === 0}
-    <div class="no-results">No commands found</div>
+  {#if selectableItems.length === 0}
+    <div class="no-results">
+      <div class="no-results-icon">✨</div>
+      <div>No commands found</div>
+      <div class="no-results-hint">Try searching for headings, lists, or code</div>
+    </div>
   {:else}
     <div class="commands-list">
-      {#each filteredCommands as command, idx}
-        <button
-          class="command-item"
-          class:selected={selectedIndex === idx}
-          role="option"
-          aria-selected={selectedIndex === idx}
-          onclick={() => handleSelect(command)}
-          onmouseenter={() => (selectedIndex = idx)}
-        >
-          <span class="command-icon">{command.icon}</span>
-          <div class="command-info">
-            <div class="command-label">{command.label}</div>
-            <div class="command-description">{command.description}</div>
-          </div>
-        </button>
+      {#each displayItems as item, itemIdx}
+        {#if item.type === 'header'}
+          <div class="category-header">{item.label}</div>
+        {:else}
+          {@const command = item.command}
+          {@const selectIdx = selectableItems.indexOf(command)}
+          <button
+            class="command-item"
+            class:selected={selectedIndex === selectIdx}
+            role="option"
+            aria-selected={selectedIndex === selectIdx}
+            onclick={() => handleSelect(command)}
+            onmouseenter={() => (selectedIndex = selectIdx)}
+          >
+            <span class="command-icon">{command.icon}</span>
+            <div class="command-info">
+              <div class="command-header">
+                <div class="command-label">{command.label}</div>
+                {#if command.metadata?.shortcuts && command.metadata.shortcuts.length > 0}
+                  <div class="command-shortcuts">
+                    {#each command.metadata.shortcuts as shortcut}
+                      <kbd>{shortcut}</kbd>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+              <div class="command-description">{command.description}</div>
+            </div>
+          </button>
+        {/if}
       {/each}
     </div>
   {/if}
