@@ -111,6 +111,7 @@ pub fn build_router(state: HttpState) -> Router {
                 .patch(crate::rename::rename_file)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/files/{id}/restore",
             post(crate::delete::restore_file).options(options_response),
@@ -320,6 +321,7 @@ pub fn build_router(state: HttpState) -> Router {
                 .post(crate::admin::admin_create_user)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/admin/users/{id}",
             axum::routing::delete(crate::admin::admin_delete_user).options(options_response),
@@ -332,6 +334,7 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/admin/users/{id}/role",
             axum::routing::put(crate::admin::admin_set_role).options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/admin/users/{id}/devices",
             axum::routing::delete(crate::admin::admin_revoke_user_devices)
@@ -380,6 +383,7 @@ pub fn build_router(state: HttpState) -> Router {
                 .post(crate::admin::admin_editor_create_document)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/admin/editor/workspaces/{id}/documents/{document_id}",
             get(crate::admin::admin_editor_get_document)
@@ -387,6 +391,7 @@ pub fn build_router(state: HttpState) -> Router {
                 .delete(crate::admin::admin_editor_delete_document)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/admin/editor/check",
             post(crate::admin::admin_editor_check).options(options_response),
@@ -401,6 +406,7 @@ pub fn build_router(state: HttpState) -> Router {
                 .post(crate::workspaces::create_workspace)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/workspaces/{id}",
             get(crate::workspaces::get_workspace)
@@ -408,6 +414,7 @@ pub fn build_router(state: HttpState) -> Router {
                 .delete(crate::workspaces::delete_workspace)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/workspaces/{id}/capabilities",
             get(crate::workspaces::workspace_capabilities).options(options_response),
@@ -431,20 +438,24 @@ pub fn build_router(state: HttpState) -> Router {
                 .delete(crate::workspaces::delete_workspace_file)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/workspaces/{workspace_id}/files/content",
             get(crate::workspaces::read_workspace_file)
                 .put(crate::workspaces::write_workspace_file)
                 .options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/workspaces/{workspace_id}/files/move",
             patch(crate::workspaces::move_workspace_file).options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/workspaces/{workspace_id}/dirs",
             post(crate::workspaces::create_workspace_dir).options(options_response),
         )
+        .layer(json_body_limit())
         .route(
             "/api/v1/workspaces/{id}/terminal/ws",
             get(crate::terminal_ws::upgrade_terminal_ws),
