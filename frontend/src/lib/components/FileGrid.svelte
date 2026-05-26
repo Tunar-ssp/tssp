@@ -4,8 +4,15 @@
   import FileIcon from './FileIcon.svelte';
   import { selectedIds, toggleSelect, selectAll, clearSelection } from '$lib/stores/drive';
 
-  export let files: FileRecord[] = [];
-  export let loading: boolean = false;
+  interface $$Props {
+    files?: FileRecord[];
+    loading?: boolean;
+  }
+
+  let {
+    files = [],
+    loading = false,
+  }: $$Props = $props();
 
   function formatSize(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -15,7 +22,8 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  function formatDate(dateStr: string): string {
+  function formatDate(dateStr: string | number | undefined): string {
+    if (!dateStr) return '';
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
   }
@@ -28,7 +36,7 @@
     clearSelection();
   }
 
-  let viewMode: 'grid' | 'list' = 'grid';
+  let viewMode = $state<'grid' | 'list'>('grid');
 </script>
 
 <div class="file-grid-container">

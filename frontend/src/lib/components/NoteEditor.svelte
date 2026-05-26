@@ -17,11 +17,13 @@
 
   let saveTimeout: number;
 
-  $: if (note) {
-    title = note.title;
-    body = note.body;
-    tags = note.tags.join(', ');
-  }
+  $effect.pre(() => {
+    if (note) {
+      title = note.title;
+      body = note.body;
+      tags = note.tags.join(', ');
+    }
+  });
 
   function handleTitleChange(e: Event) {
     const target = e.target as HTMLInputElement;
