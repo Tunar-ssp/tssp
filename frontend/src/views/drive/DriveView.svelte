@@ -752,7 +752,6 @@
   .ghost-btn,
   .danger-btn,
   .sidebar-item,
-  .pill-btn,
   .view-toggle button {
     display: inline-flex;
     align-items: center;
@@ -975,13 +974,6 @@
     justify-content: flex-end;
   }
 
-  .filter-pills {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .pill-btn,
   .view-toggle button {
     height: 32px;
     padding: 0 12px;
@@ -991,7 +983,6 @@
     color: var(--text-2);
   }
 
-  .pill-btn.active,
   .view-toggle button.active {
     background: var(--surface-hi);
     border-color: var(--border-2);
