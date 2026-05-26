@@ -55,7 +55,7 @@ impl SqliteFileRepository {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteRepositoryError> {
         let manager = SqliteConnectionManager::file(path.as_ref());
         let pool = Pool::builder()
-            .max_size(10)
+            .max_size(30)
             .build(manager)
             .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
 
