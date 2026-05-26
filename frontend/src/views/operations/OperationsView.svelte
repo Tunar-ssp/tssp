@@ -4,6 +4,7 @@
   import { api, type AdminActivityItem, type AdminSession, type AdminUser, type FileRecord } from '$lib/api';
   import SafeConsole from '$lib/components/SafeConsole.svelte';
   import { error, success } from '$lib/stores/notifications';
+  import { formatBytes, formatRelative } from '$lib/utils/formatters';
 
   type AdminSection = 'overview' | 'users' | 'sessions' | 'devices' | 'public' | 'activity' | 'maintenance';
 
@@ -123,24 +124,6 @@
     } catch (cause) {
       error('Remove Failed', cause instanceof Error ? cause.message : 'Could not revoke device');
     }
-  }
-
-  function formatBytes(bytes = 0) {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    const value = bytes / 1024 ** index;
-    return `${value.toFixed(index === 0 ? 0 : value >= 10 ? 0 : 1)} ${units[index]}`;
-  }
-
-  function formatRelative(epochSeconds?: number) {
-    if (!epochSeconds) return 'just now';
-    const delta = Math.max(0, Math.floor(Date.now() / 1000) - epochSeconds);
-    if (delta < 60) return 'just now';
-    if (delta < 3_600) return `${Math.floor(delta / 60)}m`;
-    if (delta < 86_400) return `${Math.floor(delta / 3_600)}h`;
-    if (delta < 604_800) return `${Math.floor(delta / 86_400)}d`;
-    return `${Math.floor(delta / 604_800)}w`;
   }
 
   function sectionTitle(section: AdminSection) {
