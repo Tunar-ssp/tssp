@@ -1088,7 +1088,7 @@ pub(crate) async fn workspace_capabilities(
     // Terminal is admin-only
     let terminal = if auth.is_admin() {
         // Check if sandbox is available
-        let sandbox = crate::workspace_features::SandboxStrategy::detect();
+        let sandbox = crate::workspace_features::detect_sandbox();
         if sandbox.is_available() {
             TerminalCapability::Available
         } else {
@@ -1142,7 +1142,7 @@ pub(crate) async fn terminal_status(
     }
 
     // Check if terminal is available
-    let sandbox = crate::workspace_features::SandboxStrategy::detect();
+    let sandbox = crate::workspace_features::detect_sandbox();
     let available = sandbox.is_available();
     let reason = if available {
         None

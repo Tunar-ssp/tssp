@@ -5,18 +5,22 @@
 #![allow(dead_code)]
 
 use serde::Serialize;
+pub use tssp_domain::{SandboxStrategy, TerminalCapability};
 
-/// Workspace terminal capability status.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub enum TerminalCapability {
-    /// Terminal is enabled and sandbox is configured.
-    Available,
-    /// Terminal feature is disabled in config.
-    Disabled,
-    /// Sandbox binary/setup is missing or unavailable.
-    UnavailableSandbox,
-    /// User lacks required permissions (admin).
-    Forbidden,
+/// Detects available sandbox on the system.
+pub fn detect_sandbox() -> SandboxStrategy {
+    // Check for bubblewrap first (preferred, lighter weight)
+    if which::which("bwrap").is_ok() {
+        return SandboxStrategy::Bubblewrap;
+    }
+
+    // Check for systemd-nspawn (heavier but more capable)
+    if which::which("systemd-nspawn").is_ok() {
+        return SandboxStrategy::Systemd;
+    }
+
+    // No sandbox available
+    SandboxStrategy::None
 }
 
 /// Workspace LSP capability status.
@@ -30,40 +34,6 @@ pub enum LspCapability {
     Unavailable { reason: String },
     /// User lacks required permissions.
     Forbidden,
-}
-
-/// Terminal sandbox implementation strategy.
-#[derive(Debug, Clone, Copy)]
-pub enum SandboxStrategy {
-    /// Use bubblewrap if available.
-    Bubblewrap,
-    /// Use systemd-nspawn if available.
-    Systemd,
-    /// No sandbox, terminal unavailable.
-    None,
-}
-
-impl SandboxStrategy {
-    /// Detects available sandbox on the system.
-    pub fn detect() -> Self {
-        // Check for bubblewrap first (preferred, lighter weight)
-        if which::which("bwrap").is_ok() {
-            return Self::Bubblewrap;
-        }
-
-        // Check for systemd-nspawn (heavier but more capable)
-        if which::which("systemd-nspawn").is_ok() {
-            return Self::Systemd;
-        }
-
-        // No sandbox available
-        Self::None
-    }
-
-    /// Returns true if sandbox is available.
-    pub fn is_available(self) -> bool {
-        !matches!(self, Self::None)
-    }
 }
 
 /// Workspace feature capabilities report.
@@ -81,10 +51,5 @@ mod tests {
     fn terminal_capability_comparison() {
         assert_eq!(TerminalCapability::Available, TerminalCapability::Available);
         assert_ne!(TerminalCapability::Available, TerminalCapability::Disabled);
-    }
-
-    #[test]
-    fn sandbox_strategy_none_not_available() {
-        assert!(!SandboxStrategy::None.is_available());
     }
 }

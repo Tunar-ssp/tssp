@@ -50,7 +50,7 @@ pub async fn upgrade_terminal_ws(
     }
 
     // Check if terminal is available
-    let sandbox = SandboxStrategy::detect();
+    let sandbox = crate::workspace_features::detect_sandbox();
     let terminal_manager = state.terminal_manager.clone();
 
     // Validate sandbox is available

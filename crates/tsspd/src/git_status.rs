@@ -3,18 +3,9 @@
 //! Detects if workspace root is a git repository and provides
 //! branch name, status, and changed files.
 
-use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct GitStatus {
-    pub is_repo: bool,
-    pub branch: Option<String>,
-    pub changed_count: u32,
-    pub staged_count: u32,
-    pub untracked_count: u32,
-}
+pub use tssp_domain::GitStatus;
 
 /// Detects git repository and retrieves status.
 pub fn detect_git_status(workspace_root: &Path) -> GitStatus {
