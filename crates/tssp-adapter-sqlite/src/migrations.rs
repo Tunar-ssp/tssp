@@ -98,7 +98,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_audit_events_table(connection)?;
     migrate_workspace_files_table(connection)?;
     migrate_session_creator_column(connection)?;
-    migrate_public_link_expiry(connection)
+    migrate_public_link_expiry(connection)?;
+    migrate_upload_sessions_table(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -432,6 +433,41 @@ pub(crate) fn migrate_public_link_expiry(
         .map_err(SqliteRepositoryError::Migration)?;
 
     record_migration(connection, 17)?;
+    Ok(())
+}
+
+/// Adds table for persistent chunked upload sessions (schema v18).
+pub(crate) fn migrate_upload_sessions_table(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 18)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS upload_sessions (
+                id TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                total_size INTEGER NOT NULL CHECK (total_size > 0),
+                chunk_size INTEGER NOT NULL,
+                uploaded_chunks TEXT NOT NULL,
+                folder_path TEXT NOT NULL DEFAULT '',
+                owner_id TEXT,
+                tags TEXT NOT NULL DEFAULT '',
+                mime_type TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            ) STRICT;
+
+            CREATE INDEX IF NOT EXISTS idx_upload_sessions_owner ON upload_sessions(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_upload_sessions_updated_at ON upload_sessions(updated_at);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 18)?;
     Ok(())
 }
 

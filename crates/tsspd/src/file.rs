@@ -93,7 +93,7 @@ pub(crate) struct ThumbnailQuery {
 /// GET /api/v1/files/{id}/thumbnail?size={small|medium|large}
 ///
 /// Returns 404 for non-image files.
-/// Returns 202 Accepted when the thumbnail is not yet generated (lazy mode).
+/// Returns 501 Not Implemented because thumbnail generation is not yet implemented.
 pub(crate) async fn get_file_thumbnail(
     State(state): State<HttpState>,
     crate::auth::OptionalAuthContext(auth): crate::auth::OptionalAuthContext,
@@ -178,16 +178,15 @@ pub(crate) async fn get_file_thumbnail(
             .into_response();
     }
 
-    // Lazy mode: thumbnail generation is deferred. Return 202 with retry hint.
+    // Thumbnail generation is not implemented yet.
     (
-        StatusCode::ACCEPTED,
-        Json(serde_json::json!({
-            "status": "pending",
-            "message": "thumbnail is being generated",
-            "retry_after_seconds": 5,
-            "file_id": record.id.as_str(),
-            "size": size,
-        })),
+        StatusCode::NOT_IMPLEMENTED,
+        Json(ErrorResponse {
+            error: ErrorBody {
+                code: "not_implemented",
+                message: "thumbnail generation is not yet implemented".to_owned(),
+            },
+        }),
     )
         .into_response()
 }
