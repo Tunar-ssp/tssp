@@ -17,7 +17,7 @@ export function generateBlockId(): string {
  * Create a new block with sensible defaults
  */
 export function createBlock(options: BlockCreateOptions, id: string = generateBlockId()): TypedBlock {
-  const base = {
+  const base: Block = {
     id,
     type: options.type,
     content: options.content || '',
@@ -37,7 +37,7 @@ export function createBlock(options: BlockCreateOptions, id: string = generateBl
         ...base,
         type: 'callout',
         color: options.color || 'blue',
-        icon: options.icon || '💡',
+        icon: '💡',
       } as CalloutBlock;
 
     case 'code':

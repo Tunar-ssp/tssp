@@ -25,24 +25,52 @@
     onUpdate?.(content);
   }
 
-  const Tag = `h${level}` as 'h1' | 'h2' | 'h3';
+  const levelClass = `level-${level}`;
 </script>
 
-<svelte:element
-  this={Tag}
-  bind:this={contentElement}
-  role="textbox"
-  tabindex={isSelected ? 0 : -1}
-  contenteditable
-  class="block-heading"
-  class:selected={isSelected}
-  class:level-{level}
-  onInput={handleInput}
-  onKeyDown={onKeyDown}
-  data-placeholder={`Heading ${level}...`}
->
-  {block.content}
-</svelte:element>
+{#if level === 1}
+  <h1
+    bind:this={contentElement}
+    role="textbox"
+    tabindex={isSelected ? 0 : -1}
+    contenteditable
+    class="block-heading level-1"
+    class:selected={isSelected}
+    oninput={handleInput}
+    onkeydown={onKeyDown}
+    data-placeholder="Heading 1..."
+  >
+    {block.content}
+  </h1>
+{:else if level === 2}
+  <h2
+    bind:this={contentElement}
+    role="textbox"
+    tabindex={isSelected ? 0 : -1}
+    contenteditable
+    class="block-heading level-2"
+    class:selected={isSelected}
+    oninput={handleInput}
+    onkeydown={onKeyDown}
+    data-placeholder="Heading 2..."
+  >
+    {block.content}
+  </h2>
+{:else}
+  <h3
+    bind:this={contentElement}
+    role="textbox"
+    tabindex={isSelected ? 0 : -1}
+    contenteditable
+    class="block-heading level-3"
+    class:selected={isSelected}
+    oninput={handleInput}
+    onkeydown={onKeyDown}
+    data-placeholder="Heading 3..."
+  >
+    {block.content}
+  </h3>
+{/if}
 
 <style>
   .block-heading {

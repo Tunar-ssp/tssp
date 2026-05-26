@@ -25,41 +25,55 @@
   }
 </script>
 
-<div
-  bind:this={contentElement}
-  role="textbox"
-  tabindex={isSelected ? 0 : -1}
-  contenteditable
-  class="block-paragraph"
-  class:selected={isSelected}
-  oninput={handleInput}
-  onkeydown={onKeyDown}
-  data-placeholder="Type or use / for commands..."
->
-  {block.content}
+<div class="block-quote" class:selected={isSelected}>
+  <div class="quote-bar"></div>
+  <div
+    bind:this={contentElement}
+    role="textbox"
+    tabindex={isSelected ? 0 : -1}
+    contenteditable
+    class="quote-content"
+    oninput={handleInput}
+    onkeydown={onKeyDown}
+    data-placeholder="Quote..."
+  >
+    {block.content}
+  </div>
 </div>
 
 <style>
-  .block-paragraph {
-    min-height: 1.5em;
-    line-height: 1.6;
-    font-size: 16px;
-    color: var(--text);
+  .block-quote {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    margin: 4px 0;
+  }
+
+  .quote-bar {
+    flex-shrink: 0;
+    width: 3px;
+    background-color: var(--muted);
+    border-radius: 2px;
+  }
+
+  .quote-content {
+    flex: 1;
     outline: none;
+    font-style: italic;
+    color: var(--muted);
     word-wrap: break-word;
     white-space: pre-wrap;
     overflow-wrap: break-word;
   }
 
-  .block-paragraph:empty::before {
+  .quote-content:empty::before {
     content: attr(data-placeholder);
-    color: var(--muted);
     pointer-events: none;
   }
 
-  .block-paragraph.selected {
-    background-color: rgba(59, 130, 246, 0.05);
-    border-radius: 4px;
-    padding: 0 4px;
+  .block-quote.selected {
+    background-color: rgba(59, 130, 246, 0.1);
   }
 </style>

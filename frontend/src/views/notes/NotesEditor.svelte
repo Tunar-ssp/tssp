@@ -1,7 +1,15 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import type { Note } from '$lib/api';
-  import TiptapEditor from '$lib/components/TiptapEditor.svelte';
+  import BlockEditor from '$lib/components/blocks/BlockEditor.svelte';
+  import {
+    initializeEditor,
+    editorMarkdown,
+    editorBlocks,
+    scheduleAutosave,
+  } from '$lib/blocks/editorStore';
+  import { markdownToBlocks, blocksToMarkdown } from '$lib/blocks/utils';
+  import { onMount } from 'svelte';
 
   interface $$Props {
     note: Note | null;
@@ -23,6 +31,22 @@
     class: className,
   }: $$Props = $props();
 
+  onMount(() => {
+    if (note) {
+      // Parse body into blocks
+      const blocks = markdownToBlocks(bodyDraft);
+      initializeEditor(blocks, note.id);
+
+      // Set up markdown sync
+      const unsubscribe = editorMarkdown.subscribe((markdown) => {
+        onBodyChange?.(markdown);
+        scheduleAutosave();
+      });
+
+      return () => unsubscribe();
+    }
+  });
+
   function formatDate(timestamp: number): string {
     return new Date(timestamp * 1000).toLocaleDateString('en-US', {
       month: 'short',
@@ -32,12 +56,12 @@
     });
   }
 
-  function estimateBlockCount(text: string): number {
-    return (text.match(/^(#{1,6} |[-*] |\d+\. )/gm) || []).length || 1;
+  function getBlockCount(): number {
+    return $editorBlocks.length;
   }
 
-  function getWordCount(text: string): number {
-    return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
+  function getWordCount(): number {
+    return $editorMarkdown.trim().split(/\s+/).filter((word) => word.length > 0).length;
   }
 </script>
 
@@ -54,17 +78,13 @@
       />
       <div class="canvas-meta">
         <span><Icons.History size={14} /> Edited {formatDate(note.updated_at || note.created_at)}</span>
-        <span>{getWordCount(bodyDraft)} words</span>
-        <span>{estimateBlockCount(bodyDraft)} blocks</span>
+        <span>{getWordCount()} words</span>
+        <span>{getBlockCount()} blocks</span>
       </div>
     </div>
 
     <div class="editor-body">
-      <TiptapEditor
-        content={bodyDraft}
-        onChange={onBodyChange}
-        placeholder="Start typing... Use /slash for commands"
-      />
+      <BlockEditor />
     </div>
   {/if}
 </div>
