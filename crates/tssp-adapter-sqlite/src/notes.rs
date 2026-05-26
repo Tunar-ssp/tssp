@@ -1,9 +1,9 @@
 //! `SQLite` persistence for Markdown notes and unified search.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
-use rusqlite::{params, types::Value, Connection, Row, Transaction};
+use rusqlite::{params, params_from_iter, types::Value, Connection, Row, Transaction};
 use tssp_domain::{
     search_terms, FileRecord, NoteBody, NoteId, NoteRecord, NoteTitle, Tag, TagKey, UnixTimestamp,
     UserId,
@@ -187,9 +187,15 @@ impl NoteRepository for SqliteFileRepository {
 
         let mut notes = Vec::new();
         while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            let mut record = map_note_row(row)?;
-            record.tags = load_note_tags(&connection, &record.id)?;
-            notes.push(record);
+            notes.push(map_note_row(row)?);
+        }
+
+        let ids: Vec<NoteId> = notes.iter().map(|n| n.id.clone()).collect();
+        let mut tags_by_id = load_note_tags_batch(&connection, &ids)?;
+        for note in &mut notes {
+            if let Some(tags) = tags_by_id.remove(&note.id) {
+                note.tags = tags;
+            }
         }
 
         Ok(PagedNotes {
@@ -366,10 +372,17 @@ impl NoteRepository for SqliteFileRepository {
 
         let mut records = Vec::new();
         while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-            let mut record = map_note_row(row)?;
-            record.tags = load_note_tags(&connection, &record.id)?;
-            records.push(record);
+            records.push(map_note_row(row)?);
         }
+
+        let ids: Vec<NoteId> = records.iter().map(|n| n.id.clone()).collect();
+        let mut tags_by_id = load_note_tags_batch(&connection, &ids)?;
+        for note in &mut records {
+            if let Some(tags) = tags_by_id.remove(&note.id) {
+                note.tags = tags;
+            }
+        }
+
         Ok(records)
     }
 
@@ -452,14 +465,21 @@ fn fuzzy_file_candidates(
         .map_err(map_rusqlite_repository_error)?;
     let mut records = Vec::new();
     while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-        let mut record = crate::map_file_row(row)?;
-        let id = record.id.clone();
-        record.tags = crate::load_tags(connection, &id)?;
-        if file_matches_fuzzy(&record, terms) {
-            records.push(record);
+        records.push(crate::map_file_row(row)?);
+    }
+
+    let ids: Vec<tssp_domain::FileId> = records.iter().map(|f| f.id.clone()).collect();
+    let mut tags_by_id = crate::load_tags_batch(connection, &ids)?;
+    for file in &mut records {
+        if let Some(tags) = tags_by_id.remove(&file.id) {
+            file.tags = tags;
         }
     }
-    Ok(records)
+
+    Ok(records
+        .into_iter()
+        .filter(|record| file_matches_fuzzy(record, terms))
+        .collect())
 }
 
 fn fuzzy_note_candidates(
@@ -488,13 +508,21 @@ fn fuzzy_note_candidates(
         .map_err(map_rusqlite_repository_error)?;
     let mut records = Vec::new();
     while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
-        let mut record = map_note_row(row)?;
-        record.tags = load_note_tags(connection, &record.id)?;
-        if note_matches_fuzzy(&record, terms) {
-            records.push(record);
+        records.push(map_note_row(row)?);
+    }
+
+    let ids: Vec<NoteId> = records.iter().map(|n| n.id.clone()).collect();
+    let mut tags_by_id = load_note_tags_batch(connection, &ids)?;
+    for note in &mut records {
+        if let Some(tags) = tags_by_id.remove(&note.id) {
+            note.tags = tags;
         }
     }
-    Ok(records)
+
+    Ok(records
+        .into_iter()
+        .filter(|record| note_matches_fuzzy(record, terms))
+        .collect())
 }
 
 fn fuzzy_prefix(terms: &[String]) -> Option<String> {
@@ -797,6 +825,58 @@ pub(crate) fn load_note_tags(
         tags.push(Tag::new(display).map_err(|error| map_domain_repository_error(&error))?);
     }
     Ok(tags)
+}
+
+pub(crate) fn load_note_tags_batch(
+    connection: &Connection,
+    ids: &[NoteId],
+) -> Result<HashMap<NoteId, Vec<Tag>>, RepositoryError> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut results = HashMap::with_capacity(ids.len());
+    for id in ids {
+        results.insert(id.clone(), Vec::new());
+    }
+
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT note_tags.note_id, tags.display
+         FROM tags
+         JOIN note_tags ON note_tags.tag_key = tags.key
+         WHERE note_tags.note_id IN ({placeholders})
+         ORDER BY note_tags.note_id, tags.key"
+    );
+
+    let parameters: Vec<Value> = ids
+        .iter()
+        .map(|id| Value::Text(id.as_str().to_owned()))
+        .collect();
+
+    let mut statement = connection
+        .prepare(&sql)
+        .map_err(map_rusqlite_repository_error)?;
+    let mut rows = statement
+        .query(params_from_iter(parameters))
+        .map_err(map_rusqlite_repository_error)?;
+
+    while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+        let note_id_str: String = row.get(0).map_err(map_rusqlite_repository_error)?;
+        let display: String = row.get(1).map_err(map_rusqlite_repository_error)?;
+
+        let note_id =
+            NoteId::new(note_id_str).map_err(|error| map_domain_repository_error(&error))?;
+        let tag = Tag::new(display).map_err(|error| map_domain_repository_error(&error))?;
+
+        if let Some(tags) = results.get_mut(&note_id) {
+            tags.push(tag);
+        }
+    }
+
+    Ok(results)
 }
 
 fn insert_note_row(
