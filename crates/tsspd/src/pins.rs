@@ -373,37 +373,49 @@ pub(crate) async fn reorder(
     auth: crate::auth::AuthContext,
     Json(payload): Json<ReorderRequest>,
 ) -> Response {
+    const MAX_PINS_TO_REORDER: usize = 1000;
+
     if payload.ids.is_empty() {
         return (StatusCode::OK, Json(ReorderResponse { schema_version: 1 })).into_response();
     }
 
-    for id_str in &payload.ids {
-        let file_id = match tssp_domain::FileId::new(id_str.clone()) {
-            Ok(f) => f,
-            Err(e) => {
-                return HttpPinError::InvalidRequest {
-                    message: e.to_string(),
-                }
-                .response()
-            }
-        };
+    if payload.ids.len() > MAX_PINS_TO_REORDER {
+        return HttpPinError::InvalidRequest {
+            message: format!("cannot reorder more than {MAX_PINS_TO_REORDER} pins at once"),
+        }
+        .response();
+    }
 
-        let file = match state.stats_provider.find_file(&file_id) {
-            Ok(Some(f)) => f,
-            Ok(None) => {
-                return HttpPinError::NotFound {
-                    message: "file not found".to_owned(),
+    // Skip authorization check for admins
+    if !auth.is_admin() {
+        for id_str in &payload.ids {
+            let file_id = match tssp_domain::FileId::new(id_str.clone()) {
+                Ok(f) => f,
+                Err(e) => {
+                    return HttpPinError::InvalidRequest {
+                        message: e.to_string(),
+                    }
+                    .response()
                 }
-                .response()
-            }
-            Err(e) => return HttpPinError::Internal { message: e }.response(),
-        };
+            };
 
-        if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
-            return HttpPinError::Forbidden {
-                message: "you do not have permission to reorder pins for this file".to_owned(),
+            let file = match state.stats_provider.find_file(&file_id) {
+                Ok(Some(f)) => f,
+                Ok(None) => {
+                    return HttpPinError::NotFound {
+                        message: "file not found".to_owned(),
+                    }
+                    .response()
+                }
+                Err(e) => return HttpPinError::Internal { message: e }.response(),
+            };
+
+            if file.owner_id.as_ref() != Some(&auth.user_id) {
+                return HttpPinError::Forbidden {
+                    message: "you do not have permission to reorder pins for this file".to_owned(),
+                }
+                .response();
             }
-            .response();
         }
     }
 
@@ -744,5 +756,28 @@ mod tests {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn reorder_endpoint_rejects_too_many_pins() {
+        use crate::auth::AuthContext;
+        use crate::HttpState;
+        use axum::extract::State;
+        use axum::Json;
+        use std::sync::Arc;
+
+        let state = HttpState::test_http_state(std::path::PathBuf::from("/tmp"))
+            .with_pin_provider(Arc::new(StaticFilePinProvider));
+
+        let too_many_ids: Vec<String> = (0..1001).map(|i| format!("id{i}")).collect();
+        let response = super::reorder(
+            State(state),
+            AuthContext::open_access(),
+            Json(super::ReorderRequest {
+                ids: too_many_ids,
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }
