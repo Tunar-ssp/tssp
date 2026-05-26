@@ -838,18 +838,6 @@ impl FileRepository for SqliteFileRepository {
         }
 
         Ok(records)
-      
-        }
-
-        let ids: Vec<FileId> = records.iter().map(|f| f.id.clone()).collect();
-        let mut tags_by_id = load_tags_batch(&connection, &ids)?;
-        for file in &mut records {
-            if let Some(tags) = tags_by_id.remove(&file.id) {
-                file.tags = tags;
-            }
-        }
-
-        Ok(records)
     }
 
     fn rename_file(
