@@ -3,7 +3,13 @@
   import type { Note } from '$lib/api';
   import { isSaving, updateActiveNote, deleteNote } from '$lib/stores/notes';
 
-  export let note: Note | null;
+  interface $$Props {
+    note?: Note | null;
+  }
+
+  let {
+    note = null,
+  }: $$Props = $props();
 
   let title = '';
   let body = '';
@@ -68,7 +74,7 @@
           type="text"
           class="title-input"
           value={title}
-          on:change={handleTitleChange}
+          onchange={handleTitleChange}
           placeholder="Note title"
         />
       </div>
@@ -76,14 +82,14 @@
       <div class="header-right">
         {#if $isSaving}
           <div class="saving-indicator">
-            <div class="spinner" />
+            <div class="spinner"></div>
             <span>Saving...</span>
           </div>
         {:else}
           <span class="saved-indicator">Saved</span>
         {/if}
 
-        <button class="icon-btn" on:click={handleDelete}>
+        <button class="icon-btn" onclick={handleDelete}>
           <Icons.Trash2 size={16} />
         </button>
       </div>
@@ -93,7 +99,7 @@
       <textarea
         class="body-input"
         value={body}
-        on:input={handleBodyChange}
+        oninput={handleBodyChange}
         placeholder="Start typing..."
       />
     </div>
@@ -103,7 +109,7 @@
         type="text"
         class="tags-input"
         value={tags}
-        on:change={handleTagsChange}
+        onchange={handleTagsChange}
         placeholder="Add tags separated by commas..."
       />
     </div>
