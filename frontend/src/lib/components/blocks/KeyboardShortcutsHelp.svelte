@@ -45,10 +45,25 @@
   }
 </script>
 
-<div class="shortcuts-overlay" onclick={() => onClose?.()} onkeydown={handleEscape}>
-  <div class="shortcuts-modal" onclick={(e) => e.stopPropagation()}>
+<div
+  class="shortcuts-overlay"
+  onclick={() => onClose?.()}
+  onkeydown={handleEscape}
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="shortcuts-title"
+  tabindex="-1"
+>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="shortcuts-modal"
+    onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
+    role="document"
+    tabindex="-1"
+  >
     <div class="shortcuts-header">
-      <h2>Keyboard Shortcuts</h2>
+      <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
       <button
         class="close-btn"
         onclick={() => onClose?.()}

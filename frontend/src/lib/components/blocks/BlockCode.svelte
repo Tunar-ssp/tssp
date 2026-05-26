@@ -13,8 +13,12 @@
 
   let { block, isSelected = false, onUpdate, onLanguageChange, onKeyDown }: Props = $props();
 
-  let contentElement: HTMLDivElement;
-  let language = $state(block.language || 'javascript');
+  let contentElement = $state<HTMLDivElement>();
+  let language = $state('');
+
+  $effect(() => {
+    language = block.language || 'javascript';
+  });
 
   const languages = ['javascript', 'typescript', 'python', 'rust', 'sql', 'html', 'css', 'json'];
 
@@ -49,6 +53,7 @@
   <div
     bind:this={contentElement}
     role="textbox"
+    aria-multiline="true"
     tabindex={isSelected ? 0 : -1}
     contenteditable
     class="code-content"
@@ -96,13 +101,13 @@
     cursor: pointer;
   }
 
-  .copy-icon {
+  :global(.copy-icon) {
     cursor: pointer;
     color: var(--muted);
     transition: color 0.2s;
   }
 
-  .copy-icon:hover {
+  :global(.copy-icon:hover) {
     color: var(--text);
   }
 

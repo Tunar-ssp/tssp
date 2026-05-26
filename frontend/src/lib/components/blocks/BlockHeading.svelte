@@ -12,7 +12,7 @@
 
   let { block, level, isSelected = false, onUpdate, onKeyDown }: Props = $props();
 
-  let contentElement: HTMLHeadingElement;
+  let contentElement = $state<HTMLHeadingElement>();
 
   onMount(() => {
     if (isSelected && contentElement) {
@@ -25,51 +25,60 @@
     onUpdate?.(content);
   }
 
-  const levelClass = `level-${level}`;
+  const levelClass = $derived(`level-${level}`);
 </script>
 
 {#if level === 1}
-  <h1
-    bind:this={contentElement}
-    role="textbox"
-    tabindex={isSelected ? 0 : -1}
-    contenteditable
-    class="block-heading level-1"
-    class:selected={isSelected}
-    oninput={handleInput}
-    onkeydown={onKeyDown}
-    data-placeholder="Heading 1..."
-  >
-    {block.content}
-  </h1>
+  <div role="heading" aria-level="1">
+    <div
+      bind:this={contentElement}
+      role="textbox"
+      aria-multiline="false"
+      tabindex={isSelected ? 0 : -1}
+      contenteditable
+      class="block-heading level-1"
+      class:selected={isSelected}
+      oninput={handleInput}
+      onkeydown={onKeyDown}
+      data-placeholder="Heading 1..."
+    >
+      {block.content}
+    </div>
+  </div>
 {:else if level === 2}
-  <h2
-    bind:this={contentElement}
-    role="textbox"
-    tabindex={isSelected ? 0 : -1}
-    contenteditable
-    class="block-heading level-2"
-    class:selected={isSelected}
-    oninput={handleInput}
-    onkeydown={onKeyDown}
-    data-placeholder="Heading 2..."
-  >
-    {block.content}
-  </h2>
+  <div role="heading" aria-level="2">
+    <div
+      bind:this={contentElement}
+      role="textbox"
+      aria-multiline="false"
+      tabindex={isSelected ? 0 : -1}
+      contenteditable
+      class="block-heading level-2"
+      class:selected={isSelected}
+      oninput={handleInput}
+      onkeydown={onKeyDown}
+      data-placeholder="Heading 2..."
+    >
+      {block.content}
+    </div>
+  </div>
 {:else}
-  <h3
-    bind:this={contentElement}
-    role="textbox"
-    tabindex={isSelected ? 0 : -1}
-    contenteditable
-    class="block-heading level-3"
-    class:selected={isSelected}
-    oninput={handleInput}
-    onkeydown={onKeyDown}
-    data-placeholder="Heading 3..."
-  >
-    {block.content}
-  </h3>
+  <div role="heading" aria-level="3">
+    <div
+      bind:this={contentElement}
+      role="textbox"
+      aria-multiline="false"
+      tabindex={isSelected ? 0 : -1}
+      contenteditable
+      class="block-heading level-3"
+      class:selected={isSelected}
+      oninput={handleInput}
+      onkeydown={onKeyDown}
+      data-placeholder="Heading 3..."
+    >
+      {block.content}
+    </div>
+  </div>
 {/if}
 
 <style>

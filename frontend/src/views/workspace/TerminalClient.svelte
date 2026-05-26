@@ -15,7 +15,7 @@
     isAvailable,
   }: $$Props = $props();
 
-  let terminalElement: HTMLDivElement;
+  let terminalElement = $state<HTMLDivElement | null>(null);
   let terminal: Terminal;
   let fitAddon: FitAddon;
   let ws: WebSocket | null = null;
@@ -263,7 +263,7 @@
     background: rgba(255, 85, 85, 0.1);
   }
 
-  .terminal-status .spinner {
+  :global(.spinner) {
     animation: spin 1s linear infinite;
   }
 

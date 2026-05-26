@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import { api } from '$lib/api';
-  import { formatBytes, formatDate } from '$lib/utils/formatters';
+  import { formatBytes, formatDate } from '$lib/utils';
 
   interface $$Props {
     file?: any;

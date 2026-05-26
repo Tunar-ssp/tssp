@@ -301,7 +301,7 @@
     color: var(--text-2);
   }
 
-  .capability-loading .spinner {
+  :global(.capability-loading .spinner) {
     animation: spin 1s linear infinite;
   }
 

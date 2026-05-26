@@ -4,7 +4,7 @@
   import { api, type AdminActivityItem, type AdminSession, type AdminUser, type FileRecord } from '$lib/api';
   import SafeConsole from '$lib/components/SafeConsole.svelte';
   import { error, success } from '$lib/stores/notifications';
-  import { formatBytes, formatRelative } from '$lib/utils/formatters';
+  import { formatBytes, formatRelative } from '$lib/utils';
 
   type AdminSection = 'overview' | 'users' | 'sessions' | 'devices' | 'public' | 'activity' | 'maintenance';
 
@@ -109,7 +109,19 @@
   async function executeSafeConsoleCommand(command: string) {
     try {
       const response = await api.runAdminConsoleCommand(command);
-      return response.output || 'Command completed';
+
+      // Handle structured JSON output from backend
+      if (response.output && typeof response.output === 'object') {
+        return JSON.stringify(response.output, null, 2);
+      }
+
+      // Fallback to string output
+      if (typeof response.output === 'string') {
+        return response.output;
+      }
+
+      // Generic success message
+      return response.success ? 'Command completed successfully' : 'Command execution returned no output';
     } catch (cause) {
       return cause instanceof Error ? cause.message : 'Command failed';
     }

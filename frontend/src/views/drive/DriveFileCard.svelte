@@ -7,6 +7,8 @@
   import * as Icons from 'lucide-svelte';
   import FileIcon from '$lib/components/FileIcon.svelte';
   import type { FileRecord } from '$lib/api';
+  import { generateImageThumbnail, isImageFile } from '$lib/services/imageThumbnailService';
+  import { formatBytes, formatDate } from '$lib/utils';
 
   interface Props {
     file: FileRecord;
@@ -30,23 +32,25 @@
     onShare,
   }: Props = $props();
 
-  function formatBytes(bytes: number): string {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  }
+  let thumbnailUrl = $state<string | null>(null);
+  let thumbnailError = $state(false);
 
-  function formatDate(epochSeconds?: number): string {
-    if (!epochSeconds) return '';
-    return new Date(epochSeconds * 1000).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
+  $effect(() => {
+    if (isImageFile(file.mime_type) && layout === 'grid') {
+      generateImageThumbnail(
+        file.id,
+        `/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`,
+        'medium'
+      )
+        .then((url) => {
+          thumbnailUrl = url;
+        })
+        .catch((error) => {
+          console.warn('[DriveFileCard] Failed to generate thumbnail:', error);
+          thumbnailError = true;
+        });
+    }
+  });
 </script>
 
 {#if layout === 'grid'}
@@ -59,7 +63,11 @@
     tabindex="0"
   >
     <div class="card-thumbnail">
-      <FileIcon filename={file.name} mime={file.mime_type} size={48} />
+      {#if thumbnailUrl && !thumbnailError}
+        <img src={thumbnailUrl} alt={file.name} class="thumbnail-image" />
+      {:else}
+        <FileIcon filename={file.name} mime={file.mime_type} size={48} />
+      {/if}
     </div>
     <div class="card-info">
       <div class="card-name" title={file.name}>{file.name}</div>
@@ -143,6 +151,13 @@
     height: 80px;
     background: var(--bg);
     border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .thumbnail-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .card-info {
