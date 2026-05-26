@@ -1,8 +1,11 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+
   interface $$Props {
     variant?: 'default' | 'success' | 'warning' | 'danger' | 'info';
     size?: 'sm' | 'md';
     class?: string;
+    children?: Snippet;
   }
 
   let {
@@ -27,7 +30,9 @@
 </script>
 
 <span class="badge {variantClasses[variant]} {sizeClasses[size]} {className || ''}">
-  <slot />
+  {#if children}
+    {@render children()}
+  {/if}
 </span>
 
 <style>
