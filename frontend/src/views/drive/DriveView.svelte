@@ -8,6 +8,7 @@
     type FolderEntry,
     type VisibilityResponse,
   } from '$lib/api';
+  import { driveStateManager } from '$lib/services/driveStateService';
   import FileIcon from '$lib/components/FileIcon.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { isDriveFolder, createWorkspaceFromFolder } from '$lib/services/driveWorkspaceIntegration';
@@ -18,6 +19,7 @@
   import TrashView from './TrashView.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
+  import { formatBytes, formatRelative } from '$lib/utils/formatters';
 
   type DriveLens = 'all' | 'images' | 'videos' | 'documents' | 'public' | 'trash';
   type Status = Awaited<ReturnType<typeof api.getStatus>>;
@@ -207,24 +209,6 @@
 
   function folderCount(path: string) {
     return folderEntries.find((entry) => entry.path === path)?.file_count || 0;
-  }
-
-  function formatBytes(bytes = 0): string {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    const value = bytes / 1024 ** index;
-    return `${value.toFixed(index === 0 ? 0 : value >= 10 ? 0 : 1)} ${units[index]}`;
-  }
-
-  function formatRelative(epochSeconds?: number) {
-    if (!epochSeconds) return 'just now';
-    const delta = Math.max(0, Math.floor(Date.now() / 1000) - epochSeconds);
-    if (delta < 60) return 'just now';
-    if (delta < 3_600) return `${Math.floor(delta / 60)}m`;
-    if (delta < 86_400) return `${Math.floor(delta / 3_600)}h`;
-    if (delta < 604_800) return `${Math.floor(delta / 86_400)}d`;
-    return `${Math.floor(delta / 604_800)}w`;
   }
 
   function selectFile(file: FileRecord) {
