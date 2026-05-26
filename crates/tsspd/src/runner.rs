@@ -24,7 +24,7 @@ use tsspd::{
         UserStore,
     },
     bind_error_message, build_router, collect_garbage, spawn_advertisement,
-    spawn_startup_integrity_scan,
+    spawn_startup_integrity_scan, spawn_terminal_cleanup,
     trash_cleanup::purge_expired_trash,
     ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileRestoreProvider,
     ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationFolderProvider,
@@ -445,6 +445,8 @@ pub async fn run(cli: Cli) -> Result<(), String> {
             }
         }
     });
+
+    spawn_terminal_cleanup(state.terminal_manager.clone());
 
     let router = build_router(state);
 

@@ -16,17 +16,27 @@ use crate::{
     auth::AuthContext, state::HttpState, terminal::TerminalManager, terminal_pty::PtySession,
     workspace_features::SandboxStrategy,
 };
+use tssp_app::audit::{log_audit_event, AuditAction};
 
 /// WebSocket upgrade handler for terminal sessions.
 /// Validates admin access, sandbox availability, creates PTY, streams I/O.
 pub async fn upgrade_terminal_ws(
-    State(_state): State<HttpState>,
+    State(state): State<HttpState>,
     Path(workspace_id): Path<String>,
     auth: AuthContext,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // Verify admin access
     if !auth.is_admin() {
+        log_audit_event(
+            state.repository.as_ref(),
+            AuditAction::TerminalStart,
+            Some(&auth.user_id),
+            Some("workspace"),
+            Some(&workspace_id),
+            "forbidden",
+            Some("Admin role required"),
+        );
         return Err((
             StatusCode::FORBIDDEN,
             "Terminal access requires admin role".to_string(),
@@ -40,10 +50,19 @@ pub async fn upgrade_terminal_ws(
 
     // Check if terminal is available
     let sandbox = SandboxStrategy::detect();
-    let terminal_manager = Arc::new(TerminalManager::new());
+    let terminal_manager = state.terminal_manager.clone();
 
     // Validate sandbox is available
     if !sandbox.is_available() {
+        log_audit_event(
+            state.repository.as_ref(),
+            AuditAction::TerminalStart,
+            Some(&auth.user_id),
+            Some("workspace"),
+            Some(&workspace_id),
+            "failed",
+            Some("Sandbox not available"),
+        );
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "Sandbox not available (bubblewrap or systemd-nspawn required)".to_string(),
@@ -64,13 +83,43 @@ pub async fn upgrade_terminal_ws(
             },
         )
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .map_err(|e| {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::TerminalStart,
+                Some(&auth.user_id),
+                Some("workspace"),
+                Some(&workspace_id),
+                "failed",
+                Some(&e.to_string()),
+            );
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
 
     let session_id = session.id.clone();
+    let workspace_id_clone = workspace_id.clone();
+    let state_clone = state.clone();
+
+    log_audit_event(
+        state.repository.as_ref(),
+        AuditAction::TerminalStart,
+        Some(&auth.user_id),
+        Some("workspace"),
+        Some(&workspace_id),
+        "started",
+        Some(session_id.as_str()),
+    );
 
     // Upgrade WebSocket and handle the connection
     Ok(ws.on_upgrade(move |socket| {
-        handle_terminal_ws(socket, session_id, terminal_manager, workspace_id)
+        handle_terminal_ws(
+            socket,
+            session_id,
+            terminal_manager,
+            workspace_id,
+            workspace_id_clone,
+            state_clone,
+        )
     }))
 }
 
@@ -80,10 +129,12 @@ async fn handle_terminal_ws(
     session_id: crate::terminal::TerminalSessionId,
     terminal_manager: Arc<TerminalManager>,
     workspace_id: String,
+    workspace_id_for_audit: String,
+    state: HttpState,
 ) {
     // Spawn PTY process in workspace
     let workspace_path = PathBuf::from(&workspace_id);
-    let mut pty_session = match PtySession::spawn_in_workspace(&workspace_path).await {
+    let mut pty_session = match PtySession::spawn_in_workspace(&workspace_path) {
         Ok(pty) => {
             // Mark session as started in manager
             if terminal_manager.mark_started(&session_id).await.is_err() {
@@ -136,8 +187,7 @@ async fn handle_terminal_ws(
                             }
                         }
                     }
-                    Some(Ok(axum::extract::ws::Message::Close(_))) => break,
-                    Some(Err(_)) | None => break,
+                    Some(Ok(axum::extract::ws::Message::Close(_)) | Err(_)) | None => break,
                     _ => {}
                 }
             }
@@ -177,4 +227,14 @@ async fn handle_terminal_ws(
     // Cleanup
     let _ = pty_session.kill().await;
     let _ = terminal_manager.close_session(&session_id).await;
+
+    log_audit_event(
+        state.repository.as_ref(),
+        AuditAction::TerminalStop,
+        None,
+        Some("workspace"),
+        Some(&workspace_id_for_audit),
+        "stopped",
+        Some(session_id.as_str()),
+    );
 }

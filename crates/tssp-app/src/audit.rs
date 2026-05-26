@@ -53,6 +53,10 @@ pub enum AuditAction {
     AdminCodeReset,
     /// Admin console command event.
     AdminConsoleCommand,
+    /// Terminal session start event.
+    TerminalStart,
+    /// Terminal session stop event.
+    TerminalStop,
 }
 
 impl AuditAction {
@@ -83,6 +87,8 @@ impl AuditAction {
             Self::AdminUserDelete => "admin_user_delete",
             Self::AdminCodeReset => "admin_code_reset",
             Self::AdminConsoleCommand => "admin_console_command",
+            Self::TerminalStart => "terminal_start",
+            Self::TerminalStop => "terminal_stop",
         }
     }
 }

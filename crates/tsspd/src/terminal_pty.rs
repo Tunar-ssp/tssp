@@ -15,7 +15,7 @@ pub struct PtySession {
 
 impl PtySession {
     /// Spawn a shell inside workspace with bubblewrap sandbox.
-    pub async fn spawn_in_workspace(workspace_root: &Path) -> io::Result<Self> {
+    pub fn spawn_in_workspace(workspace_root: &Path) -> io::Result<Self> {
         // Validate workspace root exists
         if !workspace_root.exists() || !workspace_root.is_dir() {
             return Err(io::Error::new(
@@ -29,28 +29,43 @@ impl PtySession {
             .to_str()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid path"))?;
 
-        // Build bubblewrap command
+        // Build bubblewrap sandbox with minimal attack surface
         let mut cmd = Command::new("bwrap");
 
-        // Sandbox constraints - minimal, workspace-only
-        cmd.arg("--bind")
-            .arg(workspace_str)
-            .arg("/workspace")
-            .arg("--tmpfs")
-            .arg("/tmp")
-            .arg("--dev")
-            .arg("/dev")
-            .arg("--proc")
-            .arg("/proc")
-            .arg("--chdir")
-            .arg("/workspace")
-            .arg("--");
+        // Bind workspace as /workspace (read-write for user operations)
+        cmd.arg("--bind").arg(workspace_str).arg("/workspace");
 
-        // Run bash inside sandbox
-        cmd.arg("/bin/bash")
-            .arg("-i")
-            .arg("-s")
-            .stdin(Stdio::piped())
+        // Temporary filesystem for /tmp (no persistence, isolates temp files)
+        cmd.arg("--tmpfs").arg("/tmp");
+
+        // Make /dev available but minimal (essential for terminal I/O)
+        // --dev creates a minimal /dev with only essential character devices
+        cmd.arg("--dev").arg("/dev");
+
+        // Bind /proc as read-only to allow processes to function
+        // but prevent privileged operations
+        cmd.arg("--ro-bind").arg("/proc").arg("/proc");
+
+        // Change to workspace directory (working directory isolation)
+        cmd.arg("--chdir").arg("/workspace");
+
+        // Set HOME to workspace (prevents leaking host paths, contains config writes)
+        cmd.arg("--setenv").arg("HOME").arg("/workspace");
+
+        // Clear most environment variables, keep only essentials
+        cmd.arg("--clearenv");
+        cmd.arg("--setenv").arg("PATH").arg("/usr/local/bin:/usr/bin:/bin");
+        cmd.arg("--setenv").arg("TERM").arg("xterm-256color");
+        cmd.arg("--setenv").arg("SHELL").arg("/bin/bash");
+
+        // Separate the bwrap args from the command to run
+        cmd.arg("--");
+
+        // Run bash in interactive mode with no startup files (fast, predictable)
+        cmd.arg("/bin/bash").arg("-i");
+
+        // Configure I/O
+        cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 

@@ -98,7 +98,7 @@ pub struct TerminalSession {
 }
 
 /// Terminal session state.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TerminalSessionState {
     pub session: TerminalSession,
     pub created_at: SystemTime,
@@ -108,6 +108,8 @@ pub struct TerminalSessionState {
 /// Terminal session manager.
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSessionState>>>,
+    /// Max concurrent terminal sessions per workspace (0 = unlimited).
+    max_sessions_per_workspace: usize,
 }
 
 impl TerminalManager {
@@ -115,11 +117,21 @@ impl TerminalManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            max_sessions_per_workspace: 5,
+        }
+    }
+
+    /// Creates a new terminal manager with custom max sessions per workspace.
+    pub fn with_max_sessions(max_sessions_per_workspace: usize) -> Self {
+        Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            max_sessions_per_workspace,
         }
     }
 
     /// Creates a new terminal session.
     /// Returns Unavailable if the sandbox strategy doesn't match an available binary.
+    /// Returns Unavailable if max sessions per workspace limit is reached.
     pub async fn create_session(
         &self,
         workspace_id: &str,
@@ -129,6 +141,23 @@ impl TerminalManager {
         // Validate workspace_id is not empty
         if workspace_id.is_empty() {
             return Err(TerminalError::Unavailable("workspace_id required".into()));
+        }
+
+        // Check max concurrent sessions per workspace (if limit is set)
+        if self.max_sessions_per_workspace > 0 {
+            let sessions = self.sessions.lock().await;
+            let workspace_count = sessions
+                .values()
+                .filter(|s| s.session.workspace_id == workspace_id)
+                .count();
+            if workspace_count >= self.max_sessions_per_workspace {
+                return Err(TerminalError::Unavailable(
+                    format!(
+                        "max concurrent terminal sessions reached (limit: {})",
+                        self.max_sessions_per_workspace
+                    ),
+                ));
+            }
         }
 
         // Check if sandbox is available based on strategy
@@ -244,6 +273,15 @@ impl TerminalManager {
         } else {
             Err(TerminalError::SessionNotFound)
         }
+    }
+
+    /// Get all active terminal sessions (for cleanup).
+    pub async fn get_all_sessions(&self) -> Vec<(TerminalSessionId, TerminalSessionState)> {
+        let sessions = self.sessions.lock().await;
+        sessions
+            .iter()
+            .map(|(id, state)| (TerminalSessionId(id.clone()), state.clone()))
+            .collect()
     }
 }
 

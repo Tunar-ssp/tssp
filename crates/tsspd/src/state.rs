@@ -53,6 +53,8 @@ pub struct HttpState {
     pub(crate) note_provider: Arc<dyn NoteProvider>,
     pub(crate) search_provider: Arc<dyn FileSearchProvider>,
     pub(crate) blob_reader: Arc<dyn BlobReader + Send + Sync>,
+    /// Terminal session manager for WebSocket connections.
+    pub terminal_manager: Arc<crate::terminal::TerminalManager>,
 }
 
 impl HttpState {
@@ -89,6 +91,7 @@ impl HttpState {
             note_provider: Arc::new(StaticNoteProvider),
             search_provider: Arc::new(StaticFileSearchProvider),
             blob_reader: Arc::new(StaticBlobReader),
+            terminal_manager: Arc::new(crate::terminal::TerminalManager::new()),
         }
     }
 
@@ -265,6 +268,7 @@ impl Clone for HttpState {
             note_provider: self.note_provider.clone(),
             search_provider: self.search_provider.clone(),
             blob_reader: self.blob_reader.clone(),
+            terminal_manager: self.terminal_manager.clone(),
         }
     }
 }

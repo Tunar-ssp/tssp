@@ -48,7 +48,9 @@ mod status;
 mod tags;
 pub mod temp_cleanup;
 mod terminal;
+mod terminal_cleanup;
 mod terminal_pty;
+mod terminal_tests;
 mod terminal_ws;
 pub mod trash_cleanup;
 mod upload;
@@ -82,6 +84,7 @@ pub use startup::StartupService;
 pub use state::HttpState;
 pub use status::{MetadataStatsProvider, RepositoryMetadataStatsProvider, StatusResponse};
 pub use tags::{ApplicationFileTagProvider, FileTagProvider, HttpTagError, HttpTagMutation};
+pub use terminal_cleanup::spawn_terminal_cleanup;
 pub use upload::{
     ApplicationFileUploadProvider, FileRecordResponse, FileUploadProvider, HttpUploadError,
     HttpUploadOutcome, HttpUploadRequest,

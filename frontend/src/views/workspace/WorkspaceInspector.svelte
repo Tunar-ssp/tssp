@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import Outline from '$lib/components/Outline.svelte';
+  import TerminalClient from './TerminalClient.svelte';
 
   interface CapabilityStatus {
     status: 'available' | 'disabled' | 'forbidden' | 'unavailable_sandbox' | 'unavailable';
@@ -15,6 +16,7 @@
 
   interface $$Props {
     tab: 'preview' | 'outline' | 'terminal';
+    workspaceId?: string;
     previewHtml: string;
     content: string;
     selectedLanguage: string;
@@ -25,6 +27,7 @@
 
   let {
     tab,
+    workspaceId = '',
     previewHtml,
     content,
     selectedLanguage,
@@ -106,16 +109,7 @@
           <span>Loading terminal status...</span>
         </div>
       {:else if terminalCapability.status === 'available'}
-        <div class="terminal-ready">
-          <Icons.CheckCircle size={18} />
-          <div>
-            <strong>Terminal Ready</strong>
-            <p>This workspace can access a sandboxed terminal.</p>
-          </div>
-        </div>
-        <div class="terminal-placeholder">
-          <code>// Terminal connection coming in PHASE 5C</code>
-        </div>
+        <TerminalClient {workspaceId} isAvailable={true} />
       {:else if terminalCapability.status === 'forbidden'}
         <div class="terminal-disabled">
           <Icons.Lock size={18} />

@@ -465,6 +465,7 @@
 
         <WorkspaceInspector
           tab={inspectorTab}
+          workspaceId={$activeWorkspace?.id ?? ''}
           {previewHtml}
           content={bodyDraft}
           {selectedLanguage}
