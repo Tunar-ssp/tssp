@@ -16,10 +16,13 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import FindWidget from '$lib/components/FindWidget.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
-  import Outline from '$lib/components/Outline.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { renderMarkdownLite } from '$lib/utils/markdown';
+  import WorkspaceSidebar from './WorkspaceSidebar.svelte';
+  import WorkspaceEditorHeader from './WorkspaceEditorHeader.svelte';
+  import WorkspaceInspector from './WorkspaceInspector.svelte';
+  import WorkspaceStageHead from './WorkspaceStageHead.svelte';
 
   type InspectorTab = 'preview' | 'outline' | 'terminal';
 
@@ -308,57 +311,16 @@
     </button>
   </aside>
 
-  <aside class="workspace-sidebar">
-    <div class="sidebar-head">
-      <div>
-        <div class="sidebar-label">Explorer</div>
-        <h2>Projects</h2>
-      </div>
-      <button type="button" class="create-btn" onclick={handleCreateWorkspace}>
-        <Icons.Plus size={16} />
-      </button>
-    </div>
-
-    <label class="workspace-search">
-      <Icons.Search size={16} />
-      <input bind:value={workspaceFilterQuery} placeholder="Find workspace..." />
-    </label>
-
-    <div class="workspace-list">
-      {#if filteredWorkspaces.length === 0}
-        <div class="workspace-empty">
-          <Icons.FilePlus2 size={24} />
-          <strong>No workspaces</strong>
-          <p>Create a new document-backed workspace to start editing.</p>
-        </div>
-      {:else}
-        {#each filteredWorkspaces as workspace (workspace.id)}
-          <button
-            type="button"
-            class="workspace-item"
-            class:active={$activeWorkspace?.id === workspace.id}
-            onclick={() => handleSelectWorkspace(workspace.id)}
-            oncontextmenu={(event) => showContextMenu(event, workspace)}
-          >
-            <div class="workspace-item-head">
-              <strong>{workspace.name || 'untitled'}</strong>
-              <span class="lang-chip" style="--tone: {languageAccent(workspace.language)}">{workspace.language}</span>
-            </div>
-            <p>{summarizeBody(workspace.body).slice(0, 90) || 'Empty workspace document'}</p>
-            <div class="workspace-item-meta">
-              <span>{formatRelative(workspace.updated_at)}</span>
-              <span>{getWordCount(workspace.body)} words</span>
-            </div>
-          </button>
-        {/each}
-      {/if}
-    </div>
-
-    <div class="sidebar-foot">
-      <span class="sync-pill"><span class="status-dot"></span>tssp.local synced</span>
-      <small>{$workspaces.length} docs · {languageCount} languages</small>
-    </div>
-  </aside>
+  <WorkspaceSidebar
+    workspaces={filteredWorkspaces}
+    filterQuery={workspaceFilterQuery}
+    activeWorkspaceId={$activeWorkspace?.id ?? null}
+    {languageCount}
+    onFilterChange={(q) => (workspaceFilterQuery = q)}
+    onSelectWorkspace={handleSelectWorkspace}
+    onShowContextMenu={showContextMenu}
+    onCreateWorkspace={handleCreateWorkspace}
+  />
 
   {#if !$activeWorkspace}
     <section class="workspace-home">
@@ -427,28 +389,12 @@
     </section>
   {:else}
     <section class="workspace-stage">
-      <header class="stage-head">
-        <div class="stage-breadcrumbs">
-          <span>Workspace</span>
-          <span>/</span>
-          <strong>{nameDraft || $activeWorkspace.name || 'untitled'}</strong>
-        </div>
-
-        <div class="stage-actions">
-          <button type="button" class="ghost-btn" onclick={() => (showFindWidget = !showFindWidget)}>
-            <Icons.Search size={14} />
-            Find
-          </button>
-          <button type="button" class="ghost-btn" onclick={() => handleDeleteWorkspace($activeWorkspace)}>
-            <Icons.Trash2 size={14} />
-            Delete
-          </button>
-          <button type="button" class="primary-btn compact" onclick={() => handleSaveWorkspace()}>
-            <Icons.Save size={14} />
-            Save
-          </button>
-        </div>
-      </header>
+      <WorkspaceStageHead
+        workspaceName={nameDraft || $activeWorkspace.name || 'untitled'}
+        onFind={() => (showFindWidget = !showFindWidget)}
+        onDelete={() => handleDeleteWorkspace($activeWorkspace)}
+        onSave={() => handleSaveWorkspace()}
+      />
 
       <TabBar
         tabs={openTabs}
@@ -473,36 +419,19 @@
 
       <div class="editor-layout">
         <div class="editor-column">
-          <div class="editor-header">
-            <input
-              type="text"
-              class="name-input"
-              placeholder="Untitled workspace"
-              bind:value={nameDraft}
-              oninput={() => {
-                isModified = true;
-                syncOpenTabs();
-                scheduleWorkspaceSave();
-              }}
-              onchange={() => handleSaveWorkspace()}
-            />
-
-            <div class="editor-actions">
-              <select
-                class="language-select"
-                bind:value={selectedLanguage}
-                onchange={(event) => handleChangeLanguage((event.currentTarget as HTMLSelectElement).value)}
-              >
-                {#each languages as language}
-                  <option value={language.id}>{language.label}</option>
-                {/each}
-              </select>
-
-              {#if $isSaving}
-                <span class="saving">Saving...</span>
-              {/if}
-            </div>
-          </div>
+          <WorkspaceEditorHeader
+            name={nameDraft}
+            selectedLanguage={selectedLanguage}
+            isSaving={$isSaving}
+            {languages}
+            onNameChange={(value) => {
+              nameDraft = value;
+              isModified = true;
+              syncOpenTabs();
+              scheduleWorkspaceSave();
+            }}
+            onLanguageChange={handleChangeLanguage}
+          />
 
           <div class="monaco-shell">
             <MonacoEditor
@@ -519,44 +448,13 @@
           </div>
         </div>
 
-        <aside class="workspace-inspector">
-          <div class="inspector-tabs">
-            <button type="button" class:active={inspectorTab === 'preview'} onclick={() => (inspectorTab = 'preview')}>Preview</button>
-            <button type="button" class:active={inspectorTab === 'outline'} onclick={() => (inspectorTab = 'outline')}>Outline</button>
-            <button type="button" class:active={inspectorTab === 'terminal'} onclick={() => (inspectorTab = 'terminal')}>Terminal</button>
-          </div>
-
-          {#if inspectorTab === 'preview'}
-            <div class="preview-panel">
-              {#if selectedLanguage === 'markdown'}
-                <div class="markdown-preview">{@html previewHtml}</div>
-              {:else}
-                <div class="plain-preview-card">
-                  <span class="sidebar-label">Preview</span>
-                  <p>Rich preview is currently optimized for markdown workspaces. Other languages render as raw text below.</p>
-                  <pre>{bodyDraft || '// No content yet'}</pre>
-                </div>
-              {/if}
-            </div>
-          {:else if inspectorTab === 'outline'}
-            <div class="outline-panel">
-              <Outline content={bodyDraft} onSelectItem={() => {}} />
-            </div>
-          {:else}
-            <div class="terminal-panel">
-              <div class="terminal-warning">
-                <Icons.AlertTriangle size={18} />
-                <div>
-                  <strong>Run is sandboxed</strong>
-                  <p>Execution and terminal access stay locked until the backend exposes a safe sandbox. Admin maintenance tools remain available separately.</p>
-                </div>
-              </div>
-              <div class="terminal-placeholder">
-                <code>// scratch: run requires sandbox unlock</code>
-              </div>
-            </div>
-          {/if}
-        </aside>
+        <WorkspaceInspector
+          tab={inspectorTab}
+          {previewHtml}
+          content={bodyDraft}
+          {selectedLanguage}
+          onTabChange={(t) => (inspectorTab = t)}
+        />
       </div>
 
       <StatusBar
@@ -596,7 +494,6 @@
   }
 
   .workspace-activity,
-  .workspace-sidebar,
   .workspace-home,
   .workspace-stage {
     min-height: 0;
@@ -632,179 +529,6 @@
     color: var(--text);
   }
 
-  .workspace-sidebar {
-    border-right: 1px solid var(--border);
-    background: rgba(16, 18, 24, 0.98);
-    display: flex;
-    flex-direction: column;
-    padding: 20px 16px;
-    gap: 16px;
-  }
-
-  .sidebar-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .sidebar-label {
-    font-family: var(--ff-mono);
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--dim);
-  }
-
-  .sidebar-head h2 {
-    margin: 8px 0 0;
-    font-size: 20px;
-  }
-
-  .create-btn {
-    width: 38px;
-    height: 38px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    background: rgba(24, 28, 38, 0.98);
-    color: var(--text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .workspace-search {
-    height: 46px;
-    padding: 0 14px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: rgba(12, 14, 20, 0.98);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--muted);
-  }
-
-  .workspace-search input {
-    width: 100%;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text);
-  }
-
-  .workspace-list {
-    flex: 1;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .workspace-empty {
-    min-height: 180px;
-    padding: 20px;
-    border-radius: 22px;
-    border: 1px dashed var(--border);
-    background: rgba(13, 15, 21, 0.92);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: var(--muted);
-    text-align: center;
-  }
-
-  .workspace-empty strong {
-    color: var(--text);
-  }
-
-  .workspace-item {
-    padding: 16px;
-    border-radius: 20px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .workspace-item:hover,
-  .workspace-item.active {
-    background: rgba(29, 33, 43, 0.98);
-    border-color: var(--border);
-  }
-
-  .workspace-item-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .workspace-item-head strong {
-    font-size: 15px;
-  }
-
-  .lang-chip {
-    height: 26px;
-    padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--tone) 32%, transparent);
-    background: color-mix(in srgb, var(--tone) 12%, transparent);
-    color: var(--tone);
-    display: inline-flex;
-    align-items: center;
-    font-size: 12px;
-    font-family: var(--ff-mono);
-  }
-
-  .workspace-item p {
-    margin: 10px 0 0;
-    color: var(--muted);
-    line-height: 1.5;
-  }
-
-  .workspace-item-meta {
-    margin-top: 12px;
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    color: var(--dim);
-    font-family: var(--ff-mono);
-    font-size: 12px;
-  }
-
-  .sidebar-foot {
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .sync-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--green);
-    font-size: 14px;
-  }
-
-  .status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 999px;
-    background: currentColor;
-    box-shadow: 0 0 18px currentColor;
-  }
-
-  .sidebar-foot small {
-    color: var(--muted);
-    font-family: var(--ff-mono);
-  }
 
   .workspace-home {
     padding: 28px 32px 36px;
@@ -842,8 +566,7 @@
     line-height: 1.6;
   }
 
-  .hero-actions,
-  .stage-actions {
+  .hero-actions {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -979,30 +702,6 @@
     min-height: 0;
   }
 
-  .stage-head {
-    min-height: 74px;
-    padding: 16px 22px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    background: rgba(12, 14, 20, 0.98);
-  }
-
-  .stage-breadcrumbs {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--muted);
-    flex-wrap: wrap;
-  }
-
-  .stage-breadcrumbs strong {
-    color: var(--text);
-    font-size: 18px;
-  }
-
   .editor-banner {
     padding: 10px 20px;
     border-bottom: 1px solid var(--border);
@@ -1042,51 +741,6 @@
     border-right: 1px solid var(--border);
   }
 
-  .editor-header {
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    background: rgba(15, 17, 23, 0.96);
-  }
-
-  .name-input {
-    flex: 1;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 28px;
-    line-height: 1.1;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-  }
-
-  .name-input::placeholder {
-    color: var(--dim);
-  }
-
-  .editor-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .language-select {
-    height: 38px;
-    padding: 0 12px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    background: rgba(12, 14, 20, 0.98);
-    color: var(--text);
-  }
-
-  .saving {
-    color: var(--warning);
-    font-size: 13px;
-  }
 
   .monaco-shell {
     flex: 1;
@@ -1094,137 +748,6 @@
     padding: 16px;
   }
 
-  .workspace-inspector {
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    background: rgba(14, 16, 22, 0.98);
-  }
-
-  .inspector-tabs {
-    padding: 12px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .inspector-tabs button {
-    height: 40px;
-    border-radius: 14px;
-    border: none;
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-  }
-
-  .inspector-tabs button.active {
-    background: rgba(34, 42, 58, 0.95);
-    color: var(--text);
-  }
-
-  .preview-panel,
-  .outline-panel,
-  .terminal-panel {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-  }
-
-  .preview-panel {
-    padding: 18px;
-  }
-
-  .outline-panel :global(.outline) {
-    height: 100%;
-    border-right: 0;
-    background: transparent;
-  }
-
-  .markdown-preview {
-    color: var(--text);
-    line-height: 1.7;
-  }
-
-  .markdown-preview :global(h1),
-  .markdown-preview :global(h2),
-  .markdown-preview :global(h3) {
-    margin: 0 0 12px;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-
-  .markdown-preview :global(h1) {
-    font-size: 34px;
-  }
-
-  .markdown-preview :global(h2) {
-    font-size: 26px;
-  }
-
-  .markdown-preview :global(p),
-  .markdown-preview :global(ul),
-  .markdown-preview :global(ol),
-  .markdown-preview :global(pre),
-  .markdown-preview :global(blockquote) {
-    margin: 0 0 14px;
-  }
-
-  .markdown-preview :global(pre) {
-    padding: 14px;
-    border-radius: 18px;
-    overflow: auto;
-    background: rgba(12, 14, 20, 0.98);
-    border: 1px solid var(--border);
-  }
-
-  .plain-preview-card,
-  .terminal-warning,
-  .terminal-placeholder {
-    padding: 18px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: rgba(18, 21, 29, 0.98);
-  }
-
-  .plain-preview-card p,
-  .terminal-warning p {
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .plain-preview-card pre,
-  .terminal-placeholder code {
-    display: block;
-    margin-top: 14px;
-    padding: 14px;
-    border-radius: 16px;
-    background: rgba(12, 14, 20, 0.98);
-    border: 1px solid var(--border);
-    color: var(--text-2);
-    font-family: var(--ff-mono);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .terminal-panel {
-    padding: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .terminal-warning {
-    display: flex;
-    gap: 12px;
-    color: var(--warning);
-  }
-
-  .terminal-warning strong {
-    display: block;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
 
   @media (max-width: 1400px) {
     .hub-metrics {
@@ -1233,11 +756,6 @@
 
     .editor-layout {
       grid-template-columns: minmax(0, 1fr);
-    }
-
-    .workspace-inspector {
-      border-top: 1px solid var(--border);
-      min-height: 320px;
     }
 
     .editor-column {
@@ -1258,15 +776,7 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .workspace-sidebar {
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
-      max-height: 360px;
-    }
-
-    .home-hero,
-    .stage-head,
-    .editor-header {
+    .home-hero {
       flex-direction: column;
       align-items: stretch;
     }

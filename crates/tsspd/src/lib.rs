@@ -53,6 +53,8 @@ pub mod validators;
 mod visibility;
 mod web;
 pub mod workspaces;
+mod workspace_fs;
+mod workspace_features;
 
 #[cfg(test)]
 mod http_tests;

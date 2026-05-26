@@ -1062,6 +1062,52 @@ pub(crate) async fn delete_workspace(
     }
 }
 
+/// `GET /api/v1/workspaces/{id}/capabilities`
+/// Returns what features are available for this workspace (terminal, LSP, etc).
+pub(crate) async fn workspace_capabilities(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    use crate::workspace_features::TerminalCapability;
+
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+
+    // Verify workspace exists and user has access
+    let owner_filter = if auth.is_admin() { None } else { Some(auth.user_id.as_str()) };
+    if store.get(&id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    // Terminal is admin-only
+    let terminal = if auth.is_admin() {
+        // Check if sandbox is available
+        let sandbox = crate::workspace_features::SandboxStrategy::detect();
+        if sandbox.is_available() {
+            TerminalCapability::Available
+        } else {
+            TerminalCapability::UnavailableSandbox
+        }
+    } else {
+        TerminalCapability::Forbidden
+    };
+
+    // LSP support is not yet implemented
+    let lsp_available: Vec<String> = vec![];
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "schema_version": 1,
+            "terminal": terminal,
+            "lsp_available": lsp_available,
+        })),
+    )
+        .into_response()
+}
+
 fn unavailable() -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,

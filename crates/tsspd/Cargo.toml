@@ -39,6 +39,7 @@ mdns-sd.workspace = true
 local-ip-address.workspace = true
 uuid.workspace = true
 qrcode.workspace = true
+which = "5.0"
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -389,6 +389,10 @@ pub fn build_router(state: HttpState) -> Router {
                 .delete(crate::workspaces::delete_workspace)
                 .options(options_response),
         )
+        .route(
+            "/api/v1/workspaces/{id}/capabilities",
+            get(crate::workspaces::workspace_capabilities).options(options_response),
+        )
         .route("/p/{token}", get(crate::public_api::public_download))
         .route("/app-v2", get(crate::web::serve_web_v2_index))
         .route("/app-v2/", get(crate::web::serve_web_v2_index))
