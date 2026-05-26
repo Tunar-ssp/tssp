@@ -1108,6 +1108,91 @@ pub(crate) async fn workspace_capabilities(
         .into_response()
 }
 
+/// `GET /api/v1/workspaces/{id}/terminal`
+/// Returns terminal availability status without opening a session.
+pub(crate) async fn terminal_status(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    use crate::workspace_features::TerminalCapability;
+
+    if !auth.is_admin() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "admin_required",
+                    message: "terminal access requires admin role".to_owned(),
+                },
+            }),
+        )
+            .into_response();
+    }
+
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+
+    // Verify workspace exists
+    if store.get(&id, None).is_err() {
+        return not_found();
+    }
+
+    // Check if terminal is available
+    let sandbox = crate::workspace_features::SandboxStrategy::detect();
+    let status = if sandbox.is_available() {
+        TerminalCapability::Available
+    } else {
+        TerminalCapability::UnavailableSandbox
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "schema_version": 1,
+            "status": status,
+            "message": if sandbox.is_available() {
+                "Terminal is available (WebSocket upgrade not yet implemented)"
+            } else {
+                "Terminal sandbox not available (bubblewrap or systemd-nspawn required)"
+            },
+        })),
+    )
+        .into_response()
+}
+
+/// `GET /api/v1/workspaces/{id}/lsp`
+/// Returns LSP availability status for the workspace.
+pub(crate) async fn lsp_status(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+
+    // Verify workspace exists and user has access
+    let owner_filter = if auth.is_admin() { None } else { Some(auth.user_id.as_str()) };
+    if store.get(&id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    // LSP is not yet implemented
+    // Return honest unavailable status
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "schema_version": 1,
+            "status": "not_implemented",
+            "available_languages": Vec::<String>::new(),
+            "message": "LSP support is not yet implemented",
+        })),
+    )
+        .into_response()
+}
+
 fn unavailable() -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,

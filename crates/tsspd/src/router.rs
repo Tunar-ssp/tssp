@@ -393,6 +393,14 @@ pub fn build_router(state: HttpState) -> Router {
             "/api/v1/workspaces/{id}/capabilities",
             get(crate::workspaces::workspace_capabilities).options(options_response),
         )
+        .route(
+            "/api/v1/workspaces/{id}/terminal",
+            get(crate::workspaces::terminal_status).options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{id}/lsp",
+            get(crate::workspaces::lsp_status).options(options_response),
+        )
         .route("/p/{token}", get(crate::public_api::public_download))
         .route("/app-v2", get(crate::web::serve_web_v2_index))
         .route("/app-v2/", get(crate::web::serve_web_v2_index))

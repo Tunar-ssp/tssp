@@ -55,6 +55,8 @@ mod web;
 pub mod workspaces;
 mod workspace_fs;
 mod workspace_features;
+mod terminal;
+mod lsp;
 
 #[cfg(test)]
 mod http_tests;
