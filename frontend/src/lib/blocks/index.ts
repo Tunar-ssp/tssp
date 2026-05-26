@@ -11,5 +11,8 @@ export * from './utils';
 export * from './slashCommands';
 export * from './templates';
 
+// History (Undo/Redo)
+export * from './history';
+
 // Store
 export * from './editorStore';
