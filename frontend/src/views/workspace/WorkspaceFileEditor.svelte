@@ -253,110 +253,119 @@
   .workspace-file-editor {
     display: flex;
     height: 100%;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
   }
 
   .editor-sidebar {
-    width: 250px;
-    border-right: 1px solid var(--border-color);
+    width: 280px;
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    background: var(--bg-secondary);
+    background: var(--surface);
     overflow-y: auto;
   }
 
   .sidebar-header {
-    padding: 12px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: var(--surface-2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
 
   .sidebar-header h3 {
     margin: 0;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
+    color: var(--muted);
   }
 
   .sidebar-actions {
     display: flex;
-    gap: 4px;
+    gap: 6px;
   }
 
   .action-btn {
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-2);
     cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 4px;
-    transition: all 0.2s;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
   }
 
   .action-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
+    background: var(--surface-3);
+    color: var(--text);
   }
 
   .create-form {
-    padding: 8px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   .create-form input {
-    padding: 6px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     font-size: 12px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--bg);
+    color: var(--text);
+    transition: all 0.15s ease;
   }
 
   .create-form input:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1);
   }
 
   .create-actions {
     display: flex;
-    gap: 4px;
+    gap: 6px;
   }
 
   .create-actions button {
     flex: 1;
-    padding: 4px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    transition: all 0.2s;
+    background: var(--surface);
+    color: var(--text);
+    transition: all 0.15s ease;
   }
 
   .create-actions button:hover {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
+    background: #0ea5e9;
+    border-color: #0ea5e9;
+    color: white;
   }
 
   .loading,
   .error-message,
   .empty-state {
-    padding: 16px 12px;
+    padding: 24px 16px;
     text-align: center;
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--muted);
   }
 
   .error-message {
-    color: var(--error-color);
+    color: #ef4444;
   }
 
   .file-tree {
@@ -370,15 +379,17 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    background: var(--bg);
   }
 
   .editor-header {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
   }
 
   .file-info {
@@ -390,11 +401,12 @@
 
   .file-name {
     font-weight: 500;
+    color: var(--text);
   }
 
   .dirty-indicator {
-    color: var(--accent-color);
-    font-size: 12px;
+    color: #f59e0b;
+    font-size: 10px;
   }
 
   .empty-editor {
@@ -403,16 +415,17 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--text-secondary);
+    color: var(--muted);
   }
 
   .empty-icon {
     font-size: 48px;
     margin-bottom: 12px;
-    opacity: 0.5;
+    opacity: 0.4;
   }
 
   .empty-text {
     font-size: 14px;
+    font-weight: 500;
   }
 </style>
