@@ -130,10 +130,7 @@ fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, Stri
 }
 
 fn create_connection_pool(metadata_path: &Path) -> Result<Pool<SqliteConnectionManager>, String> {
-    let manager = SqliteConnectionManager::file(metadata_path);
-    Pool::builder()
-        .max_size(20)
-        .build(manager)
+    SqliteFileRepository::create_pool(metadata_path, 30)
         .map_err(|e| format!("could not create metadata connection pool: {e}"))
 }
 

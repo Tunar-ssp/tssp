@@ -17,7 +17,7 @@ use tssp_ports::{BlobStore, Clock, FileRepository, IdGenerator, RepositoryError}
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
-/// Max files in a batch upload (prevents DoS attacks).
+/// Max files in a batch upload (prevents `DoS` attacks).
 const MAX_BATCH_FILES: usize = 100;
 
 /// Handles completed HTTP upload streams through the application layer.

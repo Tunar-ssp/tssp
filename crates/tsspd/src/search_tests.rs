@@ -659,7 +659,7 @@ fn make_test_file(
         content_hash: tssp_domain::ContentHash::new(HASH).unwrap(),
         mime_type: tssp_domain::MimeType::new("text/plain").unwrap(),
         storage_handle: tssp_domain::StorageHandle::new("handle").unwrap(),
-        uploaded_at: tssp_domain::UnixTimestamp::new(1700000000).unwrap(),
+        uploaded_at: tssp_domain::UnixTimestamp::new(1_700_000_000).unwrap(),
         tags: vec![],
         pinned_at: None,
         folder_path: String::new(),
