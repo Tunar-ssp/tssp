@@ -425,6 +425,16 @@ mod tests {
         ) -> Result<(), RepositoryError> {
             Ok(())
         }
+
+        fn list_audit_events(
+            &self,
+            _query: &tssp_ports::AuditEventQuery,
+        ) -> Result<tssp_ports::PagedAuditEvents, RepositoryError> {
+            Ok(tssp_ports::PagedAuditEvents {
+                events: Vec::new(),
+                next_cursor: None,
+            })
+        }
     }
 
     #[test]

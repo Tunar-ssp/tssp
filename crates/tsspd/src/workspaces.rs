@@ -1169,33 +1169,33 @@ pub(crate) async fn terminal_status(
 /// `GET /api/v1/workspaces/{id}/lsp`
 /// Returns LSP availability status for the workspace.
 pub(crate) async fn lsp_status(
-    State(state): State<HttpState>,
-    auth: AuthContext,
-    AxumPath(id): AxumPath<String>,
+    State(_state): State<HttpState>,
+    _auth: AuthContext,
+    AxumPath(_id): AxumPath<String>,
 ) -> Response {
-    let Some(store) = store(&state) else {
-        return unavailable();
-    };
+    use crate::lsp::LspManager;
 
-    // Verify workspace exists and user has access
-    let owner_filter = if auth.is_admin() {
-        None
+    // Detect available language servers on this system
+    let manager = LspManager::new();
+    let available_languages = manager.available_languages();
+
+    let status = if available_languages.is_empty() {
+        "disabled"
     } else {
-        Some(auth.user_id.as_str())
+        "available"
     };
-    if store.get(&id, owner_filter).is_err() {
-        return not_found();
-    }
 
-    // LSP is not yet implemented
-    // Return honest unavailable status
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "schema_version": 1,
-            "status": "not_implemented",
-            "available_languages": Vec::<String>::new(),
-            "message": "LSP support is not yet implemented",
+            "status": status,
+            "available_languages": available_languages,
+            "message": if available_languages.is_empty() {
+                "No language servers are installed"
+            } else {
+                "Language server support is available"
+            },
         })),
     )
         .into_response()

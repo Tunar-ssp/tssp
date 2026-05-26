@@ -151,12 +151,10 @@ impl TerminalManager {
                 .filter(|s| s.session.workspace_id == workspace_id)
                 .count();
             if workspace_count >= self.max_sessions_per_workspace {
-                return Err(TerminalError::Unavailable(
-                    format!(
-                        "max concurrent terminal sessions reached (limit: {})",
-                        self.max_sessions_per_workspace
-                    ),
-                ));
+                return Err(TerminalError::Unavailable(format!(
+                    "max concurrent terminal sessions reached (limit: {})",
+                    self.max_sessions_per_workspace
+                )));
             }
         }
 

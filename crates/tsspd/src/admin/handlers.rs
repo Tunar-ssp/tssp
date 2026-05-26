@@ -7,7 +7,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_adapter_system::SystemClock;
 use tssp_ports::Clock;
-use tssp_ports::{ListQuery, NoteListQuery};
+use tssp_ports::{AuditEventQuery, ListQuery, NoteListQuery};
 
 use crate::admin::system::collect_system_snapshot;
 use tssp_app::{log_audit_event, AuditAction};
@@ -221,6 +221,41 @@ fn collect_note_activity(
         })
 }
 
+fn collect_terminal_activity(state: &HttpState, limit: u64) -> Vec<AdminActivityItem> {
+    match state.repository.list_audit_events(&AuditEventQuery {
+        limit,
+        action: Some("terminal_start".to_string()),
+        ..AuditEventQuery::default()
+    }) {
+        Ok(page) => page
+            .events
+            .into_iter()
+            .map(|event| {
+                let title = match event.action.as_str() {
+                    "terminal_start" => "Terminal Started",
+                    "terminal_stop" => "Terminal Stopped",
+                    _ => "Terminal Event",
+                };
+                AdminActivityItem {
+                    kind: event.action.clone(),
+                    id: event.id.clone(),
+                    title: title.to_owned(),
+                    detail: event
+                        .resource_id
+                        .as_ref()
+                        .unwrap_or(&"unknown".to_string())
+                        .clone(),
+                    occurred_at: event.timestamp,
+                    visibility: None,
+                    size_bytes: None,
+                    language: None,
+                }
+            })
+            .collect(),
+        Err(_) => vec![],
+    }
+}
+
 fn collect_workspace_activity(state: &HttpState) -> Vec<AdminActivityItem> {
     state
         .workspaces
@@ -328,6 +363,7 @@ pub async fn admin_activity(
         Err((code, message)) => return admin_activity_error(code, message),
     };
     items.extend(note_items);
+    items.extend(collect_terminal_activity(&state, limit));
     items.extend(collect_workspace_activity(&state));
 
     items.sort_by(|left, right| {

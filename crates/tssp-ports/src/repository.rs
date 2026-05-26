@@ -9,8 +9,8 @@ use tssp_domain::{
 
 use crate::errors::RepositoryError;
 use crate::query::{
-    ListQuery, NoteListQuery, PagedFiles, PagedNotes, PinOutcome, RepositoryStats, SearchHit,
-    TagMutationOutcome, TagSummary,
+    AuditEventQuery, ListQuery, NoteListQuery, PagedAuditEvents, PagedFiles, PagedNotes,
+    PinOutcome, RepositoryStats, SearchHit, TagMutationOutcome, TagSummary,
 };
 use crate::record::{DeletedFileRecord, NewFileRecord, NewNoteRecord};
 
@@ -253,6 +253,16 @@ pub trait FileRepository {
         status: &str,
         details: Option<&str>,
     ) -> Result<(), RepositoryError>;
+
+    /// Lists audit events with optional filtering and pagination.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the query fails.
+    fn list_audit_events(
+        &self,
+        query: &AuditEventQuery,
+    ) -> Result<PagedAuditEvents, RepositoryError>;
 }
 
 /// Persists and queries Markdown notes.
@@ -526,6 +536,13 @@ where
             status,
             details,
         )
+    }
+
+    fn list_audit_events(
+        &self,
+        query: &AuditEventQuery,
+    ) -> Result<PagedAuditEvents, RepositoryError> {
+        self.as_ref().list_audit_events(query)
     }
 }
 

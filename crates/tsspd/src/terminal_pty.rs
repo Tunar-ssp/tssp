@@ -54,7 +54,9 @@ impl PtySession {
 
         // Clear most environment variables, keep only essentials
         cmd.arg("--clearenv");
-        cmd.arg("--setenv").arg("PATH").arg("/usr/local/bin:/usr/bin:/bin");
+        cmd.arg("--setenv")
+            .arg("PATH")
+            .arg("/usr/local/bin:/usr/bin:/bin");
         cmd.arg("--setenv").arg("TERM").arg("xterm-256color");
         cmd.arg("--setenv").arg("SHELL").arg("/bin/bash");
 

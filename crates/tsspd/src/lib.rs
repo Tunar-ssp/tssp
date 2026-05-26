@@ -22,6 +22,7 @@ mod http_error;
 mod integrity;
 mod list;
 mod lsp;
+mod lsp_ws;
 mod mdns;
 mod metrics;
 mod move_file;

@@ -268,6 +268,12 @@ impl FileRepository for MockRepo {
     ) -> Result<(), tssp_ports::RepositoryError> {
         unimplemented!()
     }
+    fn list_audit_events(
+        &self,
+        _: &tssp_ports::AuditEventQuery,
+    ) -> Result<tssp_ports::PagedAuditEvents, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
 }
 
 impl NoteRepository for MockRepo {
@@ -535,6 +541,12 @@ impl FileRepository for FailingMockRepo {
         _: &str,
         _: Option<&str>,
     ) -> Result<(), tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn list_audit_events(
+        &self,
+        _: &tssp_ports::AuditEventQuery,
+    ) -> Result<tssp_ports::PagedAuditEvents, tssp_ports::RepositoryError> {
         unimplemented!()
     }
 }

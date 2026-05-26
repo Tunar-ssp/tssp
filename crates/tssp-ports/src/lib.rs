@@ -32,8 +32,9 @@ pub use clock::Clock;
 pub use errors::{BlobReadError, BlobStoreError, IdGenerationError, RepositoryError};
 pub use id::{IdGenerator, SessionTokenGenerator};
 pub use query::{
-    ListQuery, ListSort, NoteListQuery, NoteListSort, PagedFiles, PagedNotes, PinOutcome,
-    RepositoryStats, SearchHit, TagMutationOutcome, TagSummary,
+    AuditEvent, AuditEventQuery, ListQuery, ListSort, NoteListQuery, NoteListSort,
+    PagedAuditEvents, PagedFiles, PagedNotes, PinOutcome, RepositoryStats, SearchHit,
+    TagMutationOutcome, TagSummary,
 };
 pub use record::{BlobWriteOutcome, DeletedFileRecord, NewFileRecord, NewNoteRecord};
 pub use repository::{FileRepository, NoteRepository};

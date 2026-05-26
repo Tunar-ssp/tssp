@@ -179,6 +179,12 @@ mod tests {
         ) -> Result<(), RepositoryError> {
             unimplemented!()
         }
+        fn list_audit_events(
+            &self,
+            _: &tssp_ports::AuditEventQuery,
+        ) -> Result<tssp_ports::PagedAuditEvents, RepositoryError> {
+            unimplemented!()
+        }
     }
 
     #[tokio::test]

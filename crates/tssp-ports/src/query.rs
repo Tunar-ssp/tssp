@@ -229,3 +229,66 @@ pub struct PinOutcome {
     /// True when the pin state actually changed.
     pub changed: bool,
 }
+
+/// Audit event record for compliance and forensics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditEvent {
+    /// Unique event ID.
+    pub id: String,
+    /// Unix timestamp when the event occurred.
+    pub timestamp: i64,
+    /// User who triggered the event (if applicable).
+    pub user_id: Option<String>,
+    /// Action type (e.g., `"file_upload"`, `"terminal_start"`).
+    pub action: String,
+    /// Resource type (e.g., `"file"`, `"terminal"`).
+    pub resource: Option<String>,
+    /// Resource identifier.
+    pub resource_id: Option<String>,
+    /// Event status (e.g., `"success"`, `"failure"`).
+    pub status: String,
+    /// Additional event context/details.
+    pub details: Option<String>,
+}
+
+/// Query parameters for audit event listing.
+#[derive(Debug, Clone)]
+pub struct AuditEventQuery {
+    /// Maximum events to return. Must be between 1 and 500.
+    pub limit: u64,
+    /// Filter by action type.
+    pub action: Option<String>,
+    /// Filter by user ID.
+    pub user_id: Option<String>,
+    /// Only return events at or after this timestamp.
+    pub since: Option<UnixTimestamp>,
+    /// Only return events at or before this timestamp.
+    pub until: Option<UnixTimestamp>,
+    /// Filter by event status.
+    pub status: Option<String>,
+    /// Opaque cursor from a previous response for the next page.
+    pub after_cursor: Option<Cursor>,
+}
+
+impl Default for AuditEventQuery {
+    fn default() -> Self {
+        Self {
+            limit: 50,
+            action: None,
+            user_id: None,
+            since: None,
+            until: None,
+            status: None,
+            after_cursor: None,
+        }
+    }
+}
+
+/// Paginated audit event listing result.
+#[derive(Debug, Clone)]
+pub struct PagedAuditEvents {
+    /// Audit events for the current page.
+    pub events: Vec<AuditEvent>,
+    /// Cursor for the next page, absent when no further results exist.
+    pub next_cursor: Option<Cursor>,
+}

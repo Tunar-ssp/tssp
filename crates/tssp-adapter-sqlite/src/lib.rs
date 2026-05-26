@@ -19,6 +19,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, params_from_iter, types::Value, Connection};
 use tssp_domain::{ContentHash, FileId, FileName, FileRecord, Tag, TagKey, UnixTimestamp};
+use tssp_ports::query::{AuditEvent, AuditEventQuery, PagedAuditEvents};
 use tssp_ports::{
     DeletedFileRecord, FileRepository, ListQuery, NewFileRecord, PagedFiles, RepositoryError,
     RepositoryStats, TagMutationOutcome, TagSummary,
@@ -1031,6 +1032,96 @@ impl FileRepository for SqliteFileRepository {
             )
             .map_err(map_rusqlite_repository_error)?;
         Ok(())
+    }
+
+    fn list_audit_events(
+        &self,
+        query: &AuditEventQuery,
+    ) -> Result<PagedAuditEvents, RepositoryError> {
+        let connection = self.connect()?;
+        let page_limit = validate_list_limit(query.limit)?;
+
+        let mut sql = "SELECT id, timestamp, user_id, action, resource, resource_id, status, details FROM audit_events WHERE 1=1".to_string();
+        let mut parameters = Vec::<Value>::new();
+
+        if let Some(action) = &query.action {
+            sql.push_str(" AND action = ?");
+            parameters.push(Value::from(action.clone()));
+        }
+
+        if let Some(user_id) = &query.user_id {
+            sql.push_str(" AND user_id = ?");
+            parameters.push(Value::from(user_id.clone()));
+        }
+
+        if let Some(since) = query.since {
+            sql.push_str(" AND timestamp >= ?");
+            parameters.push(Value::from(since.seconds()));
+        }
+
+        if let Some(until) = query.until {
+            sql.push_str(" AND timestamp <= ?");
+            parameters.push(Value::from(until.seconds()));
+        }
+
+        if let Some(status) = &query.status {
+            sql.push_str(" AND status = ?");
+            parameters.push(Value::from(status.clone()));
+        }
+
+        sql.push_str(" ORDER BY timestamp DESC");
+
+        let limit_plus = list_limit_plus_one(query.limit)?;
+        sql.push_str(" LIMIT ?");
+        parameters.push(Value::from(limit_plus));
+
+        let mut statement = connection
+            .prepare(&sql)
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut rows = statement
+            .query(params_from_iter(parameters.iter()))
+            .map_err(map_rusqlite_repository_error)?;
+
+        let mut events = Vec::new();
+        while let Some(row) = rows.next().map_err(map_rusqlite_repository_error)? {
+            let event = AuditEvent {
+                id: row.get(0).map_err(map_rusqlite_repository_error)?,
+                timestamp: row.get(1).map_err(map_rusqlite_repository_error)?,
+                user_id: row.get(2).map_err(map_rusqlite_repository_error)?,
+                action: row.get(3).map_err(map_rusqlite_repository_error)?,
+                resource: row.get(4).map_err(map_rusqlite_repository_error)?,
+                resource_id: row.get(5).map_err(map_rusqlite_repository_error)?,
+                status: row.get(6).map_err(map_rusqlite_repository_error)?,
+                details: row.get(7).map_err(map_rusqlite_repository_error)?,
+            };
+            events.push(event);
+        }
+
+        let has_more = events.len() > page_limit;
+        if has_more {
+            events.truncate(page_limit);
+        }
+        let next_cursor = if has_more {
+            if let Some(e) = events.last() {
+                let cursor =
+                    tssp_domain::Cursor::new(format!("{}", e.timestamp)).map_err(|err| {
+                        RepositoryError::OperationFailed {
+                            message: format!("cursor creation failed: {err}"),
+                        }
+                    })?;
+                Some(cursor)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok(PagedAuditEvents {
+            events,
+            next_cursor,
+        })
     }
 }
 
