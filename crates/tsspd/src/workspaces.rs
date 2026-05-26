@@ -1166,11 +1166,25 @@ pub(crate) async fn terminal_status(
 /// `GET /api/v1/workspaces/{id}/lsp`
 /// Returns LSP availability status for the workspace.
 pub(crate) async fn lsp_status(
-    State(_state): State<HttpState>,
-    _auth: AuthContext,
-    AxumPath(_id): AxumPath<String>,
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(id): AxumPath<String>,
 ) -> Response {
     use crate::lsp::LspManager;
+
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+
+    if store.get(&id, owner_filter).is_err() {
+        return not_found();
+    }
 
     // Detect available language servers on this system
     let manager = LspManager::new();
@@ -1201,10 +1215,24 @@ pub(crate) async fn lsp_status(
 /// `GET /api/v1/workspaces/{id}/git`
 pub(crate) async fn git_status(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     AxumPath(workspace_id): AxumPath<String>,
 ) -> Response {
     use crate::git_status;
+
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
 
     // Resolve workspace directory from data_dir
     let workspace_root = state
@@ -2143,5 +2171,67 @@ mod tests {
 
         // Should succeed (not found for filesystem, but workspace auth passes)
         assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn git_status_requires_ownership() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-other", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/git")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn git_status_admin_bypass() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-admin", UserRole::Admin));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/git")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        // Should not be forbidden
+        assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn lsp_status_requires_ownership() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-other", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/lsp")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn lsp_status_admin_bypass() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-admin", UserRole::Admin));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/lsp")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        // Should not be forbidden
+        assert_ne!(response.status(), StatusCode::FORBIDDEN);
     }
 }
