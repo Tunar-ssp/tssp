@@ -19,8 +19,8 @@
   let terminal: Terminal;
   let fitAddon: FitAddon;
   let ws: WebSocket | null = null;
-  let state: 'disconnected' | 'connecting' | 'connected' | 'error' = $state('disconnected');
-  let errorMessage: string | null = $state(null);
+  let state = $state('disconnected');
+  let errorMessage = $state<string | null>(null);
 
   onMount(() => {
     if (!isAvailable) return;
@@ -30,7 +30,6 @@
         background: '#0E1016',
         foreground: '#E0E0E0',
         cursor: '#E0E0E0',
-        selection: 'rgba(255, 255, 255, 0.15)',
         black: '#000000',
         red: '#FF5555',
         green: '#55FF55',

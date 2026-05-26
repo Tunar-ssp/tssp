@@ -34,7 +34,7 @@
 </script>
 
 <div class="ring-wrapper {className || ''}" {...rest}>
-  <svg {size} {size} class="ring-svg" viewBox={`0 0 ${size} ${size}`}>
+  <svg width={size} height={size} class="ring-svg" viewBox={`0 0 ${size} ${size}`}>
     <circle
       cx={size / 2}
       cy={size / 2}
