@@ -363,6 +363,19 @@ fn hit_matches_filters(
             if matches!(filters.kind, SearchKind::Note | SearchKind::Workspace) {
                 return false;
             }
+            // Authorization: non-admin users can only see public files or their own files
+            if let Some(auth) = auth {
+                if !auth.is_admin() {
+                    if file.visibility == Visibility::Private && file.owner_id.as_ref() != Some(&auth.user_id) {
+                        return false;
+                    }
+                }
+            } else {
+                // Unauthenticated users can only see public files
+                if file.visibility != Visibility::Public {
+                    return false;
+                }
+            }
             if filters.pinned && !file.is_pinned() {
                 return false;
             }

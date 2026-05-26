@@ -646,3 +646,159 @@ async fn search_returns_internal_error_on_failure() {
     let response = router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
+
+fn make_test_file(
+    owner_id: tssp_domain::UserId,
+    visibility: Visibility,
+) -> tssp_domain::FileRecord {
+    const HASH: &str = "abcdefabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123";
+    tssp_domain::FileRecord {
+        id: tssp_domain::FileId::new("file1").unwrap(),
+        name: tssp_domain::FileName::new("test.txt").unwrap(),
+        size: tssp_domain::FileSize::new(100),
+        content_hash: tssp_domain::ContentHash::new(HASH).unwrap(),
+        mime_type: tssp_domain::MimeType::new("text/plain").unwrap(),
+        storage_handle: tssp_domain::StorageHandle::new("handle").unwrap(),
+        uploaded_at: tssp_domain::UnixTimestamp::new(1700000000).unwrap(),
+        tags: vec![],
+        pinned_at: None,
+        folder_path: String::new(),
+        owner_id: Some(owner_id),
+        visibility,
+        public_token: None,
+        public_expires_at: None,
+    }
+}
+
+#[test]
+fn search_filters_private_files_from_non_owner_authenticated() {
+    let owner_id = tssp_domain::UserId::new("owner").unwrap();
+    let user_id = tssp_domain::UserId::new("other_user").unwrap();
+    let auth = crate::auth::AuthContext {
+        user_id: user_id.clone(),
+        role: tssp_domain::UserRole::User,
+        session_token: None,
+        device_token: None,
+    };
+
+    let private_file = make_test_file(owner_id.clone(), Visibility::Private);
+    let hit = SearchHit::File(private_file);
+    let filters = SearchFilters {
+        limit: 50,
+        kind: SearchKind::All,
+        tag: None,
+        mime_prefix: None,
+        pinned: false,
+        visibility: None,
+    };
+
+    assert!(!hit_matches_filters(&hit, &filters, Some(&auth)));
+}
+
+#[test]
+fn search_allows_private_files_for_owner_authenticated() {
+    let user_id = tssp_domain::UserId::new("owner").unwrap();
+    let auth = crate::auth::AuthContext {
+        user_id: user_id.clone(),
+        role: tssp_domain::UserRole::User,
+        session_token: None,
+        device_token: None,
+    };
+
+    let private_file = make_test_file(user_id.clone(), Visibility::Private);
+    let hit = SearchHit::File(private_file);
+    let filters = SearchFilters {
+        limit: 50,
+        kind: SearchKind::All,
+        tag: None,
+        mime_prefix: None,
+        pinned: false,
+        visibility: None,
+    };
+
+    assert!(hit_matches_filters(&hit, &filters, Some(&auth)));
+}
+
+#[test]
+fn search_allows_public_files_for_all_users() {
+    let owner_id = tssp_domain::UserId::new("owner").unwrap();
+    let user_id = tssp_domain::UserId::new("other_user").unwrap();
+    let auth = crate::auth::AuthContext {
+        user_id: user_id.clone(),
+        role: tssp_domain::UserRole::User,
+        session_token: None,
+        device_token: None,
+    };
+
+    let public_file = make_test_file(owner_id.clone(), Visibility::Public);
+    let hit = SearchHit::File(public_file);
+    let filters = SearchFilters {
+        limit: 50,
+        kind: SearchKind::All,
+        tag: None,
+        mime_prefix: None,
+        pinned: false,
+        visibility: None,
+    };
+
+    assert!(hit_matches_filters(&hit, &filters, Some(&auth)));
+}
+
+#[test]
+fn search_allows_public_files_for_unauthenticated() {
+    let owner_id = tssp_domain::UserId::new("owner").unwrap();
+    let public_file = make_test_file(owner_id.clone(), Visibility::Public);
+    let hit = SearchHit::File(public_file);
+    let filters = SearchFilters {
+        limit: 50,
+        kind: SearchKind::All,
+        tag: None,
+        mime_prefix: None,
+        pinned: false,
+        visibility: None,
+    };
+
+    assert!(hit_matches_filters(&hit, &filters, None));
+}
+
+#[test]
+fn search_filters_private_files_for_unauthenticated() {
+    let owner_id = tssp_domain::UserId::new("owner").unwrap();
+    let private_file = make_test_file(owner_id.clone(), Visibility::Private);
+    let hit = SearchHit::File(private_file);
+    let filters = SearchFilters {
+        limit: 50,
+        kind: SearchKind::All,
+        tag: None,
+        mime_prefix: None,
+        pinned: false,
+        visibility: None,
+    };
+
+    assert!(!hit_matches_filters(&hit, &filters, None));
+}
+
+#[test]
+fn search_allows_private_files_for_admin() {
+    let owner_id = tssp_domain::UserId::new("owner").unwrap();
+    let admin_id = tssp_domain::UserId::new("admin").unwrap();
+    let auth = crate::auth::AuthContext {
+        user_id: admin_id.clone(),
+        role: tssp_domain::UserRole::Admin,
+        session_token: None,
+        device_token: None,
+    };
+
+    let private_file = make_test_file(owner_id.clone(), Visibility::Private);
+    let hit = SearchHit::File(private_file);
+    let filters = SearchFilters {
+        limit: 50,
+        kind: SearchKind::All,
+        tag: None,
+        mime_prefix: None,
+        pinned: false,
+        visibility: None,
+    };
+
+    assert!(hit_matches_filters(&hit, &filters, Some(&auth)));
+}
