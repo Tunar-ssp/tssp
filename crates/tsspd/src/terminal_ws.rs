@@ -20,6 +20,7 @@ use tssp_app::audit::{log_audit_event, AuditAction};
 
 /// WebSocket upgrade handler for terminal sessions.
 /// Validates admin access, sandbox availability, creates PTY, streams I/O.
+#[allow(clippy::too_many_lines)]
 pub async fn upgrade_terminal_ws(
     State(state): State<HttpState>,
     Path(workspace_id): Path<String>,
@@ -69,13 +70,37 @@ pub async fn upgrade_terminal_ws(
         ));
     }
 
+    // Resolve actual workspace directory from data_dir
+    let workspace_dir = state
+        .settings()
+        .data_dir
+        .join("workspaces")
+        .join(&workspace_id);
+
+    // Verify workspace directory exists
+    if !workspace_dir.exists() {
+        log_audit_event(
+            state.repository.as_ref(),
+            AuditAction::TerminalStart,
+            Some(&auth.user_id),
+            Some("workspace"),
+            Some(&workspace_id),
+            "failed",
+            Some("workspace directory not found"),
+        );
+        return Err((
+            StatusCode::NOT_FOUND,
+            "Workspace directory not found".to_string(),
+        ));
+    }
+
     // Create terminal session
     let session = terminal_manager
         .create_session(
             &workspace_id,
             auth.user_id.as_str(),
             crate::terminal::TerminalConfig {
-                workspace_dir: PathBuf::from(&workspace_id),
+                workspace_dir: workspace_dir.clone(),
                 sandbox,
                 env: std::collections::HashMap::new(),
                 idle_timeout: 1800, // 30 minutes
@@ -99,6 +124,8 @@ pub async fn upgrade_terminal_ws(
     let session_id = session.id.clone();
     let workspace_id_clone = workspace_id.clone();
     let state_clone = state.clone();
+    let workspace_dir_clone = workspace_dir;
+    let sandbox_clone = sandbox;
 
     log_audit_event(
         state.repository.as_ref(),
@@ -118,23 +145,27 @@ pub async fn upgrade_terminal_ws(
             terminal_manager,
             workspace_id,
             workspace_id_clone,
+            workspace_dir_clone,
+            sandbox_clone,
             state_clone,
         )
     }))
 }
 
 /// Handle WebSocket connection for terminal I/O.
+#[allow(clippy::too_many_arguments)]
 async fn handle_terminal_ws(
     mut socket: axum::extract::ws::WebSocket,
     session_id: crate::terminal::TerminalSessionId,
     terminal_manager: Arc<TerminalManager>,
-    workspace_id: String,
+    _workspace_id: String,
     workspace_id_for_audit: String,
+    workspace_dir: PathBuf,
+    sandbox: SandboxStrategy,
     state: HttpState,
 ) {
-    // Spawn PTY process in workspace
-    let workspace_path = PathBuf::from(&workspace_id);
-    let mut pty_session = match PtySession::spawn_in_workspace(&workspace_path) {
+    // Spawn PTY process in workspace with configured sandbox
+    let mut pty_session = match PtySession::spawn_in_workspace(&workspace_dir, sandbox) {
         Ok(pty) => {
             // Mark session as started in manager
             if terminal_manager.mark_started(&session_id).await.is_err() {

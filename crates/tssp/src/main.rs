@@ -25,6 +25,7 @@ mod status;
 mod tags;
 mod upload;
 mod whoami;
+mod workspace;
 
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -123,6 +124,15 @@ fn run(cli: &Cli) -> Result<CliExitCode, String> {
     }
     if let Some(Command::Admin(args)) = cli.command.as_ref() {
         return admin::run(cli, args);
+    }
+    if let Some(Command::Workspace(args)) = cli.command.as_ref() {
+        return match &args.action {
+            tssp::WorkspaceAction::TerminalStatus => {
+                workspace::terminal_status(cli, &args.workspace_id)
+            }
+            tssp::WorkspaceAction::LspStatus => workspace::lsp_status(cli, &args.workspace_id),
+            tssp::WorkspaceAction::GitStatus => workspace::git_status(cli, &args.workspace_id),
+        };
     }
     if matches!(cli.command, Some(Command::Init)) {
         return init::run(cli);

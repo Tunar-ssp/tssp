@@ -2,13 +2,15 @@
 //!
 //! Reports language server availability detected at startup.
 
+#![allow(dead_code)]
+
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::Serialize;
 
-use crate::HttpState;
 use crate::lsp::LspManager;
+use crate::HttpState;
 
 #[derive(Debug, Serialize)]
 pub struct LspStatusResponse {
@@ -20,7 +22,7 @@ pub struct LspStatusResponse {
 /// `GET /api/v1/workspaces/{id}/lsp/status`
 ///
 /// Reports available language servers.
-pub async fn lsp_status(
+pub fn lsp_status(
     _state: State<HttpState>,
     _path: Path<String>,
 ) -> (StatusCode, Json<LspStatusResponse>) {

@@ -402,6 +402,10 @@ pub fn build_router(state: HttpState) -> Router {
             get(crate::workspaces::lsp_status).options(options_response),
         )
         .route(
+            "/api/v1/workspaces/{id}/git",
+            get(crate::workspaces::git_status).options(options_response),
+        )
+        .route(
             "/api/v1/workspaces/{id}/terminal/ws",
             get(crate::terminal_ws::upgrade_terminal_ws),
         )

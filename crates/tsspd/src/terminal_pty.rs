@@ -14,8 +14,11 @@ pub struct PtySession {
 }
 
 impl PtySession {
-    /// Spawn a shell inside workspace with bubblewrap sandbox.
-    pub fn spawn_in_workspace(workspace_root: &Path) -> io::Result<Self> {
+    /// Spawn a shell inside workspace with configured sandbox strategy.
+    pub fn spawn_in_workspace(
+        workspace_root: &Path,
+        sandbox: crate::workspace_features::SandboxStrategy,
+    ) -> io::Result<Self> {
         // Validate workspace root exists
         if !workspace_root.exists() || !workspace_root.is_dir() {
             return Err(io::Error::new(
@@ -24,6 +27,21 @@ impl PtySession {
             ));
         }
 
+        match sandbox {
+            crate::workspace_features::SandboxStrategy::Bubblewrap => {
+                Self::spawn_with_bubblewrap(workspace_root)
+            }
+            crate::workspace_features::SandboxStrategy::Systemd => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "systemd-nspawn terminal not yet implemented",
+            )),
+            crate::workspace_features::SandboxStrategy::None => Err(io::Error::other(
+                "no sandbox configured, terminal unavailable",
+            )),
+        }
+    }
+
+    fn spawn_with_bubblewrap(workspace_root: &Path) -> io::Result<Self> {
         let abs_workspace = workspace_root.canonicalize()?;
         let workspace_str = abs_workspace
             .to_str()
@@ -39,11 +57,9 @@ impl PtySession {
         cmd.arg("--tmpfs").arg("/tmp");
 
         // Make /dev available but minimal (essential for terminal I/O)
-        // --dev creates a minimal /dev with only essential character devices
         cmd.arg("--dev").arg("/dev");
 
         // Bind /proc as read-only to allow processes to function
-        // but prevent privileged operations
         cmd.arg("--ro-bind").arg("/proc").arg("/proc");
 
         // Change to workspace directory (working directory isolation)
@@ -63,7 +79,7 @@ impl PtySession {
         // Separate the bwrap args from the command to run
         cmd.arg("--");
 
-        // Run bash in interactive mode with no startup files (fast, predictable)
+        // Run bash in interactive mode with no startup files
         cmd.arg("/bin/bash").arg("-i");
 
         // Configure I/O
@@ -71,9 +87,7 @@ impl PtySession {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        // Spawn the child process
         let child = cmd.spawn()?;
-
         Ok(Self { child })
     }
 

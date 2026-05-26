@@ -7,7 +7,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_adapter_system::SystemClock;
 use tssp_ports::Clock;
-use tssp_ports::{AuditEventQuery, ListQuery, NoteListQuery};
+use tssp_ports::{AuditEventQuery, ListQuery};
 
 use crate::admin::system::collect_system_snapshot;
 use tssp_app::{log_audit_event, AuditAction};
@@ -148,134 +148,6 @@ fn admin_activity_error(code: &'static str, message: String) -> axum::response::
         .into_response()
 }
 
-fn collect_file_activity(
-    state: &HttpState,
-    limit: u64,
-) -> Result<Vec<AdminActivityItem>, (&'static str, String)> {
-    state
-        .stats_provider
-        .list_files(&ListQuery {
-            limit,
-            ..ListQuery::default()
-        })
-        .map(|page| {
-            page.files
-                .into_iter()
-                .map(|file| AdminActivityItem {
-                    kind: "file".to_owned(),
-                    id: file.id.as_str().to_owned(),
-                    title: file.name.original().to_owned(),
-                    detail: if file.folder_path.is_empty() {
-                        "Bucket root".to_owned()
-                    } else {
-                        file.folder_path.clone()
-                    },
-                    occurred_at: file.uploaded_at.seconds(),
-                    visibility: Some(file.visibility.as_str().to_owned()),
-                    size_bytes: Some(file.size.bytes()),
-                    language: None,
-                })
-                .collect()
-        })
-        .map_err(|message| ("admin_activity_files_failed", message))
-}
-
-fn collect_note_activity(
-    state: &HttpState,
-    limit: u64,
-) -> Result<Vec<AdminActivityItem>, (&'static str, String)> {
-    state
-        .note_provider
-        .list_notes(NoteListQuery {
-            limit,
-            ..NoteListQuery::default()
-        })
-        .map(|page| {
-            page.notes
-                .into_iter()
-                .map(|note| AdminActivityItem {
-                    kind: "note".to_owned(),
-                    id: note.id.as_str().to_owned(),
-                    title: note.title.as_str().to_owned(),
-                    detail: if note.tags.is_empty() {
-                        "Updated note".to_owned()
-                    } else {
-                        note.tags
-                            .iter()
-                            .map(|tag| tag.display().to_owned())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    },
-                    occurred_at: note.updated_at.seconds(),
-                    visibility: None,
-                    size_bytes: None,
-                    language: None,
-                })
-                .collect()
-        })
-        .map_err(|error| {
-            (
-                "admin_activity_notes_failed",
-                format!("note activity query failed: {error:?}"),
-            )
-        })
-}
-
-fn collect_terminal_activity(state: &HttpState, limit: u64) -> Vec<AdminActivityItem> {
-    match state.repository.list_audit_events(&AuditEventQuery {
-        limit,
-        action: Some("terminal_start".to_string()),
-        ..AuditEventQuery::default()
-    }) {
-        Ok(page) => page
-            .events
-            .into_iter()
-            .map(|event| {
-                let title = match event.action.as_str() {
-                    "terminal_start" => "Terminal Started",
-                    "terminal_stop" => "Terminal Stopped",
-                    _ => "Terminal Event",
-                };
-                AdminActivityItem {
-                    kind: event.action.clone(),
-                    id: event.id.clone(),
-                    title: title.to_owned(),
-                    detail: event
-                        .resource_id
-                        .as_ref()
-                        .unwrap_or(&"unknown".to_string())
-                        .clone(),
-                    occurred_at: event.timestamp,
-                    visibility: None,
-                    size_bytes: None,
-                    language: None,
-                }
-            })
-            .collect(),
-        Err(_) => vec![],
-    }
-}
-
-fn collect_workspace_activity(state: &HttpState) -> Vec<AdminActivityItem> {
-    state
-        .workspaces
-        .as_deref()
-        .and_then(|store| store.list_all().ok())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|workspace| AdminActivityItem {
-            kind: "workspace".to_owned(),
-            id: workspace.id.clone(),
-            title: workspace.name.clone(),
-            detail: workspace.language.clone(),
-            occurred_at: workspace.updated_at,
-            visibility: None,
-            size_bytes: None,
-            language: Some(workspace.language),
-        })
-        .collect()
-}
-
 fn default_limit() -> u64 {
     100
 }
@@ -354,35 +226,86 @@ pub async fn admin_activity(
     Query(params): Query<AdminActivityQuery>,
 ) -> impl IntoResponse {
     let limit = params.limit.clamp(1, 100);
-    let mut items = match collect_file_activity(&state, limit) {
-        Ok(items) => items,
-        Err((code, message)) => return admin_activity_error(code, message),
-    };
-    let note_items = match collect_note_activity(&state, limit) {
-        Ok(items) => items,
-        Err((code, message)) => return admin_activity_error(code, message),
-    };
-    items.extend(note_items);
-    items.extend(collect_terminal_activity(&state, limit));
-    items.extend(collect_workspace_activity(&state));
 
-    items.sort_by(|left, right| {
-        right
-            .occurred_at
-            .cmp(&left.occurred_at)
-            .then_with(|| left.kind.cmp(&right.kind))
-            .then_with(|| left.id.cmp(&right.id))
-    });
-    items.truncate(limit as usize);
+    // Query real audit events as the primary source of activity
+    match state.repository.list_audit_events(&AuditEventQuery {
+        limit,
+        ..AuditEventQuery::default()
+    }) {
+        Ok(page) => {
+            let items = page
+                .events
+                .into_iter()
+                .map(|event| {
+                    let (title, detail) = match event.action.as_str() {
+                        "file_upload" => (
+                            "File Uploaded",
+                            event.resource_id.as_deref().unwrap_or("file"),
+                        ),
+                        "file_delete" => (
+                            "File Deleted",
+                            event.resource_id.as_deref().unwrap_or("file"),
+                        ),
+                        "file_restore" => (
+                            "File Restored",
+                            event.resource_id.as_deref().unwrap_or("file"),
+                        ),
+                        "note_create" => (
+                            "Note Created",
+                            event.resource_id.as_deref().unwrap_or("note"),
+                        ),
+                        "note_update" => (
+                            "Note Updated",
+                            event.resource_id.as_deref().unwrap_or("note"),
+                        ),
+                        "note_delete" => (
+                            "Note Deleted",
+                            event.resource_id.as_deref().unwrap_or("note"),
+                        ),
+                        "tag_add" => ("Tag Added", event.details.as_deref().unwrap_or("tag")),
+                        "tag_remove" => ("Tag Removed", event.details.as_deref().unwrap_or("tag")),
+                        "pin_add" => ("Pin Added", event.resource_id.as_deref().unwrap_or("file")),
+                        "pin_remove" => (
+                            "Pin Removed",
+                            event.resource_id.as_deref().unwrap_or("file"),
+                        ),
+                        "terminal_start" => (
+                            "Terminal Started",
+                            event.resource_id.as_deref().unwrap_or("workspace"),
+                        ),
+                        "terminal_stop" => (
+                            "Terminal Stopped",
+                            event.resource_id.as_deref().unwrap_or("workspace"),
+                        ),
+                        _ => ("Event", event.details.as_deref().unwrap_or("activity")),
+                    };
+                    AdminActivityItem {
+                        kind: event.action.clone(),
+                        id: event.id.clone(),
+                        title: title.to_string(),
+                        detail: detail.to_string(),
+                        occurred_at: event.timestamp,
+                        visibility: None,
+                        size_bytes: None,
+                        language: None,
+                    }
+                })
+                .collect();
 
-    (
-        StatusCode::OK,
-        Json(AdminActivityResponse {
-            schema_version: 1,
-            items,
-        }),
-    )
-        .into_response()
+            (
+                StatusCode::OK,
+                Json(AdminActivityResponse {
+                    schema_version: 1,
+                    items,
+                }),
+            )
+                .into_response()
+        }
+        Err(_) => admin_activity_error(
+            "admin_activity_failed",
+            "Failed to query audit events".to_string(),
+        ),
+    }
 }
 
 /// `GET /api/v1/admin/files`

@@ -156,6 +156,8 @@ pub enum Command {
     Cp(CpArgs),
     /// Admin: storage, folders, system, and maintenance.
     Admin(AdminCommand),
+    /// Workspace status and features.
+    Workspace(WorkspaceCommand),
     /// Generate a shell completion script.
     #[command(hide = true)]
     Completions(CompletionArgs),
@@ -497,6 +499,28 @@ pub enum AdminAction {
     Users(AdminUsersCommand),
     /// Trusted device management.
     Devices(AdminDevicesCommand),
+}
+
+/// Workspace management and status.
+#[derive(Debug, Clone, Args)]
+pub struct WorkspaceCommand {
+    /// Workspace ID.
+    #[arg(value_name = "ID")]
+    pub workspace_id: String,
+    /// Workspace action.
+    #[command(subcommand)]
+    pub action: WorkspaceAction,
+}
+
+/// `tssp workspace` subcommands.
+#[derive(Debug, Clone, Subcommand)]
+pub enum WorkspaceAction {
+    /// Show terminal session status and availability.
+    TerminalStatus,
+    /// Show language server availability.
+    LspStatus,
+    /// Show git repository status.
+    GitStatus,
 }
 
 /// `tssp admin users` subcommands.

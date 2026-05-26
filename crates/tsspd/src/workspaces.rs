@@ -1119,8 +1119,6 @@ pub(crate) async fn terminal_status(
     auth: AuthContext,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    use crate::workspace_features::TerminalCapability;
-
     if !auth.is_admin() {
         return (
             StatusCode::FORBIDDEN,
@@ -1145,22 +1143,19 @@ pub(crate) async fn terminal_status(
 
     // Check if terminal is available
     let sandbox = crate::workspace_features::SandboxStrategy::detect();
-    let status = if sandbox.is_available() {
-        TerminalCapability::Available
+    let available = sandbox.is_available();
+    let reason = if available {
+        None
     } else {
-        TerminalCapability::UnavailableSandbox
+        Some("sandbox not available (bubblewrap or systemd-nspawn required)".to_string())
     };
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "schema_version": 1,
-            "status": status,
-            "message": if sandbox.is_available() {
-                "Terminal is available (WebSocket upgrade not yet implemented)"
-            } else {
-                "Terminal sandbox not available (bubblewrap or systemd-nspawn required)"
-            },
+            "available": available,
+            "reason": reason,
         })),
     )
         .into_response()
@@ -1199,6 +1194,56 @@ pub(crate) async fn lsp_status(
         })),
     )
         .into_response()
+}
+
+/// `GET /api/v1/workspaces/{id}/git`
+pub(crate) async fn git_status(
+    State(state): State<HttpState>,
+    _auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+) -> Response {
+    use crate::git_status;
+
+    // Resolve workspace directory from data_dir
+    let workspace_root = state
+        .settings()
+        .data_dir
+        .join("workspaces")
+        .join(&workspace_id);
+
+    // Verify workspace directory exists
+    if !workspace_root.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "schema_version": 1,
+                "error": "workspace not found"
+            })),
+        )
+            .into_response();
+    }
+
+    match git_status::git_status_handler(&workspace_root).await {
+        Ok(status) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "schema_version": 1,
+                "is_repo": status.is_repo,
+                "branch": status.branch,
+                "changed": status.changed_count,
+                "staged": status.staged_count,
+                "untracked": status.untracked_count,
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": e,
+            })),
+        )
+            .into_response(),
+    }
 }
 
 fn unavailable() -> Response {

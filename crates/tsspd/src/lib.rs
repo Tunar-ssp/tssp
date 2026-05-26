@@ -18,6 +18,7 @@ mod error_handling_tests;
 mod file;
 pub mod folders;
 mod garbage_collection;
+mod git_status;
 mod http_error;
 mod integrity;
 mod list;
