@@ -274,7 +274,7 @@ impl FileRepository for SqliteFileRepository {
         let mut statement = connection
             .prepare(
                 "SELECT id, name, size_bytes, content_hash, mime_type, storage_handle, uploaded_at, pinned_at, folder_path, owner_id, visibility, public_token, public_expires_at
-                 FROM files WHERE deleted_at IS NOT NULL AND deleted_at < ?1 ORDER BY deleted_at ASC"
+                 FROM files WHERE deleted_at IS NOT NULL AND deleted_at < ?1 ORDER BY deleted_at ASC LIMIT 10000"
             )
             .map_err(map_rusqlite_repository_error)?;
 
@@ -488,7 +488,8 @@ impl FileRepository for SqliteFileRepository {
                  FROM tags
                  JOIN file_tags ON file_tags.tag_key = tags.key
                  GROUP BY tags.key, tags.display
-                 ORDER BY tags.key ASC",
+                 ORDER BY tags.key ASC
+                 LIMIT 10000",
             )
             .map_err(map_rusqlite_repository_error)?;
         let mut rows = statement.query([]).map_err(map_rusqlite_repository_error)?;
