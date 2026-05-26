@@ -27,7 +27,9 @@
 </script>
 
 <span class="pill {toneClasses[tone]} {className || ''}" {...rest}>
-  <slot />
+  {#if children}
+    {@render children()}
+  {/if}
 </span>
 
 <style>

@@ -25,17 +25,27 @@
 >
   {#if head}
     <div class="card-head">
-      <svelte:component this={head} />
+      {#if typeof head === 'function'}
+        <svelte:component this={head} />
+      {:else if head}
+        {@render head()}
+      {/if}
     </div>
   {/if}
 
   <div class="card-body">
-    <slot />
+    {#if children}
+      {@render children()}
+    {/if}
   </div>
 
   {#if foot}
     <div class="card-foot">
-      <svelte:component this={foot} />
+      {#if typeof foot === 'function'}
+        <svelte:component this={foot} />
+      {:else if foot}
+        {@render foot()}
+      {/if}
     </div>
   {/if}
 </div>

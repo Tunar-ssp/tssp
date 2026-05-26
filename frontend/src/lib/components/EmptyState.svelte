@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import type { Snippet } from 'svelte';
 
   interface $$Props {
     icon?: any;
@@ -8,6 +9,7 @@
     action?: string;
     onAction?: () => void;
     variant?: 'default' | 'search' | 'error' | 'permission';
+    children?: Snippet;
   }
 
   let {
@@ -17,6 +19,7 @@
     action = '',
     onAction = () => {},
     variant = 'default',
+    children,
   }: $$Props = $props();
 
   const variantIcons = {
@@ -43,7 +46,9 @@
       {action}
     </button>
   {/if}
-  <slot />
+  {#if children}
+    {@render children()}
+  {/if}
 </div>
 
 <style>

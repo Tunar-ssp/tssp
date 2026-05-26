@@ -25,7 +25,7 @@
         {#if item.href}
           <a href={item.href}>{item.label}</a>
         {:else if item.onClick}
-          <button on:click={item.onClick}>{item.label}</button>
+          <button onclick={item.onClick}>{item.label}</button>
         {:else}
           <span class="current">{item.label}</span>
         {/if}
