@@ -867,7 +867,8 @@ pub(crate) fn load_note_tags_batch(
         let note_id_str: String = row.get(0).map_err(map_rusqlite_repository_error)?;
         let display: String = row.get(1).map_err(map_rusqlite_repository_error)?;
 
-        let note_id = NoteId::new(note_id_str).map_err(|error| map_domain_repository_error(&error))?;
+        let note_id =
+            NoteId::new(note_id_str).map_err(|error| map_domain_repository_error(&error))?;
         let tag = Tag::new(display).map_err(|error| map_domain_repository_error(&error))?;
 
         if let Some(tags) = results.get_mut(&note_id) {
