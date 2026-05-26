@@ -29,6 +29,7 @@
   import BlockCallout from './BlockCallout.svelte';
   import BlockCode from './BlockCode.svelte';
   import SlashCommandMenu from './SlashCommandMenu.svelte';
+  import KeyboardShortcutsHelp from './KeyboardShortcutsHelp.svelte';
 
   interface Props {
     class?: string;
@@ -41,6 +42,15 @@
   let slashQuery = $state('');
   let slashPosition = $state({ top: 0, left: 0 });
   let currentBlockId = $state<string | null>(null);
+  let showKeyboardHelp = $state(false);
+
+  function handleEditorKeyDown(e: KeyboardEvent) {
+    // "?" to show keyboard shortcuts help
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      showKeyboardHelp = true;
+    }
+  }
 
   onMount(() => {
     editorElement?.focus();
@@ -247,7 +257,11 @@
   });
 </script>
 
-<div bind:this={editorElement} class="block-editor {className}">
+<div
+  bind:this={editorElement}
+  class="block-editor {className}"
+  onkeydown={handleEditorKeyDown}
+>
   {#if $editorBlocks.length === 0}
     <div class="empty-state">
       <Icons.Feather size={32} />
@@ -394,6 +408,10 @@
         </button>
       </div>
     </div>
+  {/if}
+
+  {#if showKeyboardHelp}
+    <KeyboardShortcutsHelp onClose={() => (showKeyboardHelp = false)} />
   {/if}
 </div>
 
