@@ -18,6 +18,9 @@ use crate::{
 };
 use tssp_app::audit::{log_audit_event, AuditAction};
 
+/// Max size for a single WebSocket input message (64KB).
+const MAX_WS_INPUT_SIZE: usize = 65_536;
+
 /// WebSocket upgrade handler for terminal sessions.
 /// Validates admin access, sandbox availability, creates PTY, streams I/O.
 #[allow(clippy::too_many_lines)]
@@ -206,10 +209,22 @@ async fn handle_terminal_ws(
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(axum::extract::ws::Message::Text(text))) => {
+                        // Validate message size to prevent DoS
+                        if text.len() > MAX_WS_INPUT_SIZE {
+                            let err_msg = json!({"error": "message too large (max 64KB)"}).to_string();
+                            let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
+                            break;
+                        }
+
                         let _ = terminal_manager.update_activity(&session_id).await;
 
                         if let Ok(input_msg) = serde_json::from_str::<serde_json::Value>(text.as_str()) {
                             if let Some(input_data) = input_msg.get("input").and_then(|v| v.as_str()) {
+                                if input_data.len() > MAX_WS_INPUT_SIZE {
+                                    let err_msg = json!({"error": "input field too large (max 64KB)"}).to_string();
+                                    let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
+                                    break;
+                                }
                                 if let Err(e) = pty_session.write_input(input_data.as_bytes()).await {
                                     let err_msg = json!({"error": format!("Write failed: {e}")}).to_string();
                                     let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
