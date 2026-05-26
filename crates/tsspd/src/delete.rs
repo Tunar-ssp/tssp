@@ -534,11 +534,18 @@ pub(crate) async fn permanent_delete(
     }
 }
 
-/// Returns all soft-deleted files (trash).
+/// Returns soft-deleted files (trash).
+/// Admins see all deleted files; non-admins see only their own.
 pub(crate) async fn list_trash(
     State(state): State<HttpState>,
-    _auth: crate::auth::AuthContext,
+    auth: crate::auth::AuthContext,
 ) -> Response {
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.clone())
+    };
+
     match tokio::task::spawn_blocking(move || {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -548,7 +555,17 @@ pub(crate) async fn list_trash(
 
         match tssp_domain::UnixTimestamp::new(i64::try_from(cutoff).unwrap_or(i64::MAX)) {
             Ok(cutoff_ts) => match state.repository.list_deleted_files(cutoff_ts) {
-                Ok(files) => Ok(files),
+                Ok(files) => {
+                    let filtered = if let Some(owner_id) = owner_filter {
+                        files
+                            .into_iter()
+                            .filter(|f| f.owner_id.as_ref() == Some(&owner_id))
+                            .collect()
+                    } else {
+                        files
+                    };
+                    Ok(filtered)
+                }
                 Err(e) => Err(format!("failed to list deleted files: {e}")),
             },
             Err(e) => Err(format!("invalid timestamp: {e}")),
@@ -574,10 +591,24 @@ pub(crate) async fn list_trash(
 }
 
 /// Empties trash by permanently deleting all files older than retention period.
+/// Admin-only operation.
 pub(crate) async fn empty_trash(
     State(state): State<HttpState>,
-    _auth: crate::auth::AuthContext,
+    auth: crate::auth::AuthContext,
 ) -> Response {
+    if !auth.is_admin() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "forbidden",
+                    message: "empty trash requires admin role".to_owned(),
+                },
+            }),
+        )
+            .into_response();
+    }
+
     let settings = state.settings().clone();
     let repo = state.repository.clone();
 
