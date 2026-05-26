@@ -326,6 +326,70 @@ export function redo() {
 }
 
 /**
+ * Move a block up in the document
+ */
+export function moveBlockUp(blockId: string) {
+  const currentBlocks = get(editorBlocks);
+  editorHistory.save(currentBlocks);
+
+  editorBlocks.update((blocks) => {
+    const moveRecursive = (blocks: Block[]): Block[] => {
+      const result: Block[] = [...blocks];
+      for (let i = 1; i < result.length; i++) {
+        if (result[i].id === blockId) {
+          [result[i], result[i - 1]] = [result[i - 1], result[i]];
+          return result;
+        }
+        if (result[i].children) {
+          const updated = moveRecursive(result[i].children);
+          result[i].children = updated;
+          if (updated !== result[i].children) {
+            return result;
+          }
+        }
+      }
+      return result;
+    };
+
+    return moveRecursive(blocks);
+  });
+
+  editorIsDirty.set(true);
+}
+
+/**
+ * Move a block down in the document
+ */
+export function moveBlockDown(blockId: string) {
+  const currentBlocks = get(editorBlocks);
+  editorHistory.save(currentBlocks);
+
+  editorBlocks.update((blocks) => {
+    const moveRecursive = (blocks: Block[]): Block[] => {
+      const result: Block[] = [...blocks];
+      for (let i = 0; i < result.length - 1; i++) {
+        if (result[i].id === blockId) {
+          [result[i], result[i + 1]] = [result[i + 1], result[i]];
+          return result;
+        }
+        if (result[i].children) {
+          const updated = moveRecursive(result[i].children);
+          result[i].children = updated;
+          if (updated !== result[i].children) {
+            return result;
+          }
+        }
+      }
+      return result;
+    };
+
+    return moveRecursive(blocks);
+  });
+
+  editorIsDirty.set(true);
+}
+
+/**
  * Reset editor state
  */
 export function resetEditor() {

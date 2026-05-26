@@ -17,6 +17,8 @@
     redo,
     canUndo,
     canRedo,
+    moveBlockUp,
+    moveBlockDown,
   } from '$lib/blocks/editorStore';
   import { createBlock, generateBlockId, detectBlockType, extractMarkdownPrefix, findBlockById, markdownToBlocks } from '$lib/blocks/utils';
   import { findCommand } from '$lib/blocks/slashCommands';
@@ -149,6 +151,20 @@
         ((e.metaKey || e.ctrlKey) && e.key === 'y')) {
       e.preventDefault();
       redo();
+      return;
+    }
+
+    // Alt+Up - move block up
+    if (e.altKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveBlockUp(blockId);
+      return;
+    }
+
+    // Alt+Down - move block down
+    if (e.altKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveBlockDown(blockId);
       return;
     }
 
