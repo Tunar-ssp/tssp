@@ -145,11 +145,12 @@
         <button
           type="button"
           class="find-toggle-replace"
+          class:expand-open={showReplace}
           onclick={() => showReplace = !showReplace}
           title="Toggle replace (Ctrl+H)"
           aria-label="Toggle replace"
         >
-          <Icons.ChevronRight size={16} class:rotated={showReplace} />
+          <Icons.ChevronRight size={16} />
         </button>
       </div>
     </div>
@@ -158,7 +159,7 @@
     {#if showReplace}
       <div class="replace-section">
         <div class="replace-input-group">
-          <Icons.Replace2 size={16} />
+          <Icons.Replace size={16} />
           <input
             bind:this={replaceInput}
             type="text"
@@ -323,7 +324,7 @@
     transition: transform var(--duration-quick) var(--ease-smooth);
   }
 
-  .find-toggle-replace :global(svg.rotated) {
+  .find-toggle-replace.expand-open :global(svg) {
     transform: rotate(90deg);
   }
 

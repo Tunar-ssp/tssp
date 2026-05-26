@@ -14,13 +14,16 @@
   import { success, error } from '$lib/stores/notifications';
   import MonacoEditor from '$lib/components/MonacoEditor.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
-  import FindWidget from '$lib/components/FindWidget.svelte';
+  import FindReplaceWidget from '$lib/components/FindReplaceWidget.svelte';
+  import MarkdownPreview from '$lib/components/MarkdownPreview.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { renderMarkdownLite } from '$lib/utils/markdown';
   import { getWorkspaceCapabilities } from '$lib/services/workspaceService';
   import type { WorkspaceCapabilities } from '$lib/api';
+  import { findMatches, replaceMatches } from '$lib/services/workspaceSearchService';
+  import type { SearchOptions } from '$lib/services/workspaceSearchService';
   import WorkspaceSidebar from './WorkspaceSidebar.svelte';
   import WorkspaceEditorHeader from './WorkspaceEditorHeader.svelte';
   import WorkspaceInspector from './WorkspaceInspector.svelte';
@@ -40,6 +43,8 @@
   let cursorColumn = $state(1);
   let isModified = $state(false);
   let capabilities = $state<WorkspaceCapabilities | null>(null);
+  let matchCount = $state(0);
+  let currentMatchIndex = $state(0);
 
   let openTabs: Array<{ id: string; label: string; isDirty?: boolean; language?: string }> = $state([]);
   let activeTabId: string | null = $state(null);
@@ -119,6 +124,7 @@
   let previewHtml = $derived(renderMarkdownLite(bodyDraft));
   let languageCount = $derived(new Set($workspaces.map((workspace) => workspace.language)).size);
   let recentWorkspaces = $derived(filteredWorkspaces.slice(0, 6));
+  let isMarkdownFile = $derived(selectedLanguage === 'markdown');
 
   function syncOpenTabs() {
     if (!$activeWorkspace) return;
@@ -212,15 +218,50 @@
     }
   }
 
-  function handleFind(query: string, options: { matchCase: boolean; wholeWord: boolean }) {
+  function handleFind(query: string, options: SearchOptions) {
     if (!query.trim()) return;
-    const text = options.matchCase ? bodyDraft : bodyDraft.toLowerCase();
-    const search = options.matchCase ? query : query.toLowerCase();
-    const index = text.indexOf(search);
+    const matches = findMatches(bodyDraft, query, options);
+    matchCount = matches.length;
+    currentMatchIndex = 0;
 
-    if (index >= 0) {
-      updateCursorPositionFromOffset(index);
-      success('Match Found', `Line ${cursorLine}, column ${cursorColumn}`);
+    if (matches.length > 0) {
+      const match = matches[0];
+      updateCursorPositionFromOffset(match.matchStart);
+      success('Match Found', `${matches.length} matches found, viewing 1/${matchCount}`);
+    } else {
+      error('No Match', `"${query}" was not found`);
+    }
+  }
+
+  function handleReplace(query: string, replacement: string, options: SearchOptions) {
+    if (!query.trim()) return;
+    const result = replaceMatches(bodyDraft, query, replacement, options);
+    bodyDraft = result.content;
+    isModified = true;
+    syncOpenTabs();
+    scheduleWorkspaceSave();
+
+    if (result.replacementCount > 0) {
+      success('Replaced', `${result.replacementCount} match${result.replacementCount === 1 ? '' : 'es'} replaced`);
+      matchCount = 0;
+      currentMatchIndex = 0;
+    } else {
+      error('No Match', `"${query}" was not found`);
+    }
+  }
+
+  function handleReplaceAll(query: string, replacement: string, options: SearchOptions) {
+    if (!query.trim()) return;
+    const result = replaceMatches(bodyDraft, query, replacement, options);
+    bodyDraft = result.content;
+    isModified = true;
+    syncOpenTabs();
+    scheduleWorkspaceSave();
+
+    if (result.replacementCount > 0) {
+      success('Replaced All', `${result.replacementCount} match${result.replacementCount === 1 ? '' : 'es'} replaced`);
+      matchCount = 0;
+      currentMatchIndex = 0;
     } else {
       error('No Match', `"${query}" was not found`);
     }
@@ -419,10 +460,14 @@
         onCloseTab={handleTabClose}
       />
 
-      <FindWidget
+      <FindReplaceWidget
         isOpen={showFindWidget}
         onClose={() => (showFindWidget = false)}
         onFind={handleFind}
+        onReplace={handleReplace}
+        onReplaceAll={handleReplaceAll}
+        {matchCount}
+        currentMatchIndex={currentMatchIndex}
       />
 
       <div class="editor-banner">
@@ -450,17 +495,26 @@
           />
 
           <div class="monaco-shell">
-            <MonacoEditor
-              value={bodyDraft}
-              language={selectedLanguage}
-              onChange={handleEditorInput}
-              onCursorChange={(position) => {
-                cursorLine = position.line;
-                cursorColumn = position.column;
-              }}
-              height="100%"
-              showToolbar={false}
-            />
+            {#if isMarkdownFile}
+              <MarkdownPreview
+                content={bodyDraft}
+                showPreview={true}
+                onTogglePreview={() => {}}
+                onChange={handleEditorInput}
+              />
+            {:else}
+              <MonacoEditor
+                value={bodyDraft}
+                language={selectedLanguage}
+                onChange={handleEditorInput}
+                onCursorChange={(position) => {
+                  cursorLine = position.line;
+                  cursorColumn = position.column;
+                }}
+                height="100%"
+                showToolbar={false}
+              />
+            {/if}
           </div>
         </div>
 

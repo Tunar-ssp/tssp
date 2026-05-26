@@ -6,18 +6,20 @@
     content?: string;
     showPreview?: boolean;
     onTogglePreview?: (show: boolean) => void;
+    onChange?: (content: string) => void;
   }
 
   let {
     content = '',
     showPreview = true,
     onTogglePreview = () => {},
+    onChange = () => {},
   }: $$Props = $props();
 
   let editorElement: HTMLTextAreaElement | null = $state(null);
   let previewElement: HTMLDivElement | null = $state(null);
-  let syncScroll = true;
-  let isEditorScrolling = false;
+  let syncScroll = $state(true);
+  let isEditorScrolling = $state(false);
 
   function handleEditorScroll() {
     if (!syncScroll || !editorElement || !previewElement) return;
@@ -39,6 +41,10 @@
   }
 
   let previewHtml = $derived(renderMarkdownLite(content));
+
+  $effect(() => {
+    onChange(content);
+  });
 </script>
 
 <div class="markdown-preview-container">

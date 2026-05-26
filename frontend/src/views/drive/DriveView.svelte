@@ -10,12 +10,13 @@
   } from '$lib/api';
   import FileIcon from '$lib/components/FileIcon.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
+  import { isDriveFolder, createWorkspaceFromFolder } from '$lib/services/driveWorkspaceIntegration';
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import SharingModal from '$lib/components/SharingModal.svelte';
   import MoveFileDialog from './MoveFileDialog.svelte';
   import DriveDetailsPanel from './DriveDetailsPanel.svelte';
   import TrashView from './TrashView.svelte';
-  import { consumeSelectionIntent, preferences, setDefaultDriveView } from '$lib/stores/ui';
+  import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
 
   type DriveLens = 'all' | 'images' | 'videos' | 'documents' | 'public' | 'trash';
@@ -387,7 +388,24 @@
     };
   }
 
-  function getContextItems(file: FileRecord) {
+  async function handleOpenAsWorkspace(file: FileRecord) {
+    try {
+      const workspaceId = await createWorkspaceFromFolder(file.name, file.folder_path || '');
+      success('Workspace Created', `Opened "${file.name}" as a workspace`);
+      selectionIntent.set({ kind: 'workspace', id: workspaceId });
+    } catch (cause) {
+      error('Failed to Open Workspace', cause instanceof Error ? cause.message : 'Could not create workspace');
+    }
+  }
+
+  interface MenuItem {
+    icon?: any;
+    label: string;
+    action: () => void | Promise<void>;
+    danger?: boolean;
+  }
+
+  function getContextItems(file: FileRecord): MenuItem[] {
     if (isTrashView) {
       return [
         { icon: Icons.RotateCcw, label: 'Restore', action: () => handleRestore(file) },
@@ -395,15 +413,22 @@
       ];
     }
 
-    return [
+    const items: MenuItem[] = [
       { icon: Icons.Eye, label: 'Preview', action: () => openPreview(file) },
       { icon: Icons.Download, label: 'Download', action: () => downloadFile(file) },
       { icon: Icons.Share2, label: file.visibility === 'public' ? 'Manage sharing' : 'Share', action: () => { selectedFile = file; shareFile = file; } },
       { icon: Icons.Pin, label: file.pinned_at ? 'Unpin' : 'Pin', action: () => handlePin(file) },
       { icon: Icons.Pencil, label: 'Rename', action: () => handleRename(file) },
       { icon: Icons.FolderOpen, label: 'Move', action: () => { selectedFile = file; moveDialogFile = file; isMoveDialogOpen = true; } },
-      { icon: Icons.Trash2, label: 'Move to trash', action: () => handleDelete(file), danger: true },
     ];
+
+    if (isDriveFolder(file)) {
+      items.push({ icon: Icons.Code, label: 'Open as Workspace', action: () => handleOpenAsWorkspace(file) });
+    }
+
+    items.push({ icon: Icons.Trash2, label: 'Move to trash', action: () => handleDelete(file), danger: true });
+
+    return items;
   }
 
   const libraryFilters = [
