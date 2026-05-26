@@ -7,6 +7,8 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use tssp_domain::{UserId, UserName, UserRole};
 
+use tssp_app::{log_audit_event, AuditAction};
+
 use crate::auth::AuthContext;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
@@ -88,7 +90,7 @@ pub async fn admin_list_users(
 /// `POST /api/v1/admin/users`
 pub async fn admin_create_user(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     Json(body): Json<CreateUserBody>,
 ) -> impl IntoResponse {
     let Some(users) = state.auth.users() else {
@@ -112,15 +114,40 @@ pub async fn admin_create_user(
         tssp_adapter_system::SystemClock.now().seconds()
     };
     match users.create_user(&id, &name, role, &body.code, now) {
-        Ok(user) => (StatusCode::CREATED, Json(map_user(&user))).into_response(),
-        Err(error) => admin_error(error.to_string()).into_response(),
+        Ok(user) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::AdminUserCreate,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(id.as_str()),
+                "success",
+                Some(&format!(
+                    "created user '{name}' with role {role_str}",
+                    role_str = role.as_str()
+                )),
+            );
+            (StatusCode::CREATED, Json(map_user(&user))).into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::AdminUserCreate,
+                Some(&auth.user_id),
+                Some("user"),
+                None,
+                "failure",
+                Some(&format!("failed to create user '{name}': {error}")),
+            );
+            admin_error(error.to_string()).into_response()
+        }
     }
 }
 
 /// `DELETE /api/v1/admin/users/{id}`
 pub async fn admin_delete_user(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     axum::extract::Path(id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     let Some(users) = state.auth.users() else {
@@ -131,15 +158,37 @@ pub async fn admin_delete_user(
         Err(error) => return admin_error(error.to_string()).into_response(),
     };
     match users.delete_user(&user_id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => admin_error(error.to_string()).into_response(),
+        Ok(()) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::AdminUserDelete,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(user_id.as_str()),
+                "success",
+                None,
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::AdminUserDelete,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(user_id.as_str()),
+                "failure",
+                Some(&error.to_string()),
+            );
+            admin_error(error.to_string()).into_response()
+        }
     }
 }
 
 /// `POST /api/v1/admin/users/{id}/reset-code`
 pub async fn admin_reset_code(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<ResetCodeBody>,
 ) -> impl IntoResponse {
@@ -151,15 +200,37 @@ pub async fn admin_reset_code(
         Err(error) => return admin_error(error.to_string()).into_response(),
     };
     match users.reset_code(&user_id, &body.code) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => admin_error(error.to_string()).into_response(),
+        Ok(()) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::AdminCodeReset,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(user_id.as_str()),
+                "success",
+                None,
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::AdminCodeReset,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(user_id.as_str()),
+                "failure",
+                Some(&error.to_string()),
+            );
+            admin_error(error.to_string()).into_response()
+        }
     }
 }
 
 /// `PUT /api/v1/admin/users/{id}/role`
 pub async fn admin_set_role(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<SetRoleBody>,
 ) -> impl IntoResponse {
@@ -176,7 +247,29 @@ pub async fn admin_set_role(
         _ => return admin_error("role must be admin or user".to_owned()).into_response(),
     };
     match users.set_role(&user_id, role) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => admin_error(error.to_string()).into_response(),
+        Ok(()) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::UserRoleUpdate,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(user_id.as_str()),
+                "success",
+                Some(&format!("set role to {role_str}", role_str = role.as_str())),
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::UserRoleUpdate,
+                Some(&auth.user_id),
+                Some("user"),
+                Some(user_id.as_str()),
+                "failure",
+                Some(&error.to_string()),
+            );
+            admin_error(error.to_string()).into_response()
+        }
     }
 }

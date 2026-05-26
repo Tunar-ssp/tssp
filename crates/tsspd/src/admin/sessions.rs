@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use tssp_domain::UserId;
 use tssp_ports::Clock;
 
+use tssp_app::{log_audit_event, AuditAction};
+
 use crate::auth::AuthContext;
 use crate::{ErrorBody, ErrorResponse, HttpState};
 use tssp_adapter_system::SystemClock;
@@ -152,29 +154,51 @@ pub async fn admin_list_sessions(
 /// `DELETE /api/v1/admin/sessions/{token}`
 pub async fn admin_revoke_session(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     Path(token): Path<String>,
 ) -> impl IntoResponse {
     match state.auth.revoke_token_existing(&token) {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(true) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::SessionRevoke,
+                Some(&auth.user_id),
+                Some("session"),
+                Some(&session_token_preview(&token)),
+                "success",
+                None,
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
         Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "revoke_session_failed",
-                    message: error.to_string(),
-                },
-            }),
-        )
-            .into_response(),
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::SessionRevoke,
+                Some(&auth.user_id),
+                Some("session"),
+                Some(&session_token_preview(&token)),
+                "failure",
+                Some(&error.to_string()),
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "revoke_session_failed",
+                        message: error.to_string(),
+                    },
+                }),
+            )
+                .into_response()
+        }
     }
 }
 
 /// `DELETE /api/v1/admin/users/{id}/sessions`
 pub async fn admin_revoke_user_sessions(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let user_id = match UserId::new(id) {
@@ -193,24 +217,46 @@ pub async fn admin_revoke_user_sessions(
         }
     };
     match state.auth.revoke_all_sessions_for_user(&user_id) {
-        Ok(removed) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "schema_version": 1,
-                "removed": removed,
-            })),
-        )
-            .into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "revoke_user_sessions_failed",
-                    message: error.to_string(),
-                },
-            }),
-        )
-            .into_response(),
+        Ok(removed) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::SessionRevoke,
+                Some(&auth.user_id),
+                Some("user_sessions"),
+                Some(user_id.as_str()),
+                "success",
+                Some(&format!("revoked {removed} sessions")),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "schema_version": 1,
+                    "removed": removed,
+                })),
+            )
+                .into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::SessionRevoke,
+                Some(&auth.user_id),
+                Some("user_sessions"),
+                Some(user_id.as_str()),
+                "failure",
+                Some(&error.to_string()),
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "revoke_user_sessions_failed",
+                        message: error.to_string(),
+                    },
+                }),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -256,22 +302,44 @@ pub async fn admin_list_devices(
 /// `DELETE /api/v1/admin/devices/{token}`
 pub async fn admin_revoke_device(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     Path(token): Path<String>,
 ) -> impl IntoResponse {
     let Some(devices) = state.auth.devices() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     match devices.revoke(&token) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(_) => StatusCode::NOT_FOUND.into_response(),
+        Ok(()) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::DeviceRevoke,
+                Some(&auth.user_id),
+                Some("device"),
+                Some(&session_token_preview(&token)),
+                "success",
+                None,
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::DeviceRevoke,
+                Some(&auth.user_id),
+                Some("device"),
+                Some(&session_token_preview(&token)),
+                "failure",
+                Some(&error.to_string()),
+            );
+            StatusCode::NOT_FOUND.into_response()
+        }
     }
 }
 
 /// `DELETE /api/v1/admin/users/{id}/devices`
 pub async fn admin_revoke_user_devices(
     State(state): State<HttpState>,
-    _auth: AuthContext,
+    auth: AuthContext,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let Some(devices) = state.auth.devices() else {
@@ -293,23 +361,45 @@ pub async fn admin_revoke_user_devices(
         }
     };
     match devices.revoke_all_for_user(&user_id) {
-        Ok(removed) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "schema_version": 1,
-                "removed": removed,
-            })),
-        )
-            .into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: ErrorBody {
-                    code: "revoke_devices_failed",
-                    message: error.to_string(),
-                },
-            }),
-        )
-            .into_response(),
+        Ok(removed) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::DeviceRevoke,
+                Some(&auth.user_id),
+                Some("user_devices"),
+                Some(user_id.as_str()),
+                "success",
+                Some(&format!("revoked {removed} devices")),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "schema_version": 1,
+                    "removed": removed,
+                })),
+            )
+                .into_response()
+        }
+        Err(error) => {
+            log_audit_event(
+                state.repository.as_ref(),
+                AuditAction::DeviceRevoke,
+                Some(&auth.user_id),
+                Some("user_devices"),
+                Some(user_id.as_str()),
+                "failure",
+                Some(&error.to_string()),
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "revoke_devices_failed",
+                        message: error.to_string(),
+                    },
+                }),
+            )
+                .into_response()
+        }
     }
 }

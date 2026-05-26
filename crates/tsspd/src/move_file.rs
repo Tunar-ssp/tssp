@@ -35,8 +35,8 @@ pub async fn move_file_to_folder(
         Err(error) => return bad_request("invalid_file_id", error.to_string()),
     };
 
-    let folder_path = crate::folders::normalize_folder_path(&request.folder_path);
-    if let Err(message) = crate::folders::validate_folder_path(&folder_path) {
+    let folder_path = tssp_app::normalize_folder_path(&request.folder_path);
+    if let Err(message) = tssp_app::validate_folder_path(&folder_path) {
         return bad_request("invalid_request", format!("invalid folder path: {message}"));
     }
 

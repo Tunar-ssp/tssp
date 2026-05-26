@@ -390,8 +390,8 @@ pub(crate) async fn stage_multipart_upload(
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
             "folder" | "folder_path" => {
                 let text = field_text(field).await?;
-                folder_path = crate::folders::normalize_folder_path(&text);
-                crate::folders::validate_folder_path(&folder_path).map_err(|message| {
+                folder_path = tssp_app::normalize_folder_path(&text);
+                tssp_app::validate_folder_path(&folder_path).map_err(|message| {
                     HttpUploadError::InvalidRequest {
                         message: format!("invalid folder path: {message}"),
                     }
@@ -446,8 +446,8 @@ async fn stage_batch_multipart_upload(
             "pin" => pinned = parse_pin_field(&field_text(field).await?)?,
             "folder" | "folder_path" => {
                 let text = field_text(field).await?;
-                folder_path = crate::folders::normalize_folder_path(&text);
-                crate::folders::validate_folder_path(&folder_path).map_err(|message| {
+                folder_path = tssp_app::normalize_folder_path(&text);
+                tssp_app::validate_folder_path(&folder_path).map_err(|message| {
                     HttpUploadError::InvalidRequest {
                         message: format!("invalid folder path: {message}"),
                     }

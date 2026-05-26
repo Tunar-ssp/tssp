@@ -6,6 +6,8 @@ use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use tssp_app::{log_audit_event, AuditAction};
+
 use crate::admin::system::collect_system_snapshot;
 use crate::HttpState;
 
@@ -98,6 +100,7 @@ pub async fn list_commands() -> impl IntoResponse {
 /// `POST /api/v1/admin/console/run`
 pub async fn run_command(
     State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
     Json(req): Json<ConsoleRunRequest>,
 ) -> impl IntoResponse {
     let ran_at_ms = u64::try_from(
@@ -134,6 +137,16 @@ pub async fn run_command(
         "tag_stats" => run_tag_stats(&state),
         _ => (false, serde_json::json!({"error": "unhandled command"})),
     };
+
+    log_audit_event(
+        state.repository.as_ref(),
+        AuditAction::AdminConsoleCommand,
+        Some(&auth.user_id),
+        Some("console"),
+        Some(&req.command),
+        if success { "success" } else { "failure" },
+        None,
+    );
 
     (
         StatusCode::OK,
@@ -360,10 +373,11 @@ mod tests {
     #[tokio::test]
     async fn run_unknown_command_returns_bad_request() {
         let state = crate::HttpState::test_http_state(std::env::temp_dir());
+        let auth = crate::auth::AuthContext::open_access();
         let req = ConsoleRunRequest {
             command: "rm -rf /".to_owned(),
         };
-        let resp = run_command(axum::extract::State(state), Json(req))
+        let resp = run_command(axum::extract::State(state), auth, Json(req))
             .await
             .into_response();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -372,10 +386,11 @@ mod tests {
     #[tokio::test]
     async fn run_version_info_returns_success() {
         let state = crate::HttpState::test_http_state(std::env::temp_dir());
+        let auth = crate::auth::AuthContext::open_access();
         let req = ConsoleRunRequest {
             command: "version_info".to_owned(),
         };
-        let resp = run_command(axum::extract::State(state), Json(req))
+        let resp = run_command(axum::extract::State(state), auth, Json(req))
             .await
             .into_response();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -390,10 +405,11 @@ mod tests {
     #[tokio::test]
     async fn run_cleanup_temp_returns_success() {
         let state = crate::HttpState::test_http_state(std::env::temp_dir());
+        let auth = crate::auth::AuthContext::open_access();
         let req = ConsoleRunRequest {
             command: "cleanup_temp".to_owned(),
         };
-        let resp = run_command(axum::extract::State(state), Json(req))
+        let resp = run_command(axum::extract::State(state), auth, Json(req))
             .await
             .into_response();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -407,11 +423,12 @@ mod tests {
     #[tokio::test]
     async fn all_declared_commands_are_handled() {
         let state = crate::HttpState::test_http_state(std::env::temp_dir());
+        let auth = crate::auth::AuthContext::open_access();
         for cmd in COMMANDS {
             let req = ConsoleRunRequest {
                 command: cmd.name.to_owned(),
             };
-            let resp = run_command(axum::extract::State(state.clone()), Json(req))
+            let resp = run_command(axum::extract::State(state.clone()), auth.clone(), Json(req))
                 .await
                 .into_response();
             assert_eq!(
