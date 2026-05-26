@@ -39,3 +39,13 @@ export function formatAbsoluteDate(value: string | number | Date | null | undefi
   if (!date) return value == null ? "—" : String(value);
   return date.toLocaleString();
 }
+
+export function formatRelative(timestamp?: number): string {
+  if (!timestamp) return 'just now';
+  const delta = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
+  if (delta < 60) return 'just now';
+  if (delta < 3600) return `${Math.floor(delta / 60)}m`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h`;
+  if (delta < 604800) return `${Math.floor(delta / 86400)}d`;
+  return `${Math.floor(delta / 604800)}w`;
+}

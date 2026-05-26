@@ -233,8 +233,7 @@
   }
 
   .plain-preview-card,
-  .terminal-warning,
-  .terminal-placeholder {
+  .terminal-warning {
     padding: 18px;
     border-radius: 20px;
     border: 1px solid var(--border);
@@ -247,8 +246,7 @@
     line-height: 1.6;
   }
 
-  .plain-preview-card pre,
-  .terminal-placeholder code {
+  .plain-preview-card pre {
     display: block;
     margin-top: 14px;
     padding: 14px;
@@ -275,18 +273,6 @@
   }
 
   .terminal-warning strong {
-    display: block;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
-
-  .terminal-ready {
-    display: flex;
-    gap: 12px;
-    color: var(--green);
-  }
-
-  .terminal-ready strong {
     display: block;
     color: var(--text);
     margin-bottom: 6px;
