@@ -146,10 +146,18 @@ impl UploadSession {
 /// This means clients CANNOT resume uploads after the server restarts.
 /// Resumability is only guaranteed within a single daemon lifetime.
 /// Consider implementing database persistence for true resumability.
+///
+/// # Limits
+///
+/// - Maximum 100 concurrent sessions per user
+/// - Maximum 1000 total concurrent sessions across all users
 #[derive(Clone)]
 pub struct UploadSessionManager {
     sessions: Arc<RwLock<HashMap<String, UploadSession>>>,
 }
+
+const MAX_SESSIONS_PER_USER: usize = 100;
+const MAX_SESSIONS_TOTAL: usize = 1000;
 
 impl UploadSessionManager {
     pub fn new() -> Self {
@@ -158,10 +166,32 @@ impl UploadSessionManager {
         }
     }
 
-    pub async fn create_session(&self, session: UploadSession) -> UploadSessionId {
+    pub async fn create_session(&self, session: UploadSession) -> Result<UploadSessionId, String> {
         let id = session.id.clone();
-        self.sessions.write().await.insert(id.0.clone(), session);
-        id
+        let owner_id = session.owner_id.as_deref();
+
+        let mut sessions = self.sessions.write().await;
+
+        // Check global limit
+        if sessions.len() >= MAX_SESSIONS_TOTAL {
+            return Err(format!("server has reached maximum concurrent uploads ({})", MAX_SESSIONS_TOTAL));
+        }
+
+        // Check per-user limit
+        let user_session_count = sessions
+            .values()
+            .filter(|s| s.owner_id.as_deref() == owner_id)
+            .count();
+
+        if user_session_count >= MAX_SESSIONS_PER_USER {
+            return Err(format!(
+                "you have reached the maximum concurrent uploads ({}) per user",
+                MAX_SESSIONS_PER_USER
+            ));
+        }
+
+        sessions.insert(id.0.clone(), session);
+        Ok(id)
     }
 
     pub async fn get_session(&self, id: &UploadSessionId) -> Option<UploadSession> {
@@ -360,17 +390,18 @@ pub async fn start_upload(
 
     let total_chunks = req.total_size.div_ceil(CHUNK_SIZE);
 
-    let _id = state.upload_session_manager.create_session(session).await;
-
-    (
-        StatusCode::OK,
-        Json(StartUploadResponse {
-            session_id: session_id.0,
-            chunk_size: CHUNK_SIZE,
-            total_chunks,
-        }),
-    )
-        .into_response()
+    match state.upload_session_manager.create_session(session).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(StartUploadResponse {
+                session_id: session_id.0,
+                chunk_size: CHUNK_SIZE,
+                total_chunks,
+            }),
+        )
+            .into_response(),
+        Err(e) => error_response(StatusCode::TOO_MANY_REQUESTS, "upload_limit_exceeded", &e),
+    }
 }
 
 /// Upload a single chunk within a session.
@@ -798,4 +829,116 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
         })),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn create_session_respects_per_user_limit() {
+        let manager = UploadSessionManager::new();
+        let owner_id = Some("user123".to_string());
+
+        // Create MAX_SESSIONS_PER_USER sessions
+        for i in 0..MAX_SESSIONS_PER_USER {
+            let uuid = format!("{:0>8}-0000-0000-0000-{:0>12}", i, i);
+            let session_id = UploadSessionId::new(format!("ses_{}", uuid))
+                .expect("valid session id");
+            let session = UploadSession::new(
+                session_id,
+                format!("file{i}.txt"),
+                1024,
+                String::new(),
+                owner_id.clone(),
+                vec![],
+                None,
+            );
+            let result = manager.create_session(session).await;
+            assert!(result.is_ok(), "session {} should succeed", i);
+        }
+
+        // Try to create one more - should fail
+        let session_id = UploadSessionId::new("ses_99999999-0000-0000-0000-999999999999".to_string())
+            .expect("valid session id");
+        let session = UploadSession::new(
+            session_id,
+            "extra.txt".to_string(),
+            1024,
+            String::new(),
+            owner_id,
+            vec![],
+            None,
+        );
+        let result = manager.create_session(session).await;
+        assert!(result.is_err(), "should reject exceeding per-user limit");
+    }
+
+    #[tokio::test]
+    async fn create_session_respects_global_limit() {
+        let manager = UploadSessionManager::new();
+
+        // Create MAX_SESSIONS_TOTAL sessions with different owners
+        for i in 0..MAX_SESSIONS_TOTAL {
+            let uuid = format!("{:0>8}-0000-0000-0000-{:0>12}", i, i);
+            let session_id = UploadSessionId::new(format!("ses_{}", uuid))
+                .expect("valid session id");
+            let session = UploadSession::new(
+                session_id,
+                format!("file{i}.txt"),
+                1024,
+                String::new(),
+                Some(format!("user{}", i % 100)), // Spread across users
+                vec![],
+                None,
+            );
+            let result = manager.create_session(session).await;
+            assert!(result.is_ok(), "session {} should succeed", i);
+        }
+
+        // Try to create one more - should fail
+        let session_id = UploadSessionId::new("ses_ffffffff-0000-0000-0000-ffffffffffff".to_string())
+            .expect("valid session id");
+        let session = UploadSession::new(
+            session_id,
+            "extra.txt".to_string(),
+            1024,
+            String::new(),
+            Some("new_user".to_string()),
+            vec![],
+            None,
+        );
+        let result = manager.create_session(session).await;
+        assert!(result.is_err(), "should reject exceeding global limit");
+    }
+
+    #[tokio::test]
+    async fn cleanup_removes_expired_sessions() {
+        let manager = UploadSessionManager::new();
+
+        // Create a session
+        let session_id = UploadSessionId::new("ses_deadbeef-0000-0000-0000-deadbeefdeaf".to_string())
+            .expect("valid session id");
+        let session = UploadSession::new(
+            session_id.clone(),
+            "file.txt".to_string(),
+            1024,
+            String::new(),
+            Some("user1".to_string()),
+            vec![],
+            None,
+        );
+        manager.create_session(session).await.unwrap();
+
+        // Verify session exists
+        assert!(manager.get_session(&session_id).await.is_some());
+
+        // Cleanup with 0 duration should remove all sessions
+        let expired = manager.cleanup_expired(std::time::Duration::ZERO).await;
+        assert_eq!(expired.len(), 1);
+        assert_eq!(expired[0].0, session_id.0);
+
+        // Verify session is gone
+        assert!(manager.get_session(&session_id).await.is_none());
+    }
 }
