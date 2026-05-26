@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Filesystem blob storage adapter for TSSP"
 
 [dependencies]
+async-trait = "0.1"
 blake3.workspace = true
 tokio.workspace = true
 tracing.workspace = true

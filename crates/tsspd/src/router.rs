@@ -2,7 +2,7 @@
 
 use axum::extract::DefaultBodyLimit;
 use axum::middleware;
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::Router;
 
 use crate::state::HttpState;
@@ -404,6 +404,27 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/workspaces/{id}/git",
             get(crate::workspaces::git_status).options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/files",
+            get(crate::workspaces::list_workspace_files)
+                .post(crate::workspaces::create_workspace_file)
+                .delete(crate::workspaces::delete_workspace_file)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/files/content",
+            get(crate::workspaces::read_workspace_file)
+                .put(crate::workspaces::write_workspace_file)
+                .options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/files/move",
+            patch(crate::workspaces::move_workspace_file).options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/dirs",
+            post(crate::workspaces::create_workspace_dir).options(options_response),
         )
         .route(
             "/api/v1/workspaces/{id}/terminal/ws",

@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "TSSP backend daemon"
 
 [dependencies]
+async-trait = "0.1"
 axum.workspace = true
 blake3.workspace = true
 clap.workspace = true

@@ -16,6 +16,7 @@
 //! | [`record`] | Input/output record types for write operations |
 //! | [`repository`] | [`FileRepository`], [`NoteRepository`] port traits |
 //! | [`session`] | [`SessionRepository`] port trait |
+//! | [`workspace`] | [`WorkspaceFileStore`] port trait |
 
 pub mod blob;
 pub mod clock;
@@ -25,6 +26,7 @@ pub mod query;
 pub mod record;
 pub mod repository;
 pub mod session;
+pub mod workspace;
 
 // Flat re-exports for backward compatibility.
 pub use blob::{BlobReader, BlobStore};
@@ -39,6 +41,7 @@ pub use query::{
 pub use record::{BlobWriteOutcome, DeletedFileRecord, NewFileRecord, NewNoteRecord};
 pub use repository::{FileRepository, NoteRepository};
 pub use session::SessionRepository;
+pub use workspace::{WorkspaceFileEntry, WorkspaceFileStore, WorkspaceFileStoreError};
 
 #[cfg(test)]
 mod tests {

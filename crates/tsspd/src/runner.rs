@@ -8,13 +8,13 @@ use std::time::Instant;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use tokio::net::TcpListener;
-use tssp_adapter_fs::FilesystemBlobStore;
+use tssp_adapter_fs::{FilesystemBlobStore, FilesystemWorkspaceFileStore};
 use tssp_adapter_sqlite::{initialize_connection, SqliteFileRepository, SqliteSessionRepository};
 use tssp_adapter_system::SystemClock;
 use tssp_adapter_system::UuidV7FileIdGenerator;
 use tssp_app::{
     DeleteFileService, FolderService, NoteService, PinService, PurgeDeletedFilesService,
-    RestoreFileService, SessionService, TagService, UploadService,
+    RestoreFileService, SessionService, TagService, UploadService, WorkspaceFileService,
 };
 use tssp_ports::Clock;
 use tsspd::workspaces::WorkspaceStore;
@@ -275,6 +275,10 @@ fn build_http_state(
     let pin_service = PinService::new(repository.clone());
     let note_service = NoteService::new(repository.clone(), SystemClock, UuidV7FileIdGenerator);
     let workspace_store = Arc::new(WorkspaceStore::new(pool));
+    let workspace_file_store = Arc::new(FilesystemWorkspaceFileStore::new(
+        settings.data_dir.join("workspaces"),
+    ));
+    let workspace_file_service = Arc::new(WorkspaceFileService::new(workspace_file_store));
 
     HttpState::new(
         Instant::now(),
@@ -285,6 +289,7 @@ fn build_http_state(
     )
     .with_repository(repository.clone())
     .with_workspaces(workspace_store)
+    .with_workspace_file_service(workspace_file_service)
     .with_stats_provider(Arc::new(stats_provider))
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
     .with_folder_provider(Arc::new(ApplicationFolderProvider::new(folder_service)))

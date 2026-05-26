@@ -1,8 +1,8 @@
-//! Filesystem implementation of content-addressed blob storage.
+//! Filesystem implementations of port traits.
 //!
-//! Bytes are streamed into a temporary file while BLAKE3 is computed. Completed
-//! files are moved into a fanout path based on the content hash, so identical
-//! content shares one stored blob.
+//! Provides:
+//! - [`FilesystemBlobStore`]: content-addressed blob storage with deduplication
+//! - [`FilesystemWorkspaceFileStore`]: workspace filesystem with path security
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -11,6 +11,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tssp_domain::{ContentHash, FileSize, StorageHandle};
 use tssp_ports::{BlobReadError, BlobReader, BlobStore, BlobStoreError, BlobWriteOutcome};
+
+pub mod workspace;
+
+pub use workspace::FilesystemWorkspaceFileStore;
 
 const BUFFER_SIZE: usize = 64 * 1024;
 const TEMP_DIR: &str = "tmp";

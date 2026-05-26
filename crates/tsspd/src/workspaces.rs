@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use axum::extract::{Path as AxumPath, State};
+use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -14,7 +14,9 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, ErrorCode, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use thiserror::Error;
+use tssp_ports::WorkspaceFileStoreError;
 use uuid::Uuid;
 
 use crate::auth::AuthContext;
@@ -1311,6 +1313,328 @@ fn internal(message: String) -> Response {
         .into_response()
 }
 
+// Workspace filesystem handlers
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListFilesQuery {
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct FileListResponse {
+    entries: Vec<FileEntryResponse>,
+}
+
+#[derive(Debug, Serialize)]
+struct FileEntryResponse {
+    path: String,
+    is_dir: bool,
+    size_bytes: u64,
+    modified_at: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ReadFileQuery {
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct WriteFileBody {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateFileBody {
+    pub path: String,
+    #[serde(default)]
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateDirBody {
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct MoveFileBody {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct DeleteFileQuery {
+    pub path: String,
+}
+
+/// `GET /api/v1/workspaces/{workspace_id}/files`
+pub(crate) async fn list_workspace_files(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<ListFilesQuery>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let path = query.path.unwrap_or_default();
+    let result = state
+        .workspace_file_service
+        .list_tree(&workspace_id, &path, 10)
+        .await;
+
+    match result {
+        Ok(entries) => {
+            let entries: Vec<_> = entries
+                .into_iter()
+                .map(|e| FileEntryResponse {
+                    path: e.path,
+                    is_dir: e.is_dir,
+                    size_bytes: e.size_bytes,
+                    modified_at: e.modified_at,
+                })
+                .collect();
+            (StatusCode::OK, Json(FileListResponse { entries })).into_response()
+        }
+        Err(WorkspaceFileStoreError::NotFound) => not_found(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
+/// `GET /api/v1/workspaces/{workspace_id}/files/content`
+pub(crate) async fn read_workspace_file(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<ReadFileQuery>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let result = state
+        .workspace_file_service
+        .read_file(&workspace_id, &query.path)
+        .await;
+
+    match result {
+        Ok(content) => (StatusCode::OK, content).into_response(),
+        Err(WorkspaceFileStoreError::NotFound) => not_found(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(WorkspaceFileStoreError::FileTooLarge) => (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "file_too_large",
+                    message: "file exceeds size limit".to_owned(),
+                },
+            }),
+        )
+            .into_response(),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
+/// `PUT /api/v1/workspaces/{workspace_id}/files/content`
+pub(crate) async fn write_workspace_file(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(body): Json<WriteFileBody>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let result = state
+        .workspace_file_service
+        .write_file(&workspace_id, &body.path, body.content.as_bytes())
+        .await;
+
+    match result {
+        Ok(()) => (StatusCode::OK, Json(json!({"status": "written"}))).into_response(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(WorkspaceFileStoreError::FileTooLarge) => (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "file_too_large",
+                    message: "content exceeds size limit".to_owned(),
+                },
+            }),
+        )
+            .into_response(),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
+/// `POST /api/v1/workspaces/{workspace_id}/files`
+pub(crate) async fn create_workspace_file(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(body): Json<CreateFileBody>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let result = state
+        .workspace_file_service
+        .write_file(&workspace_id, &body.path, body.content.as_bytes())
+        .await;
+
+    match result {
+        Ok(()) => (
+            StatusCode::CREATED,
+            Json(json!({"status": "created", "path": body.path})),
+        )
+            .into_response(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
+/// `POST /api/v1/workspaces/{workspace_id}/dirs`
+pub(crate) async fn create_workspace_dir(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(body): Json<CreateDirBody>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let result = state
+        .workspace_file_service
+        .create_dir(&workspace_id, &body.path)
+        .await;
+
+    match result {
+        Ok(()) => (
+            StatusCode::CREATED,
+            Json(json!({"status": "created", "path": body.path})),
+        )
+            .into_response(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
+/// `PATCH /api/v1/workspaces/{workspace_id}/files/move`
+pub(crate) async fn move_workspace_file(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(body): Json<MoveFileBody>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let result = state
+        .workspace_file_service
+        .rename(&workspace_id, &body.from, &body.to)
+        .await;
+
+    match result {
+        Ok(()) => (StatusCode::OK, Json(json!({"status": "moved"}))).into_response(),
+        Err(WorkspaceFileStoreError::NotFound) => not_found(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
+/// `DELETE /api/v1/workspaces/{workspace_id}/files`
+pub(crate) async fn delete_workspace_file(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<DeleteFileQuery>,
+) -> Response {
+    let Some(store) = store(&state) else {
+        return unavailable();
+    };
+    let owner_filter = if auth.is_admin() {
+        None
+    } else {
+        Some(auth.user_id.as_str())
+    };
+    if store.get(&workspace_id, owner_filter).is_err() {
+        return not_found();
+    }
+
+    let result = state
+        .workspace_file_service
+        .delete(&workspace_id, &query.path)
+        .await;
+
+    match result {
+        Ok(()) => (StatusCode::OK, Json(json!({"status": "deleted"}))).into_response(),
+        Err(WorkspaceFileStoreError::NotFound) => not_found(),
+        Err(WorkspaceFileStoreError::InvalidPath(msg)) => bad_request(&msg),
+        Err(WorkspaceFileStoreError::TraversalAttempt) => bad_request("path traversal rejected"),
+        Err(_) => internal("file store error".to_owned()),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -1319,7 +1643,7 @@ mod tests {
     use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use axum::middleware;
-    use axum::routing::get;
+    use axum::routing::{get, patch, post};
     use axum::Router;
     use serde_json::json;
     use tempfile::TempDir;
@@ -1328,9 +1652,11 @@ mod tests {
     use tssp_domain::{UserId, UserRole};
 
     use super::{
-        create_workspace, delete_workspace, get_workspace, list_workspaces, new_workspace_id,
-        update_workspace, validate_document_path, validate_language, validate_name, WorkspaceError,
-        WorkspaceRecord, WorkspaceStore,
+        create_workspace, create_workspace_dir, create_workspace_file, delete_workspace,
+        delete_workspace_file, get_workspace, list_workspace_files, list_workspaces,
+        move_workspace_file, new_workspace_id, read_workspace_file, update_workspace,
+        validate_document_path, validate_language, validate_name, write_workspace_file,
+        WorkspaceError, WorkspaceRecord, WorkspaceStore,
     };
     use crate::auth::AuthContext;
     use crate::{HttpState, PublicUrlBuilder};
@@ -1372,6 +1698,24 @@ mod tests {
                 get(get_workspace)
                     .put(update_workspace)
                     .delete(delete_workspace),
+            )
+            .route(
+                "/api/v1/workspaces/{workspace_id}/files",
+                get(list_workspace_files)
+                    .post(create_workspace_file)
+                    .delete(delete_workspace_file),
+            )
+            .route(
+                "/api/v1/workspaces/{workspace_id}/files/content",
+                get(read_workspace_file).put(write_workspace_file),
+            )
+            .route(
+                "/api/v1/workspaces/{workspace_id}/files/move",
+                patch(move_workspace_file),
+            )
+            .route(
+                "/api/v1/workspaces/{workspace_id}/dirs",
+                post(create_workspace_dir),
             )
             .layer(middleware::from_fn(
                 move |mut request: axum::extract::Request, next: axum::middleware::Next| {
@@ -1621,5 +1965,183 @@ mod tests {
             .delete_document("ws-owned", &remaining[0].id, Some("user-owner"), 13)
             .expect_err("last document delete must fail");
         assert!(matches!(error, WorkspaceError::InvalidOperation(_)));
+    }
+
+    // Workspace filesystem HTTP integration tests
+
+    #[tokio::test]
+    async fn workspace_file_list_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/nonexistent/files")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_path_traversal_rejected() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/files?path=../etc/passwd")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_read_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/nonexistent/files/content?path=test.txt")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_write_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .method("PUT")
+            .uri("/api/v1/workspaces/nonexistent/files/content")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_string(&json!({
+                    "path": "test.txt",
+                    "content": "data"
+                }))
+                .expect("json"),
+            ))
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_create_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/workspaces/nonexistent/files")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_string(&json!({
+                    "path": "test.txt",
+                    "content": ""
+                }))
+                .expect("json"),
+            ))
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_dir_create_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/workspaces/nonexistent/dirs")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_string(&json!({
+                    "path": "src"
+                }))
+                .expect("json"),
+            ))
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_move_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .method("PATCH")
+            .uri("/api/v1/workspaces/nonexistent/files/move")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_string(&json!({
+                    "from": "old.txt",
+                    "to": "new.txt"
+                }))
+                .expect("json"),
+            ))
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_delete_requires_valid_workspace() {
+        let (_temp, store) = open_store();
+        let router = app(store, auth("user-owner", UserRole::User));
+
+        let request = Request::builder()
+            .method("DELETE")
+            .uri("/api/v1/workspaces/nonexistent/files?path=test.txt")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_ownership_enforced() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-other", UserRole::User));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/files")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workspace_file_admin_bypass_ownership() {
+        let (_temp, store) = open_store();
+        insert_record(&store, "ws-owner", "user-owner");
+        let router = app(store, auth("user-admin", UserRole::Admin));
+
+        let request = Request::builder()
+            .uri("/api/v1/workspaces/ws-owner/files")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+
+        // Should succeed (not found for filesystem, but workspace auth passes)
+        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
     }
 }

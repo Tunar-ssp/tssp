@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use tssp_ports::{BlobReader, FileRepository};
+use tssp_app::WorkspaceFileService;
+use tssp_ports::{BlobReader, FileRepository, WorkspaceFileStore};
 
 use crate::auth::AuthService;
 use crate::chunked_upload::UploadSessionManager;
@@ -55,6 +56,8 @@ pub struct HttpState {
     pub(crate) blob_reader: Arc<dyn BlobReader + Send + Sync>,
     /// Terminal session manager for WebSocket connections.
     pub terminal_manager: Arc<crate::terminal::TerminalManager>,
+    /// Workspace file operations service.
+    pub(crate) workspace_file_service: Arc<WorkspaceFileService>,
 }
 
 impl HttpState {
@@ -92,6 +95,9 @@ impl HttpState {
             search_provider: Arc::new(StaticFileSearchProvider),
             blob_reader: Arc::new(StaticBlobReader),
             terminal_manager: Arc::new(crate::terminal::TerminalManager::new()),
+            workspace_file_service: Arc::new(WorkspaceFileService::new(Arc::new(
+                StaticWorkspaceFileStore,
+            ))),
         }
     }
 
@@ -99,6 +105,13 @@ impl HttpState {
     #[must_use]
     pub fn with_workspaces(mut self, store: Arc<workspaces::WorkspaceStore>) -> Self {
         self.workspaces = Some(store);
+        self
+    }
+
+    /// Attaches the workspace file service.
+    #[must_use]
+    pub fn with_workspace_file_service(mut self, service: Arc<WorkspaceFileService>) -> Self {
+        self.workspace_file_service = service;
         self
     }
 
@@ -269,6 +282,7 @@ impl Clone for HttpState {
             search_provider: self.search_provider.clone(),
             blob_reader: self.blob_reader.clone(),
             terminal_manager: self.terminal_manager.clone(),
+            workspace_file_service: self.workspace_file_service.clone(),
         }
     }
 }
@@ -559,4 +573,83 @@ impl crate::folders::FolderProvider for StaticFolderProvider {
             "folder service is not configured".to_owned(),
         ))
     }
+}
+
+/// No-op workspace file store for testing.
+#[derive(Clone, Copy)]
+struct StaticWorkspaceFileStore;
+
+#[async_trait::async_trait]
+impl WorkspaceFileStore for StaticWorkspaceFileStore {
+    async fn init_workspace(
+        &self,
+        _workspace_id: &str,
+    ) -> Result<(), tssp_ports::WorkspaceFileStoreError> {
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+
+    async fn list_tree(
+        &self,
+        _workspace_id: &str,
+        rel_path: &str,
+        _max_depth: usize,
+    ) -> Result<Vec<tssp_ports::WorkspaceFileEntry>, tssp_ports::WorkspaceFileStoreError> {
+        validate_path(rel_path)?;
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+
+    async fn read_file(
+        &self,
+        _workspace_id: &str,
+        rel_path: &str,
+    ) -> Result<Vec<u8>, tssp_ports::WorkspaceFileStoreError> {
+        validate_path(rel_path)?;
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+
+    async fn write_file(
+        &self,
+        _workspace_id: &str,
+        rel_path: &str,
+        _contents: &[u8],
+    ) -> Result<(), tssp_ports::WorkspaceFileStoreError> {
+        validate_path(rel_path)?;
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+
+    async fn create_dir(
+        &self,
+        _workspace_id: &str,
+        rel_path: &str,
+    ) -> Result<(), tssp_ports::WorkspaceFileStoreError> {
+        validate_path(rel_path)?;
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+
+    async fn delete(
+        &self,
+        _workspace_id: &str,
+        rel_path: &str,
+    ) -> Result<(), tssp_ports::WorkspaceFileStoreError> {
+        validate_path(rel_path)?;
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+
+    async fn rename(
+        &self,
+        _workspace_id: &str,
+        from: &str,
+        to: &str,
+    ) -> Result<(), tssp_ports::WorkspaceFileStoreError> {
+        validate_path(from)?;
+        validate_path(to)?;
+        Err(tssp_ports::WorkspaceFileStoreError::NotFound)
+    }
+}
+
+fn validate_path(rel_path: &str) -> Result<(), tssp_ports::WorkspaceFileStoreError> {
+    if rel_path.starts_with("../") || rel_path.contains("/../") || rel_path.ends_with("/..") {
+        return Err(tssp_ports::WorkspaceFileStoreError::TraversalAttempt);
+    }
+    Ok(())
 }

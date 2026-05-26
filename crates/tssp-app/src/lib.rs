@@ -12,6 +12,7 @@ mod pins;
 mod sessions;
 mod tags;
 mod upload;
+pub mod workspace_files;
 
 pub use audit::{log_audit_event, AuditAction};
 pub use delete::{
@@ -24,3 +25,4 @@ pub use pins::{PinError, PinService};
 pub use sessions::SessionService;
 pub use tags::{TagError, TagService};
 pub use upload::{UploadError, UploadRequest, UploadResult, UploadService};
+pub use workspace_files::WorkspaceFileService;

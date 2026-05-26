@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Infrastructure boundary traits for TSSP"
 
 [dependencies]
+async-trait = "0.1"
 thiserror.workspace = true
 tssp-domain = { path = "../tssp-domain" }
 
