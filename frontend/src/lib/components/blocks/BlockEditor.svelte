@@ -13,6 +13,10 @@
     setSelection,
     scheduleAutosave,
     editorMarkdown,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } from '$lib/blocks/editorStore';
   import { createBlock, generateBlockId, detectBlockType, extractMarkdownPrefix, findBlockById, markdownToBlocks } from '$lib/blocks/utils';
   import { findCommand } from '$lib/blocks/slashCommands';
@@ -133,7 +137,22 @@
       return;
     }
 
-    // Cmd/Ctrl+C on Backspace at start of line - delete block
+    // Cmd/Ctrl+Z - undo
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+      return;
+    }
+
+    // Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y - redo
+    if (((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) ||
+        ((e.metaKey || e.ctrlKey) && e.key === 'y')) {
+      e.preventDefault();
+      redo();
+      return;
+    }
+
+    // Cmd/Ctrl+Backspace at start of line - delete block
     if (e.key === 'Backspace' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       if ($editorBlocks.length > 1) {
@@ -326,15 +345,38 @@
     />
   {/if}
 
-  {#if $editorIsDirty || $editorIsSaving}
+  {#if $editorIsDirty || $editorIsSaving || $canUndo || $canRedo}
     <div class="editor-status" class:saving={$editorIsSaving}>
-      {#if $editorIsSaving}
-        <span class="status-indicator">●</span>
-        <span>Saving...</span>
-      {:else}
-        <span class="status-indicator unsaved">●</span>
-        <span>Unsaved changes</span>
-      {/if}
+      <div class="status-left">
+        {#if $editorIsSaving}
+          <span class="status-indicator">●</span>
+          <span>Saving...</span>
+        {:else if $editorIsDirty}
+          <span class="status-indicator unsaved">●</span>
+          <span>Unsaved changes</span>
+        {/if}
+      </div>
+
+      <div class="status-right">
+        <button
+          class="history-btn"
+          disabled={!$canUndo}
+          onclick={undo}
+          title="Undo (Cmd+Z)"
+          aria-label="Undo"
+        >
+          <Icons.RotateCcw size={14} />
+        </button>
+        <button
+          class="history-btn"
+          disabled={!$canRedo}
+          onclick={redo}
+          title="Redo (Cmd+Shift+Z)"
+          aria-label="Redo"
+        >
+          <Icons.RotateCw size={14} />
+        </button>
+      </div>
     </div>
   {/if}
 </div>
@@ -403,12 +445,27 @@
     right: 0;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 8px 16px;
     background-color: var(--bg-secondary);
     border-top: 1px solid var(--border);
     font-size: 12px;
     color: var(--muted);
+  }
+
+  .status-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .status-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
   }
 
   .status-indicator {
@@ -419,6 +476,35 @@
 
   .status-indicator.unsaved {
     color: var(--warning);
+  }
+
+  .history-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background-color: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .history-btn:hover:not(:disabled) {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .history-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .history-btn:active:not(:disabled) {
+    background-color: rgba(59, 130, 246, 0.2);
   }
 
   @keyframes pulse {

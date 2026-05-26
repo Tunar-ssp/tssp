@@ -6,6 +6,7 @@
 import { writable, derived, get } from 'svelte/store';
 import type { Block, EditorState } from './types';
 import { serializeBlocks, deserializeBlocks, blocksToMarkdown } from './utils';
+import { editorHistory } from './history';
 
 // IndexedDB setup
 const DB_NAME = 'tssp_notes';
@@ -113,6 +114,22 @@ export const editorIsSaving = writable(false);
 export const editorActiveNoteId = writable<string | null>(null);
 
 /**
+ * Whether undo is available
+ */
+export const canUndo = derived(
+  editorBlocks,
+  () => editorHistory.canUndo()
+);
+
+/**
+ * Whether redo is available
+ */
+export const canRedo = derived(
+  editorBlocks,
+  () => editorHistory.canRedo()
+);
+
+/**
  * Get current editor state
  */
 export const editorState = derived(
@@ -137,6 +154,8 @@ export function initializeEditor(blocks: Block[], noteId: string) {
   editorSelection.set(null);
   editorIsDirty.set(false);
   editorActiveNoteId.set(noteId);
+  editorHistory.clear();
+  editorHistory.save(blocks);
 }
 
 /**
@@ -159,6 +178,9 @@ export function updateBlocks(blocks: Block[]) {
  * Update a single block
  */
 export function updateBlock(blockId: string, updates: Partial<Block>) {
+  const currentBlocks = get(editorBlocks);
+  editorHistory.save(currentBlocks);
+
   editorBlocks.update((blocks) => {
     const updateRecursive = (blocks: Block[]): Block[] => {
       return blocks.map((block) => {
@@ -185,6 +207,9 @@ export function updateBlock(blockId: string, updates: Partial<Block>) {
  * Insert a block at a specific position
  */
 export function insertBlock(newBlock: Block, afterBlockId?: string) {
+  const currentBlocks = get(editorBlocks);
+  editorHistory.save(currentBlocks);
+
   editorBlocks.update((blocks) => {
     if (!afterBlockId) {
       return [...blocks, newBlock];
@@ -214,6 +239,9 @@ export function insertBlock(newBlock: Block, afterBlockId?: string) {
  * Delete a block
  */
 export function deleteBlock(blockId: string) {
+  const currentBlocks = get(editorBlocks);
+  editorHistory.save(currentBlocks);
+
   editorBlocks.update((blocks) => {
     const deleteRecursive = (blocks: Block[]): Block[] => {
       return blocks
@@ -274,6 +302,30 @@ export async function clearEditorDraft() {
 }
 
 /**
+ * Undo last change
+ */
+export function undo() {
+  const previousBlocks = editorHistory.undo();
+  if (previousBlocks) {
+    editorBlocks.set(previousBlocks);
+    editorSelection.set(null);
+    editorIsDirty.set(true);
+  }
+}
+
+/**
+ * Redo last undone change
+ */
+export function redo() {
+  const nextBlocks = editorHistory.redo();
+  if (nextBlocks) {
+    editorBlocks.set(nextBlocks);
+    editorSelection.set(null);
+    editorIsDirty.set(true);
+  }
+}
+
+/**
  * Reset editor state
  */
 export function resetEditor() {
@@ -282,5 +334,6 @@ export function resetEditor() {
   editorIsDirty.set(false);
   editorIsSaving.set(false);
   editorActiveNoteId.set(null);
+  editorHistory.clear();
   clearTimeout(autosaveTimeout);
 }
