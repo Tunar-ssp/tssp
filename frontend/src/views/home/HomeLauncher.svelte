@@ -5,6 +5,7 @@
   import FileIcon from '$lib/components/FileIcon.svelte';
   import { isAdmin, user } from '$lib/stores/auth';
   import { navigateTo, openCommandPalette } from '$lib/stores/ui';
+  import { formatBytes, formatRelative } from '$lib/utils/formatters';
 
   type Status = Awaited<ReturnType<typeof api.getStatus>>;
   type AdminOverview = Awaited<ReturnType<typeof api.getAdminOverview>>;
@@ -77,24 +78,6 @@
     if (hour < 12) return 'Good morning';
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
-  }
-
-  function formatBytes(bytes = 0): string {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    const value = bytes / 1024 ** index;
-    return `${value.toFixed(index === 0 ? 0 : value >= 10 ? 0 : 1)} ${units[index]}`;
-  }
-
-  function formatRelative(epochSeconds?: number) {
-    if (!epochSeconds) return 'just now';
-    const delta = Math.max(0, Math.floor(Date.now() / 1000) - epochSeconds);
-    if (delta < 60) return 'just now';
-    if (delta < 3_600) return `${Math.floor(delta / 60)}m`;
-    if (delta < 86_400) return `${Math.floor(delta / 3_600)}h`;
-    if (delta < 604_800) return `${Math.floor(delta / 86_400)}d`;
-    return `${Math.floor(delta / 604_800)}w`;
   }
 
   function formatUptime(seconds = 0) {
