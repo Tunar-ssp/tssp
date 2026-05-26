@@ -213,11 +213,11 @@
       {
         id: 'root',
         name: 'root',
-        type: 'folder',
+        type: 'folder' as const,
         children: $workspaces.map(w => ({
           id: w.id,
           name: w.name + (languages.find(l => l.id === w.language)?.ext || ''),
-          type: 'file',
+          type: 'file' as const,
           path: w.name,
         })),
       },

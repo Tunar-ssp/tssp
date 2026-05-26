@@ -22,8 +22,9 @@
  * - Syntax errors: Graceful fallback
  */
 
-import type { Workspace } from '$lib/api';
+import type { Workspace, WorkspaceFileEntry } from '$lib/api';
 import { api } from '$lib/api';
+import { validateFilePath, normalizePath } from '$lib/utils/workspaceFS';
 
 // Logging utility
 function log(context: string, message: string, data?: any) {
@@ -415,6 +416,393 @@ export async function getWorkspaceCapabilities(id: string) {
       terminal: { status: 'unavailable' as const, message: 'Failed to load capabilities' },
       lsp: { status: 'unavailable' as const, message: 'Failed to load capabilities' },
     };
+  }
+}
+
+/**
+ * Load file tree from workspace filesystem
+ * Handles edge cases: empty workspace, deep recursion, network failures
+ * @throws WorkspaceServiceError on failure
+ */
+export async function loadWorkspaceFileTree(
+  workspaceId: string,
+  path: string = ''
+): Promise<WorkspaceFileEntry[]> {
+  log('loadWorkspaceFileTree', 'Starting', { workspaceId, path });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+
+    // Validate path if provided
+    if (path?.trim()) {
+      const validation = validateFilePath(path);
+      if (!validation.valid) {
+        throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid path');
+      }
+    }
+
+    const response = await api.listWorkspaceFiles(workspaceId, path || undefined);
+    const entries = response.entries || [];
+
+    // Ensure entries are sorted: folders first, then files, alphabetically
+    const sorted = entries.sort((a, b) => {
+      if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+      return a.path.localeCompare(b.path);
+    });
+
+    log('loadWorkspaceFileTree', 'Success', { workspaceId, count: sorted.length });
+    return sorted;
+  } catch (err) {
+    // Don't re-wrap WorkspaceServiceError
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to load file tree';
+    log('loadWorkspaceFileTree', 'Error', { error: message, workspaceId });
+    throw new WorkspaceServiceError(
+      'LOAD_FILE_TREE_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+/**
+ * Read file content
+ * Handles edge cases: missing file, permission denied, large files
+ * @throws WorkspaceServiceError on failure
+ */
+export async function readWorkspaceFileContent(
+  workspaceId: string,
+  path: string
+): Promise<string> {
+  log('readWorkspaceFileContent', 'Starting', { workspaceId, path });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+    if (!path?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'File path required');
+    }
+
+    // Validate path
+    const validation = validateFilePath(path);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid path');
+    }
+
+    const response = await api.readWorkspaceFile(workspaceId, path);
+    const content = response.content || '';
+
+    // Warn if file is large (but still return it)
+    if (content.length > 5 * 1024 * 1024) {
+      log('readWorkspaceFileContent', 'Warning: Large file', {
+        workspaceId,
+        path,
+        sizeMB: (content.length / 1024 / 1024).toFixed(1)
+      });
+    }
+
+    log('readWorkspaceFileContent', 'Success', { workspaceId, path, bytes: content.length });
+    return content;
+  } catch (err) {
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to read file';
+    log('readWorkspaceFileContent', 'Error', { error: message, workspaceId, path });
+    throw new WorkspaceServiceError(
+      'READ_FILE_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+/**
+ * Write file content
+ * Handles edge cases: permission denied, disk full, concurrent writes
+ * @throws WorkspaceServiceError on failure
+ */
+export async function writeWorkspaceFileContent(
+  workspaceId: string,
+  path: string,
+  content: string
+): Promise<void> {
+  log('writeWorkspaceFileContent', 'Starting', { workspaceId, path, bytes: content.length });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+    if (!path?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'File path required');
+    }
+
+    // Validate path
+    const validation = validateFilePath(path);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid path');
+    }
+
+    // Check content size (100MB limit)
+    if (content.length > 100 * 1024 * 1024) {
+      throw new WorkspaceServiceError(
+        'VALIDATION_ERROR',
+        'File content is too large (max 100MB)'
+      );
+    }
+
+    // Warn if content is large
+    if (content.length > 10 * 1024 * 1024) {
+      log('writeWorkspaceFileContent', 'Warning: Large file write', {
+        workspaceId,
+        path,
+        sizeMB: (content.length / 1024 / 1024).toFixed(1)
+      });
+    }
+
+    await api.writeWorkspaceFile(workspaceId, path, content);
+
+    log('writeWorkspaceFileContent', 'Success', { workspaceId, path });
+  } catch (err) {
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to write file';
+    log('writeWorkspaceFileContent', 'Error', { error: message, workspaceId, path });
+    throw new WorkspaceServiceError(
+      'WRITE_FILE_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+/**
+ * Create new file
+ * Handles edge cases: file already exists, parent directory missing, quota exceeded
+ * @throws WorkspaceServiceError on failure
+ */
+export async function createWorkspaceFile(
+  workspaceId: string,
+  path: string,
+  content: string = ''
+): Promise<void> {
+  log('createWorkspaceFile', 'Starting', { workspaceId, path });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+    if (!path?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'File path required');
+    }
+
+    // Validate path
+    const validation = validateFilePath(path);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid path');
+    }
+
+    // Check content size before creating
+    if (content.length > 100 * 1024 * 1024) {
+      throw new WorkspaceServiceError(
+        'VALIDATION_ERROR',
+        'File content is too large (max 100MB)'
+      );
+    }
+
+    await api.createWorkspaceFile(workspaceId, path, content);
+
+    log('createWorkspaceFile', 'Success', { workspaceId, path });
+  } catch (err) {
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to create file';
+    log('createWorkspaceFile', 'Error', { error: message, workspaceId, path });
+    throw new WorkspaceServiceError(
+      'CREATE_FILE_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+/**
+ * Create new directory
+ * Handles edge cases: directory already exists, parent missing, permission denied
+ * @throws WorkspaceServiceError on failure
+ */
+export async function createWorkspaceDirectory(
+  workspaceId: string,
+  path: string
+): Promise<void> {
+  log('createWorkspaceDirectory', 'Starting', { workspaceId, path });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+    if (!path?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Directory path required');
+    }
+
+    // Normalize and validate path
+    const normalized = normalizePath(path);
+    const validation = validateFilePath(normalized);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid path');
+    }
+
+    // Check for excessively deep paths (prevent DOS)
+    const depth = normalized.split('/').length;
+    if (depth > 50) {
+      throw new WorkspaceServiceError(
+        'VALIDATION_ERROR',
+        'Directory path is too deeply nested (max 50 levels)'
+      );
+    }
+
+    await api.createWorkspaceDirectory(workspaceId, normalized);
+
+    log('createWorkspaceDirectory', 'Success', { workspaceId, path: normalized });
+  } catch (err) {
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to create directory';
+    log('createWorkspaceDirectory', 'Error', { error: message, workspaceId, path });
+    throw new WorkspaceServiceError(
+      'CREATE_DIR_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+/**
+ * Move/rename file or directory
+ * Handles edge cases: source not found, destination exists, moving to self
+ * @throws WorkspaceServiceError on failure
+ */
+export async function moveWorkspaceFile(
+  workspaceId: string,
+  from: string,
+  to: string
+): Promise<void> {
+  log('moveWorkspaceFile', 'Starting', { workspaceId, from, to });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+    if (!from?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Source path required');
+    }
+    if (!to?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Destination path required');
+    }
+
+    // Normalize paths
+    const fromNormalized = normalizePath(from);
+    const toNormalized = normalizePath(to);
+
+    // Validate both paths
+    let validation = validateFilePath(fromNormalized);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid source path');
+    }
+
+    validation = validateFilePath(toNormalized);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid destination path');
+    }
+
+    // Check for moving to same path
+    if (fromNormalized === toNormalized) {
+      throw new WorkspaceServiceError(
+        'VALIDATION_ERROR',
+        'Source and destination paths are the same'
+      );
+    }
+
+    // Prevent moving directory into itself
+    if (toNormalized.startsWith(fromNormalized + '/')) {
+      throw new WorkspaceServiceError(
+        'VALIDATION_ERROR',
+        'Cannot move a directory into itself'
+      );
+    }
+
+    await api.moveWorkspaceFile(workspaceId, fromNormalized, toNormalized);
+
+    log('moveWorkspaceFile', 'Success', { workspaceId, from: fromNormalized, to: toNormalized });
+  } catch (err) {
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to move file';
+    log('moveWorkspaceFile', 'Error', { error: message, workspaceId, from, to });
+    throw new WorkspaceServiceError(
+      'MOVE_FILE_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+/**
+ * Delete file or directory
+ * Handles edge cases: file not found, permission denied, directory not empty
+ * @throws WorkspaceServiceError on failure
+ */
+export async function deleteWorkspaceFile(
+  workspaceId: string,
+  path: string
+): Promise<void> {
+  log('deleteWorkspaceFile', 'Starting', { workspaceId, path });
+
+  try {
+    if (!workspaceId?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'Workspace ID required');
+    }
+    if (!path?.trim()) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', 'File path required');
+    }
+
+    // Validate path
+    const normalized = normalizePath(path);
+    const validation = validateFilePath(normalized);
+    if (!validation.valid) {
+      throw new WorkspaceServiceError('VALIDATION_ERROR', validation.error || 'Invalid path');
+    }
+
+    await api.deleteWorkspaceFile(workspaceId, normalized);
+
+    log('deleteWorkspaceFile', 'Success', { workspaceId, path: normalized });
+  } catch (err) {
+    if (err instanceof WorkspaceServiceError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : 'Failed to delete file';
+    log('deleteWorkspaceFile', 'Error', { error: message, workspaceId, path });
+    throw new WorkspaceServiceError(
+      'DELETE_FILE_FAILED',
+      message,
+      err instanceof Error ? err : undefined
+    );
   }
 }
 

@@ -16,7 +16,7 @@ export type { Note } from './notes';
 
 // Workspace
 export { workspaceApi } from './workspace';
-export type { Workspace, WorkspaceCapabilities, WorkspaceDocumentSummary } from './workspace';
+export type { Workspace, WorkspaceCapabilities, WorkspaceDocumentSummary, WorkspaceFileEntry, FileListResponse } from './workspace';
 
 // Admin
 export { adminApi } from './admin';

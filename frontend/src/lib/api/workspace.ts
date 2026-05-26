@@ -27,6 +27,18 @@ export interface WorkspaceCapabilities {
   };
 }
 
+// Workspace filesystem types
+export interface WorkspaceFileEntry {
+  path: string;
+  is_dir: boolean;
+  size_bytes?: number;
+  modified_at?: number;
+}
+
+export interface FileListResponse {
+  entries: WorkspaceFileEntry[];
+}
+
 export const workspaceApi = {
   // Workspaces
   listWorkspaces: async (limit?: number, cursor?: string) => {
@@ -62,4 +74,61 @@ export const workspaceApi = {
     request<{ status: 'available' | 'disabled' | 'forbidden' | 'unavailable_sandbox' | 'unavailable' }>(`/workspaces/${encodeURIComponent(id)}/terminal`),
   getWorkspaceLspStatus: (id: string) =>
     request<{ status: 'available' | 'disabled' | 'unavailable' | 'not_implemented'; languages?: string[] }>(`/workspaces/${encodeURIComponent(id)}/lsp`),
+
+  // Workspace filesystem operations
+  listWorkspaceFiles: (workspaceId: string, path?: string) => {
+    const params = new URLSearchParams();
+    if (path) params.append('path', path);
+    const query = params.toString();
+    return request<FileListResponse>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/files${query ? `?${query}` : ''}`
+    );
+  },
+  readWorkspaceFile: (workspaceId: string, path: string) => {
+    const params = new URLSearchParams();
+    params.append('path', path);
+    return request<{ content: string }>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/files/content?${params.toString()}`
+    );
+  },
+  writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>
+    request<void>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/files/content`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ path, content }),
+      }
+    ),
+  createWorkspaceFile: (workspaceId: string, path: string, content: string = '') =>
+    request<void>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/files`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ path, content }),
+      }
+    ),
+  createWorkspaceDirectory: (workspaceId: string, path: string) =>
+    request<void>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/dirs`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      }
+    ),
+  moveWorkspaceFile: (workspaceId: string, from: string, to: string) =>
+    request<void>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/files/move`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ from, to }),
+      }
+    ),
+  deleteWorkspaceFile: (workspaceId: string, path: string) => {
+    const params = new URLSearchParams();
+    params.append('path', path);
+    return request<void>(
+      `/workspaces/${encodeURIComponent(workspaceId)}/files?${params.toString()}`,
+      { method: 'DELETE' }
+    );
+  },
 };

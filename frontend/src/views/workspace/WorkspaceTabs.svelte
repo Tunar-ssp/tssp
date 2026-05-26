@@ -21,18 +21,19 @@
 <div class="workspace-tabs">
   <div class="tabs-list">
     {#each tabs as tab (tab.id)}
-      <button
-        type="button"
-        class="tab-item"
-        class:active={activeTabId === tab.id}
-        onclick={() => onTabSelect?.(tab.id)}
-      >
-        <span class="tab-label">
-          {#if tab.isDirty}
-            <span class="dirty-indicator" title="Unsaved changes"></span>
-          {/if}
-          {tab.label}
-        </span>
+      <div class="tab-item" class:active={activeTabId === tab.id}>
+        <button
+          type="button"
+          class="tab-button"
+          onclick={() => onTabSelect?.(tab.id)}
+        >
+          <span class="tab-label">
+            {#if tab.isDirty}
+              <span class="dirty-indicator" title="Unsaved changes"></span>
+            {/if}
+            {tab.label}
+          </span>
+        </button>
         <button
           type="button"
           class="tab-close"
@@ -44,7 +45,7 @@
         >
           <Icons.X size={14} />
         </button>
-      </button>
+      </div>
     {/each}
   </div>
 </div>
@@ -70,14 +71,13 @@
   .tab-item {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     height: 32px;
     padding: 0 12px;
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
     color: var(--text-2);
-    cursor: pointer;
     font-size: 13px;
     white-space: nowrap;
     transition: all 0.2s;
@@ -92,6 +92,23 @@
     background: var(--surface-2);
     border-color: var(--blue);
     color: var(--text);
+  }
+
+  .tab-button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: inherit;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tab-button:focus {
+    outline: none;
   }
 
   .tab-label {
