@@ -40,9 +40,10 @@ impl FilesystemWorkspaceFileStore {
     /// Gets the full filesystem path for a workspace file, with security checks.
     ///
     /// Implements safe lexical path normalization to prevent directory traversal attacks.
+    /// Empty paths and `.` resolve to the workspace root.
     /// The function processes paths in stages:
     ///
-    /// 1. Validation: Rejects null bytes, empty paths, absolute paths
+    /// 1. Validation: Rejects null bytes, absolute paths
     /// 2. Lexical normalization: Resolves `.` and `..` without filesystem access
     ///    - Rejects if `..` would escape the workspace root
     /// 3. Filesystem verification:
@@ -64,16 +65,15 @@ impl FilesystemWorkspaceFileStore {
             ));
         }
 
-        if rel_path.trim().is_empty() {
-            return Err(WorkspaceFileStoreError::InvalidPath(
-                "path cannot be empty".to_string(),
-            ));
-        }
-
         if rel_path.starts_with('/') {
             return Err(WorkspaceFileStoreError::InvalidPath(
                 "absolute paths rejected".to_string(),
             ));
+        }
+
+        let rel_path = rel_path.trim();
+        if rel_path.is_empty() || rel_path == "." {
+            return Ok(workspace_dir);
         }
 
         let mut normalized = Vec::new();
@@ -104,26 +104,28 @@ impl FilesystemWorkspaceFileStore {
 
         if requested.exists() {
             let canonical = requested.canonicalize()?;
-            if !canonical.starts_with(&workspace_dir) {
+            let canonical_workspace = workspace_dir.canonicalize()?;
+            if !canonical.starts_with(&canonical_workspace) {
                 return Err(WorkspaceFileStoreError::TraversalAttempt);
             }
             Ok(canonical)
         } else {
-            let mut parent = requested.clone();
+            // For non-existent paths, find the nearest existing parent and verify it's within workspace
+            let mut check_path = requested.clone();
             loop {
-                if parent == workspace_dir {
+                if check_path == workspace_dir {
+                    // Parent chain leads back to workspace root - safe
                     return Ok(requested);
                 }
-                if parent.pop() {
-                    if parent.exists() {
-                        let canonical_parent = parent.canonicalize()?;
-                        if !canonical_parent.starts_with(&workspace_dir) {
+                if check_path.pop() {
+                    if check_path.exists() {
+                        // Found an existing parent - verify it's within workspace
+                        let canonical_parent = check_path.canonicalize()?;
+                        let canonical_workspace = workspace_dir.canonicalize()?;
+                        if !canonical_parent.starts_with(&canonical_workspace) {
                             return Err(WorkspaceFileStoreError::TraversalAttempt);
                         }
-                        let relative = requested
-                            .strip_prefix(&parent)
-                            .map_err(|_| WorkspaceFileStoreError::TraversalAttempt)?;
-                        return Ok(canonical_parent.join(relative));
+                        return Ok(requested);
                     }
                 } else {
                     return Err(WorkspaceFileStoreError::TraversalAttempt);
@@ -152,6 +154,13 @@ impl WorkspaceFileStore for FilesystemWorkspaceFileStore {
         }
 
         let path = self.resolve_path(workspace_id, rel_path)?;
+        let workspace_dir = self.workspace_dir(workspace_id)?;
+
+        // Create workspace directory if it doesn't exist (empty workspace)
+        if rel_path.trim().is_empty() || rel_path == "." {
+            tokio::fs::create_dir_all(&workspace_dir).await?;
+        }
+
         let mut entries = Vec::new();
 
         if !path.exists() {

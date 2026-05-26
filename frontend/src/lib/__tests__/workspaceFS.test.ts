@@ -148,7 +148,7 @@ describe('Path Manipulation', () => {
   it('should suggest unique paths for conflicts', () => {
     const unique = suggestUniquePath('folder/file.txt');
     expect(unique).toContain('(1)');
-    expect(unique).toEndWith('.txt');
+    expect(unique).toMatch(/\.txt$/);
   });
 
   it('should compare paths correctly', () => {
