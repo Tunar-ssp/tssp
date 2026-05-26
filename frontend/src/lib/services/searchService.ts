@@ -144,7 +144,7 @@ async function searchFiles(query: string, limit: number): Promise<FileRecord[]> 
   try {
     const response = await api.search(query);
     const results = response.results.filter(r => r.type === 'file');
-
+    
     // Fetch detailed records
     const files = await Promise.all(results.map(r => api.getFile(r.id)));
     return files.slice(0, limit);
@@ -161,7 +161,7 @@ async function searchNotes(query: string, limit: number): Promise<Note[]> {
   try {
     const response = await api.search(query);
     const results = response.results.filter(r => r.type === 'note');
-
+    
     // Fetch detailed notes
     const notes = await Promise.all(results.map(r => api.getNote(r.id)));
     return notes.slice(0, limit);
@@ -178,7 +178,7 @@ async function searchWorkspaces(query: string, limit: number): Promise<Workspace
   try {
     const response = await api.search(query);
     const results = response.results.filter(r => r.type === 'workspace');
-
+    
     // Fetch detailed workspaces
     const workspaces = await Promise.all(results.map(r => api.getWorkspace(r.id)));
     return workspaces.slice(0, limit);

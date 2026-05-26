@@ -347,7 +347,7 @@ export async function searchFiles(query: string): Promise<FileRecord[]> {
     if (!sanitized) return [];
 
     const response = await api.search(sanitized);
-
+    
     // Filter to only include files from the search results
     const fileIds = response.results.filter(r => r.type === 'file').map(r => r.id);
     const files = await Promise.all(fileIds.map(id => api.getFile(id)));

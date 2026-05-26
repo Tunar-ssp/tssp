@@ -268,10 +268,10 @@ export async function searchNotes(query: string): Promise<Note[]> {
     if (!sanitized) return [];
 
     const response = await api.search(sanitized);
-
+    
     // Filter to only include notes from search results
     const noteIds = response.results.filter(r => r.type === 'note').map(r => r.id);
-
+    
     // Fetch full note details if needed, or return partials
     const notes = await Promise.all(noteIds.map(id => api.getNote(id)));
 
