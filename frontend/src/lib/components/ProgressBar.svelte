@@ -1,8 +1,17 @@
 <script lang="ts">
-  export let value: number = 0;
-  export let tone: 'blue' | 'green' | 'pink' | 'orange' | 'violet' | 'warn' = 'blue';
-  export let height: number = 6;
-  export let segments: any[] | null = null;
+  interface $$Props {
+    value?: number;
+    tone?: 'blue' | 'green' | 'pink' | 'orange' | 'violet' | 'warn';
+    height?: number;
+    segments?: any[] | null;
+  }
+
+  let {
+    value = 0,
+    tone = 'blue',
+    height = 6,
+    segments = null,
+  }: $$Props = $props();
 
   const colors: Record<string, string> = {
     blue: 'var(--blue)',
@@ -13,7 +22,7 @@
     warn: 'var(--warning)',
   };
 
-  const c = colors[tone];
+  let c = $derived(colors[tone]);
 </script>
 
 {#if segments}

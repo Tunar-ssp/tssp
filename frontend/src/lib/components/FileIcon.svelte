@@ -1,9 +1,17 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
 
-  export let mimeType: string = 'application/octet-stream';
-  export let size: number = 24;
-  export let name: string = '';
+  interface $$Props {
+    mimeType?: string;
+    size?: number;
+    name?: string;
+  }
+
+  let {
+    mimeType = 'application/octet-stream',
+    size = 24,
+    name = '',
+  }: $$Props = $props();
 
   function getIcon() {
     const ext = name.split('.').pop()?.toLowerCase() || '';
@@ -46,7 +54,7 @@
     }
   }
 
-  $: Icon = getIcon();
+  let Icon = $derived(getIcon());
 </script>
 
 <Icon {size} strokeWidth={1.5} />

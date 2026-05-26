@@ -1,13 +1,31 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
 
-  export let x: number = 0;
-  export let y: number = 0;
-  export let visible: boolean = false;
-  export let items: Array<{ icon?: any; label: string; action: () => void; danger?: boolean }> = [];
+  interface MenuItem {
+    icon?: any;
+    label: string;
+    action: () => void;
+    danger?: boolean;
+  }
+
+  interface $$Props {
+    x?: number;
+    y?: number;
+    visible?: boolean;
+    items?: MenuItem[];
+    onClose?: () => void;
+  }
+
+  let {
+    x = 0,
+    y = 0,
+    visible = false,
+    items = [],
+    onClose,
+  }: $$Props = $props();
 
   function handleClickOutside() {
-    visible = false;
+    if (onClose) onClose();
   }
 </script>
 
@@ -27,7 +45,7 @@
         class="context-item {item.danger ? 'danger' : ''}"
         onclick={() => {
           item.action();
-          visible = false;
+          if (onClose) onClose();
         }}
       >
         {#if Icon}
