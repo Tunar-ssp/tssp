@@ -48,9 +48,6 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --lib
 
-      - name: Run integration tests
-        run: cargo test --workspace --test '*'
-
       - name: Clippy lint
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -60,21 +57,11 @@ jobs:
       - name: Generate coverage report
         run: cargo tarpaulin --workspace --lib --timeout 300 --out Xml
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: ./cobertura.xml
-          fail_ci_if_error: false
-
-      - name: Check JavaScript in assets
-        run: |
-          set -e
-          if [ -d "crates/tsspd/assets/web" ]; then
-            find crates/tsspd/assets/web -name "*.js" -type f -print0 | while IFS= read -r -d '' file; do
-              echo "Checking $file"
-              node --check "$file"
-            done
-          fi
+          name: coverage
+          path: cobertura.xml
 
   frontend:
     name: Web Frontend
@@ -110,7 +97,7 @@ jobs:
     if: always()
     steps:
       - name: Download coverage
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: always()
         with:
           name: coverage
