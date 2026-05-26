@@ -81,7 +81,8 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/pins/reorder",
-            post(crate::pins::reorder).options(options_response)
+            post(crate::pins::reorder)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(
@@ -93,7 +94,8 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/files/{id}/tags",
-            post(crate::tags::add_tags).options(options_response)
+            post(crate::tags::add_tags)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(
@@ -145,7 +147,8 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/files/visibility/bulk",
-            post(crate::visibility::bulk_file_visibility).options(options_response)
+            post(crate::visibility::bulk_file_visibility)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(
@@ -157,12 +160,14 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/folders/move",
-            post(crate::folders::move_folder).options(options_response)
+            post(crate::folders::move_folder)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(
             "/api/v1/folders/delete",
-            post(crate::folders::delete_folder).options(options_response)
+            post(crate::folders::delete_folder)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(
@@ -259,12 +264,14 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/auth/login",
-            post(crate::auth::auth_login).options(options_response)
+            post(crate::auth::auth_login)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(
             "/api/v1/auth/token",
-            post(crate::auth::auth_token).options(options_response)
+            post(crate::auth::auth_token)
+                .options(options_response)
                 .layer(json_body_limit()),
         )
         .route(

@@ -447,7 +447,9 @@ async fn stage_batch_multipart_upload(
             "file" => {
                 if files.len() >= MAX_BATCH_FILES {
                     return Err(HttpUploadError::InvalidRequest {
-                        message: format!("batch upload exceeds maximum file limit of {MAX_BATCH_FILES}"),
+                        message: format!(
+                            "batch upload exceeds maximum file limit of {MAX_BATCH_FILES}"
+                        ),
                     });
                 }
                 files.push(stage_batch_file(field, upload_temp_dir).await?);

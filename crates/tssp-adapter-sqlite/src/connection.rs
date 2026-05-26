@@ -29,6 +29,10 @@ pub(crate) fn configure_connection(connection: &Connection) -> Result<(), Sqlite
     // Improve write concurrency with increased cache and page size
     connection
         .pragma_update(None, "page_size", "4096")
+        .map_err(SqliteRepositoryError::Configure)?;
+    // Use memory-mapped I/O to speed up reads (256 MiB limit).
+    connection
+        .pragma_update(None, "mmap_size", 268_435_456_i64)
         .map_err(SqliteRepositoryError::Configure)
 }
 

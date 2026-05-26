@@ -366,7 +366,9 @@ fn hit_matches_filters(
             // Authorization: non-admin users can only see public files or their own files
             if let Some(auth) = auth {
                 if !auth.is_admin() {
-                    if file.visibility == Visibility::Private && file.owner_id.as_ref() != Some(&auth.user_id) {
+                    if file.visibility == Visibility::Private
+                        && file.owner_id.as_ref() != Some(&auth.user_id)
+                    {
                         return false;
                     }
                 }

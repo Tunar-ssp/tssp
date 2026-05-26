@@ -66,3 +66,11 @@ expect_used = "warn"
 pedantic = { level = "warn", priority = -1 }
 todo = "deny"
 unwrap_used = "deny"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
