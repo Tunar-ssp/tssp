@@ -132,31 +132,58 @@
     position: fixed;
     background-color: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     box-shadow: 0 10px 38px 0 rgba(0, 0, 0, 0.12), 0 10px 20px 0 rgba(0, 0, 0, 0.1);
     z-index: 1000;
-    max-height: 400px;
+    max-height: 480px;
     overflow-y: auto;
-    min-width: 280px;
+    min-width: 320px;
     outline: none;
+    backdrop-filter: blur(12px);
   }
 
   .no-results {
-    padding: 16px;
+    padding: 32px 24px;
     text-align: center;
     color: var(--muted);
     font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .no-results-icon {
+    font-size: 28px;
+    opacity: 0.6;
+  }
+
+  .no-results-hint {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-top: 4px;
   }
 
   .commands-list {
     display: flex;
     flex-direction: column;
-    padding: 4px;
+    padding: 6px;
+  }
+
+  .category-header {
+    padding: 10px 16px 6px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+    pointer-events: none;
   }
 
   .command-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     padding: 10px 12px;
     border: none;
@@ -164,37 +191,90 @@
     color: var(--text);
     cursor: pointer;
     text-align: left;
-    transition: background-color 0.15s;
-    border-radius: 6px;
+    transition: all 0.15s ease;
+    border-radius: 8px;
+    font-family: inherit;
   }
 
   .command-item:hover {
-    background-color: var(--bg-secondary);
+    background-color: rgba(59, 130, 246, 0.08);
+    transform: translateX(2px);
   }
 
   .command-item.selected {
-    background-color: rgba(59, 130, 246, 0.1);
+    background-color: rgba(59, 130, 246, 0.15);
     color: var(--text);
   }
 
   .command-icon {
     flex-shrink: 0;
-    font-size: 18px;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
   }
 
   .command-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .command-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .command-label {
     font-size: 14px;
     font-weight: 500;
+    flex: 1;
+  }
+
+  .command-shortcuts {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .command-shortcuts kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    color: var(--muted);
+    white-space: nowrap;
   }
 
   .command-description {
     font-size: 12px;
     color: var(--muted);
-    margin-top: 2px;
+  }
+
+  /* Scrollbar styling */
+  .slash-menu::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .slash-menu::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .slash-menu::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+  }
+
+  .slash-menu::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
   }
 </style>
