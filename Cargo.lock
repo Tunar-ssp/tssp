@@ -3049,7 +3049,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tssp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "clap",
@@ -3067,7 +3067,7 @@ dependencies = [
 
 [[package]]
 name = "tssp-adapter-fs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3080,7 +3080,7 @@ dependencies = [
 
 [[package]]
 name = "tssp-adapter-sqlite"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "r2d2",
@@ -3094,7 +3094,7 @@ dependencies = [
 
 [[package]]
 name = "tssp-adapter-system"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "tssp-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "thiserror",
@@ -3124,11 +3124,11 @@ dependencies = [
 
 [[package]]
 name = "tssp-cli-core"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "tssp-domain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -3137,7 +3137,7 @@ dependencies = [
 
 [[package]]
 name = "tssp-ports"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "thiserror",
@@ -3146,7 +3146,7 @@ dependencies = [
 
 [[package]]
 name = "tsspd"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "axum",

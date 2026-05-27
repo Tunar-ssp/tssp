@@ -199,7 +199,6 @@
               <div class="stat-progress">
                 <Bar
                   value={stats.usedStorage > 0 ? 100 : 0}
-                  tone="blue"
                 />
               </div>
               <div class="stat-meta">Indexed object storage</div>

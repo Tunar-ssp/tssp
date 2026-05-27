@@ -24,6 +24,9 @@ export interface ShellPreferences {
 export interface BannerMessage {
   message: string;
   type: BannerType;
+  tone?: BannerType;
+  title?: string;
+  detail?: string;
 }
 
 const STORAGE_KEY = 'tssp.shell.preferences.v2';

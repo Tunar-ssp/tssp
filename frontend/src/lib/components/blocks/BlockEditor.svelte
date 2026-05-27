@@ -257,10 +257,15 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   bind:this={editorElement}
   class="block-editor {className}"
   onkeydown={handleEditorKeyDown}
+  role="application"
+  aria-label="Block Editor"
+  tabindex="0"
 >
   {#if $editorBlocks.length === 0}
     <div class="empty-state">
@@ -359,7 +364,7 @@
               onKeyDown={(e) => handleBlockKeyDown(block.id, e)}
             />
           {:else if block.type === 'divider'}
-            <div class="block-divider" />
+            <div class="block-divider"></div>
           {/if}
         </div>
       {/each}

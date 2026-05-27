@@ -95,7 +95,9 @@
     </div>
 
     <button class="action-btn" onclick={onRefresh} disabled={isLoading} title="Refresh">
-      <Icons.RotateCw size={16} class:spinning={isLoading} />
+      <span class:spinning={isLoading}>
+        <Icons.RotateCw size={16} />
+      </span>
     </button>
 
     <button class="action-btn primary" onclick={onUpload} title="Upload files">

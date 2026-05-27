@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import { api } from '$lib/api';
+  import { formatBytes, formatDate } from '$lib/utils';
 
   interface $$Props {
     file?: any;
@@ -65,22 +66,6 @@
     if (e.target === e.currentTarget && onClose) {
       onClose();
     }
-  }
-
-  function formatBytes(bytes: number) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  }
-
-  function formatDate(timestamp: number) {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   }
 </script>
 

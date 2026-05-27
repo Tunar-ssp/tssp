@@ -14,8 +14,15 @@
 
   let { block, type, isSelected = false, onUpdate, onToggleChecked, onKeyDown }: Props = $props();
 
-  let contentElement: HTMLDivElement;
-  let isChecked = $state(type === 'checklist' ? (block as ChecklistBlock).checked || false : false);
+  let contentElement = $state<HTMLDivElement>();
+  let isChecked = $state(false);
+
+  // Sync isChecked with block.checked when type is checklist
+  $effect(() => {
+    if (type === 'checklist') {
+      isChecked = (block as ChecklistBlock).checked || false;
+    }
+  });
 
   onMount(() => {
     if (isSelected && contentElement) {
@@ -56,6 +63,7 @@
   <div
     bind:this={contentElement}
     role="textbox"
+    aria-multiline="false"
     tabindex={isSelected ? 0 : -1}
     contenteditable
     class="list-content"

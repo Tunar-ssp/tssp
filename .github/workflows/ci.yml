@@ -82,7 +82,7 @@ jobs:
         working-directory: frontend
 
       - name: Type check
-        run: npm run check || true
+        run: npm run check
         working-directory: frontend
 
       - name: Build production bundle

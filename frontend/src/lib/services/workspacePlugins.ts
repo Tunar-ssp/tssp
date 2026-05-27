@@ -82,7 +82,7 @@ class PluginManager {
       const hook = plugin.hooks[hookName];
       if (hook) {
         try {
-          await hook(...args);
+          await (hook as any)(...args);
         } catch (error) {
           console.error(`Error executing hook ${hookName} in plugin ${pluginId}:`, error);
         }
@@ -104,7 +104,7 @@ class PluginManager {
       const hook = plugin.hooks[hookName];
       if (hook) {
         try {
-          value = hook(value, ...args);
+          value = (hook as any)(value, ...args);
         } catch (error) {
           console.error(`Error executing filter hook ${hookName} in plugin ${pluginId}:`, error);
         }

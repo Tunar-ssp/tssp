@@ -2,14 +2,14 @@
   import * as Icons from 'lucide-svelte';
   import QRCodeGenerator from './QRCodeGenerator.svelte';
   import Btn from './Btn.svelte';
-  import { api, type VisibilityResponse } from '$lib/api';
+  import { api, type FileRecord, type VisibilityResponse } from '$lib/api';
   import { success, error } from '$lib/stores/notifications';
 
   interface $$Props {
     file?: any;
     isOpen?: boolean;
     onClose?: () => void;
-    onShare?: (fileId: string, isPublic: boolean) => Promise<VisibilityResponse | null | void>;
+    onShare?: (fileId: string, isPublic: boolean) => Promise<FileRecord | null>;
     class?: string;
   }
 
@@ -46,8 +46,13 @@
       const nextPublic = !isPublic;
       const result = await onShare(file.id, nextPublic);
       isPublic = nextPublic;
-      file = result?.file ?? { ...file, public: nextPublic, visibility: nextPublic ? 'public' : 'private' };
-      shareLink = result?.public_url || '';
+      
+      if (result) {
+        file = result;
+        shareLink = result.public_token ? `${window.location.origin}/p/${result.public_token}` : '';
+      } else {
+        file = { ...file, public: nextPublic, visibility: nextPublic ? 'public' : 'private' };
+      }
 
       if (nextPublic && !shareLink) {
         await loadShareLink(file);

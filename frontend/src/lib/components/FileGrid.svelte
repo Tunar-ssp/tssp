@@ -2,17 +2,20 @@
   import * as Icons from 'lucide-svelte';
   import type { FileRecord } from '$lib/api';
   import FileIcon from './FileIcon.svelte';
-  import { selectedIds, toggleSelect, selectAll, clearSelection } from '$lib/stores/drive';
 
   interface $$Props {
     files?: FileRecord[];
     loading?: boolean;
+    onSelectFile?: (file: FileRecord) => void;
   }
 
   let {
     files = [],
     loading = false,
+    onSelectFile,
   }: $$Props = $props();
+
+  let viewMode = $state<'grid' | 'list'>('grid');
 
   function formatSize(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -28,57 +31,37 @@
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
   }
 
-  function handleSelectAll() {
-    selectAll(files.map(f => f.id));
+  function handleSelectFile(file: FileRecord) {
+    if (onSelectFile) {
+      onSelectFile(file);
+    }
   }
-
-  function handleClearSelection() {
-    clearSelection();
-  }
-
-  let viewMode = $state<'grid' | 'list'>('grid');
 </script>
 
 <div class="file-grid-container">
-  {#if files.length > 0}
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <span class="file-count">{files.length} file{files.length !== 1 ? 's' : ''}</span>
-        {#if $selectedIds.size > 0}
-          <span class="selected-count">{$selectedIds.size} selected</span>
-        {/if}
-      </div>
-
-      <div class="toolbar-right">
-        {#if $selectedIds.size > 0}
-          <button class="toolbar-btn" on:click={handleClearSelection}>
-            <Icons.X size={14} />
-          </button>
-        {/if}
-
-        <button class="toolbar-btn" on:click={handleSelectAll}>
-          <Icons.CheckSquare size={14} />
-        </button>
-
-        <div class="view-toggle">
-          <button
-            class="toggle-btn"
-            class:active={viewMode === 'grid'}
-            on:click={() => (viewMode = 'grid')}
-          >
-            <Icons.Grid2x2 size={14} />
-          </button>
-          <button
-            class="toggle-btn"
-            class:active={viewMode === 'list'}
-            on:click={() => (viewMode = 'list')}
-          >
-            <Icons.List size={14} />
-          </button>
-        </div>
-      </div>
+  <div class="toolbar">
+    <span class="file-count">{files.length} file{files.length !== 1 ? 's' : ''}</span>
+    <div class="view-toggle">
+      <button
+        type="button"
+        class="toggle-btn"
+        class:active={viewMode === 'grid'}
+        onclick={() => (viewMode = 'grid')}
+        title="Grid view"
+      >
+        <Icons.Grid2x2 size={14} />
+      </button>
+      <button
+        type="button"
+        class="toggle-btn"
+        class:active={viewMode === 'list'}
+        onclick={() => (viewMode = 'list')}
+        title="List view"
+      >
+        <Icons.List size={14} />
+      </button>
     </div>
-  {/if}
+  </div>
 
   {#if loading}
     <div class="loading">
@@ -89,35 +72,26 @@
     <div class="empty">
       <Icons.Inbox size={40} />
       <h3>No files yet</h3>
-      <p>Drag files here or use the upload button</p>
+      <p>Upload files to get started</p>
     </div>
   {:else if viewMode === 'grid'}
     <div class="grid">
       {#each files as file (file.id)}
         <div
           class="file-card"
-          class:selected={$selectedIds.has(file.id)}
-          on:click={() => toggleSelect(file.id)}
           role="button"
           tabindex="0"
+          onclick={() => handleSelectFile(file)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleSelectFile(file);
+            }
+          }}
         >
-          <div class="file-header">
-            <div class="checkbox">
-              <input
-                type="checkbox"
-                checked={$selectedIds.has(file.id)}
-                on:change={() => toggleSelect(file.id)}
-              />
-            </div>
-            <button class="menu-btn" on:click|stopPropagation>
-              <Icons.MoreVertical size={14} />
-            </button>
-          </div>
-
           <div class="file-icon">
-            <FileIcon mimeType={file.mime_type} name={file.name} size={32} />
+            <FileIcon name={file.name} mimeType={file.mime_type} size={40} />
           </div>
-
           <div class="file-info">
             <div class="file-name" title={file.name}>{file.name}</div>
             <div class="file-size">{formatSize(file.size_bytes)}</div>
@@ -130,30 +104,23 @@
       {#each files as file (file.id)}
         <div
           class="list-item"
-          class:selected={$selectedIds.has(file.id)}
-          on:click={() => toggleSelect(file.id)}
           role="button"
           tabindex="0"
+          onclick={() => handleSelectFile(file)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleSelectFile(file);
+            }
+          }}
         >
-          <div class="item-left">
-            <input
-              type="checkbox"
-              checked={$selectedIds.has(file.id)}
-              on:change={() => toggleSelect(file.id)}
-            />
-            <div class="item-icon">
-              <FileIcon mimeType={file.mime_type} name={file.name} size={20} />
-            </div>
-            <div class="item-name" title={file.name}>{file.name}</div>
+          <div class="item-icon">
+            <FileIcon name={file.name} mimeType={file.mime_type} size={24} />
           </div>
-
-          <div class="item-right">
-            <span class="item-size">{formatSize(file.size_bytes)}</span>
-            <span class="item-date">{formatDate(file.updated_at)}</span>
-            <button class="menu-btn" on:click|stopPropagation>
-              <Icons.MoreVertical size={14} />
-            </button>
-          </div>
+          <div class="item-name" title={file.name}>{file.name}</div>
+          <span class="item-type">{file.mime_type}</span>
+          <span class="item-size">{formatSize(file.size_bytes)}</span>
+          <span class="item-date">{formatDate(file.updated_at)}</span>
         </div>
       {/each}
     </div>
@@ -178,46 +145,10 @@
     gap: 16px;
   }
 
-  .toolbar-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  .file-count {
     font-size: var(--fs-12);
     color: var(--text-2);
-  }
-
-  .file-count {
     font-weight: 500;
-  }
-
-  .selected-count {
-    color: var(--blue);
-  }
-
-  .toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .toolbar-btn {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: var(--r-2);
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--text-2);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-  }
-
-  .toolbar-btn:hover {
-    background: var(--surface-hi);
-    color: var(--text);
   }
 
   .view-toggle {
@@ -242,6 +173,11 @@
     justify-content: center;
     border-radius: 3px;
     transition: all 0.15s;
+  }
+
+  .toggle-btn:hover {
+    background: var(--surface-3);
+    color: var(--text);
   }
 
   .toggle-btn.active {
@@ -290,7 +226,7 @@
     overflow: auto;
     padding: 16px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: 12px;
   }
 
@@ -304,59 +240,18 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    align-items: center;
+    text-align: center;
   }
 
   .file-card:hover {
     background: var(--surface-2);
-    border-color: var(--border-2);
+    border-color: var(--blue-subtle);
   }
 
-  .file-card.selected {
-    background: var(--blue-soft);
-    border-color: var(--blue);
-  }
-
-  .file-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    opacity: 0;
-    transition: opacity 0.15s;
-  }
-
-  .file-card:hover .file-header,
-  .file-card.selected .file-header {
-    opacity: 1;
-  }
-
-  .checkbox {
-    display: flex;
-  }
-
-  .checkbox input {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-  }
-
-  .menu-btn {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--r-2);
-    transition: all 0.15s;
-  }
-
-  .menu-btn:hover {
-    background: var(--surface-3);
-    color: var(--text);
+  .file-card:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
   }
 
   .file-icon {
@@ -371,6 +266,7 @@
     flex-direction: column;
     gap: 4px;
     min-width: 0;
+    flex: 1;
   }
 
   .file-name {
@@ -387,7 +283,6 @@
     color: var(--muted);
   }
 
-  /* List view */
   .list {
     flex: 1;
     overflow: auto;
@@ -400,8 +295,7 @@
     border-bottom: 1px solid var(--hairline);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -410,23 +304,9 @@
     background: var(--surface-2);
   }
 
-  .list-item.selected {
-    background: var(--blue-soft);
-  }
-
-  .item-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .item-left input {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    flex-shrink: 0;
+  .list-item:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: -2px;
   }
 
   .item-icon {
@@ -438,23 +318,32 @@
   .item-name {
     font-size: var(--fs-13);
     color: var(--text);
+    flex: 1;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .item-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-shrink: 0;
+  .item-type {
+    font-size: var(--fs-11);
+    color: var(--text-2);
+    min-width: 120px;
+    text-align: right;
   }
 
-  .item-size,
-  .item-date {
+  .item-size {
     font-size: var(--fs-12);
     color: var(--text-2);
+    min-width: 60px;
+    text-align: right;
+  }
+
+  .item-date {
+    font-size: var(--fs-12);
+    color: var(--muted);
     min-width: 80px;
     text-align: right;
+    flex-shrink: 0;
   }
 </style>

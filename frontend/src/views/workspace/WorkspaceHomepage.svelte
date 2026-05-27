@@ -162,10 +162,6 @@
     color: var(--blue);
   }
 
-  .primary-btn.compact {
-    height: 40px;
-  }
-
   .ghost-btn {
     border: 1px solid var(--border);
     background: rgba(18, 22, 31, 0.96);

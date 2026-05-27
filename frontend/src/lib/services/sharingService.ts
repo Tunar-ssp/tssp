@@ -68,7 +68,7 @@ export async function generateShareLink(fileId: string): Promise<ShareLink> {
     }
 
     // Generate link via API
-    const result = await api.generateShareLink(fileId);
+    const result = await api.generateShareLink(fileId) as any;
 
     if (!result?.url) {
       throw new SharingServiceError(
@@ -80,7 +80,7 @@ export async function generateShareLink(fileId: string): Promise<ShareLink> {
     const link: ShareLink = {
       id: result.id || generateLinkId(),
       url: result.url,
-      expires_at: result.expires_at,
+      expires_at: result.expires_at || undefined,
       created_at: Math.floor(Date.now() / 1000),
       access_count: 0,
     };
@@ -149,7 +149,7 @@ export async function updateVisibility(
       throw new SharingServiceError('VALIDATION_ERROR', 'File ID required');
     }
 
-    const file = await api.setFileVisibility(fileId, isPublic);
+    const file = await api.setFileVisibility(fileId, isPublic) as any;
 
     if (!file?.id) {
       throw new SharingServiceError(
@@ -159,7 +159,7 @@ export async function updateVisibility(
     }
 
     log('updateVisibility', 'Success', { fileId, isPublic });
-    return file;
+    return file as FileRecord;
   } catch (err) {
     const message = err instanceof SharingServiceError
       ? err.message
@@ -185,8 +185,14 @@ export async function getShareLinks(fileId: string): Promise<ShareLink[]> {
       throw new SharingServiceError('VALIDATION_ERROR', 'File ID required');
     }
 
-    const result = await api.listShareLinks(fileId);
-    const links = result.links || [];
+    const result = await api.listShareLinks(fileId) as any;
+    const links: ShareLink[] = (result.links || []).map((link: any) => ({
+      id: link.id || '',
+      url: link.url || '',
+      expires_at: link.expires_at,
+      created_at: link.created_at || Math.floor(Date.now() / 1000),
+      access_count: link.access_count || 0,
+    }));
 
     log('getShareLinks', 'Success', { fileId, count: links.length });
     return links;
@@ -257,17 +263,12 @@ export async function generateQRCode(url: string): Promise<string> {
     const QRCode = (await import('qrcode')).default;
 
     // Generate QR code as data URL
-    const dataUrl = await QRCode.toDataURL(url, {
+    const dataUrl: string = await (QRCode.toDataURL(url, {
       errorCorrectionLevel: 'H',
-      type: 'image/png',
-      quality: 0.95,
       margin: 1,
       width: 300,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF',
-      },
-    });
+      color: { dark: '#000000', light: '#FFFFFF' },
+    }) as Promise<string>);
 
     log('generateQRCode', 'Success');
     return dataUrl;

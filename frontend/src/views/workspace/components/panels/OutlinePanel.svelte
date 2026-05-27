@@ -26,7 +26,7 @@
       case 'heading':
         return Icons.Heading2;
       case 'function':
-        return Icons.Function;
+        return Icons.Code2;
       case 'class':
         return Icons.Braces;
       case 'section':

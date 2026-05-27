@@ -102,10 +102,10 @@ function validatePath(path: string): void {
  * List files with filtering
  */
 export async function listFiles(
-  folder: string = '',
-  limit: number = 100
+  limit: number = 100,
+  cursor: string = ''
 ): Promise<FileRecord[]> {
-  log('listFiles', 'Starting', { folder, limit });
+  log('listFiles', 'Starting', { limit, cursor });
 
   try {
     if (limit < 1 || limit > 1000) {
@@ -115,19 +115,17 @@ export async function listFiles(
       );
     }
 
-    validatePath(folder);
-
-    const response = await api.listFiles(limit, folder);
+    const response = await api.listFiles(limit, cursor);
     const files = response.files || [];
 
-    log('listFiles', 'Success', { folder, count: files.length });
+    log('listFiles', 'Success', { cursor, count: files.length });
     return files;
   } catch (err) {
     const message = err instanceof DriveServiceError
       ? err.message
       : 'Failed to list files';
 
-    log('listFiles', 'Error', { error: message, folder });
+    log('listFiles', 'Error', { error: message, cursor });
     throw new DriveServiceError(
       'LIST_FAILED',
       message,
@@ -149,11 +147,7 @@ export async function createFolder(
     validateFilename(name);
     validatePath(parent);
 
-    const response = await api.createFile({
-      name,
-      parent_path: parent,
-      is_folder: true,
-    });
+    const response = await api.createFolder(name, parent);
 
     if (!response?.id) {
       throw new DriveServiceError(

@@ -4,7 +4,7 @@
   interface ConsoleCommand {
     id: string;
     name: string;
-    description: string;
+    description?: string;
     category: string;
   }
 
@@ -28,14 +28,16 @@
   let consoleElement = $state<HTMLDivElement | undefined>(undefined);
   let inputElement = $state<HTMLInputElement | undefined>(undefined);
 
-  const defaultCommands: ConsoleCommand[] = [
-    { id: 'help', name: 'help', description: 'Show available commands', category: 'System' },
-    { id: 'status', name: 'status', description: 'Show system status', category: 'System' },
-    { id: 'clear', name: 'clear', description: 'Clear console output', category: 'System' },
-    { id: 'version', name: 'version', description: 'Show version information', category: 'System' },
-  ];
-
-  let availableCommands = $derived(commands.length > 0 ? commands : defaultCommands);
+  let availableCommands = $derived(
+    commands && commands.length > 0
+      ? commands.map((cmd: any) => ({
+          id: cmd.name || cmd.id,
+          name: cmd.name || cmd.id,
+          description: cmd.description || 'Safe system command',
+          category: cmd.category || 'general',
+        }))
+      : []
+  );
 
   function scrollToBottom() {
     if (consoleElement) {
@@ -53,7 +55,19 @@
 
     try {
       const output = await onExecuteCommand(trimmed);
-      history = [...history, { type: 'output', text: output }];
+
+      // Try to parse as JSON and format it nicely
+      let displayOutput = output;
+      try {
+        const json = JSON.parse(output);
+        if (json && typeof json === 'object') {
+          displayOutput = JSON.stringify(json, null, 2);
+        }
+      } catch {
+        // Not JSON, use raw output
+      }
+
+      history = [...history, { type: 'output', text: displayOutput }];
     } catch (err) {
       history = [...history, { type: 'error', text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` }];
     } finally {

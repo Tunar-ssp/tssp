@@ -5,11 +5,6 @@
 
 import * as Icons from 'lucide-svelte';
 import type { AppView } from '$lib/stores/ui';
-import HomeView from '$views/home/HomeLauncher.svelte';
-import DriveView from '$views/drive/DriveView.svelte';
-import NotesView from '$views/notes/NotesSurface.svelte';
-import WorkspaceView from '$views/workspace/WorkspaceSurface.svelte';
-import OperationsView from '$views/operations/OperationsView.svelte';
 
 /**
  * App view metadata and configuration
@@ -21,17 +16,6 @@ export interface AppViewConfig {
   crumbs: string[];
   requiresAdmin?: boolean;
 }
-
-/**
- * View component registry
- */
-export const viewRegistry = {
-  home: HomeView,
-  drive: DriveView,
-  notes: NotesView,
-  workspace: WorkspaceView,
-  admin: OperationsView,
-} as const;
 
 /**
  * View metadata
@@ -111,12 +95,6 @@ export const globalCommands = [
   },
 ];
 
-/**
- * Get view component by key
- */
-export function getViewComponent(view: AppView) {
-  return viewRegistry[view] || viewRegistry.home;
-}
 
 /**
  * Get view metadata

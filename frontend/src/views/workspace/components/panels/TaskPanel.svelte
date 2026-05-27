@@ -51,7 +51,6 @@
       title: newTaskTitle,
       status: 'todo',
       priority: 'medium',
-      createdAt: Date.now(),
     });
     newTaskTitle = '';
     showNewTaskForm = false;
@@ -128,7 +127,7 @@
         type="button"
         class="filter-tab"
         class:active={filterStatus === status}
-        onclick={() => (filterStatus = status)}
+        onclick={() => (filterStatus = status as 'all' | 'todo' | 'done' | 'in-progress')}
       >
         {status.replace('-', ' ')}
       </button>

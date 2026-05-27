@@ -5,7 +5,7 @@
   import { FitAddon } from 'xterm-addon-fit';
   import 'xterm/css/xterm.css';
 
-  interface $$Props {
+  interface Props {
     workspaceId: string;
     isAvailable: boolean;
   }
@@ -13,57 +13,61 @@
   let {
     workspaceId,
     isAvailable,
-  }: $$Props = $props();
+  }: Props = $props();
 
-  let terminalElement: HTMLDivElement;
+  let terminalElement = $state<HTMLDivElement | null>(null);
   let terminal: Terminal;
   let fitAddon: FitAddon;
   let ws: WebSocket | null = null;
-  let state = $state('disconnected');
+  let connectionState = $state('disconnected');
   let errorMessage = $state<string | null>(null);
 
   onMount(() => {
     if (!isAvailable) return;
 
     terminal = new Terminal({
-      theme: {
-        background: '#0E1016',
-        foreground: '#E0E0E0',
-        cursor: '#E0E0E0',
-        black: '#000000',
-        red: '#FF5555',
-        green: '#55FF55',
-        yellow: '#FFFF55',
-        blue: '#5555FF',
-        magenta: '#FF55FF',
-        cyan: '#55FFFF',
-        white: '#FFFFFF',
-        brightBlack: '#555555',
-        brightRed: '#FF8888',
-        brightGreen: '#88FF88',
-        brightYellow: '#FFFF88',
-        brightBlue: '#8888FF',
-        brightMagenta: '#FF88FF',
-        brightCyan: '#88FFFF',
-        brightWhite: '#FFFFFF',
-      },
-      fontSize: 14,
-      fontFamily: 'Courier New, monospace',
-      cursorStyle: 'block',
-      bellStyle: 'none',
-    });
+        theme: {
+          background: '#0E1016',
+          foreground: '#E0E0E0',
+          cursor: '#E0E0E0',
+          black: '#000000',
+          red: '#FF5555',
+          green: '#55FF55',
+          yellow: '#FFFF55',
+          blue: '#5555FF',
+          magenta: '#FF55FF',
+          cyan: '#55FFFF',
+          white: '#FFFFFF',
+          brightBlack: '#555555',
+          brightRed: '#FF8888',
+          brightGreen: '#88FF88',
+          brightYellow: '#FFFF88',
+          brightBlue: '#8888FF',
+          brightMagenta: '#FF88FF',
+          brightCyan: '#88FFFF',
+          brightWhite: '#FFFFFF',
+        },
+        fontSize: 14,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        cursorBlink: true,
+        cursorStyle: 'block',
+      });
 
-    fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(terminalElement);
-    fitAddon.fit();
+      fitAddon = new FitAddon();
+      terminal.loadAddon(fitAddon);
+      if (terminalElement) {
+        terminal.open(terminalElement);
+        fitAddon.fit();
+      }
 
-    connect();
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (fitAddon) fitAddon.fit();
-    });
-    resizeObserver.observe(terminalElement);
+      const resizeObserver = new ResizeObserver(() => {
+        if (terminalElement) {
+          fitAddon.fit();
+        }
+      });
+      if (terminalElement) {
+        resizeObserver.observe(terminalElement);
+      }
 
     return () => {
       resizeObserver.disconnect();
@@ -77,10 +81,10 @@
   });
 
   function connect() {
-    if (state === 'connecting' || state === 'connected') return;
+    if (connectionState === 'connecting' || connectionState === 'connected') return;
     if (!isAvailable) return;
 
-    state = 'connecting';
+    connectionState = 'connecting';
     errorMessage = null;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -89,7 +93,7 @@
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      state = 'connected';
+      connectionState = 'connected';
       terminal.write('\r\n✓ Terminal connected\r\n');
     };
 
@@ -104,38 +108,38 @@
           terminal.write(output);
         } else if (msg.type === 'exit') {
           terminal.write(`\r\n✓ Process exited with code ${msg.code}\r\n`);
-          state = 'disconnected';
+          connectionState = 'disconnected';
           ws?.close();
         } else if (msg.error) {
           const errMsg = msg.error || 'Unknown error';
           terminal.write(`\r\n✗ Error: ${errMsg}\r\n`);
-          state = 'error';
+          connectionState = 'error';
           errorMessage = errMsg;
           setTimeout(() => ws?.close(), 1000);
         }
       } catch (e) {
         terminal.write(`\r\n✗ Protocol error\r\n`);
-        state = 'error';
+        connectionState = 'error';
         errorMessage = 'Protocol error';
       }
     };
 
     ws.onerror = () => {
-      state = 'error';
+      connectionState = 'error';
       errorMessage = 'Connection failed';
       terminal.write('\r\n✗ Connection error\r\n');
     };
 
     ws.onclose = () => {
-      if (state === 'connected') {
-        state = 'disconnected';
+      if (connectionState === 'connected') {
+        connectionState = 'disconnected';
         terminal.write('\r\n✓ Disconnected\r\n');
       }
       ws = null;
     };
 
     terminal.onData((data) => {
-      if (state === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
+      if (connectionState === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ input: data }));
       }
     });
@@ -146,7 +150,7 @@
       ws.close();
       ws = null;
     }
-    state = 'disconnected';
+    connectionState = 'disconnected';
     errorMessage = null;
   }
 
@@ -166,12 +170,12 @@
       <Icons.AlertTriangle size={20} />
       <p>Terminal is not available for this workspace.</p>
     </div>
-  {:else if state === 'connecting'}
+  {:else if connectionState === 'connecting'}
     <div class="terminal-status">
       <Icons.Loader size={20} class="spinner" />
       <p>Connecting...</p>
     </div>
-  {:else if state === 'error'}
+  {:else if connectionState === 'error'}
     <div class="terminal-status error">
       <Icons.AlertCircle size={20} />
       <div>
@@ -187,8 +191,8 @@
   {:else}
     <div class="terminal-wrapper">
       <div class="terminal-header">
-        <div class="terminal-status-indicator" class:connected={state === 'connected'}>
-          {#if state === 'connected'}
+        <div class="terminal-status-indicator" class:connected={connectionState === 'connected'}>
+          {#if connectionState === 'connected'}
             <span class="status-dot"></span>
             Connected
           {:else}
@@ -197,7 +201,7 @@
           {/if}
         </div>
         <div class="terminal-controls">
-          {#if state === 'connected'}
+          {#if connectionState === 'connected'}
             <button type="button" onclick={kill} class="terminal-button" title="Disconnect">
               <Icons.X size={16} />
             </button>
@@ -263,7 +267,7 @@
     background: rgba(255, 85, 85, 0.1);
   }
 
-  .terminal-status .spinner {
+  :global(.spinner) {
     animation: spin 1s linear infinite;
   }
 

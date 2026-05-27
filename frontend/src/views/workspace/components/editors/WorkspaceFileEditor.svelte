@@ -17,7 +17,7 @@
   import { success, error } from '$lib/stores/notifications';
   import MonacoEditor from '$lib/components/MonacoEditor.svelte';
   import { createWorkspaceFile, createWorkspaceDirectory, deleteWorkspaceFile } from '$lib/services/workspaceService';
-  import FileTreeItem from './FileTreeItem.svelte';
+  import FileTreeItem from '../../FileTreeItem.svelte';
 
   interface Props {
     workspaceId: string;

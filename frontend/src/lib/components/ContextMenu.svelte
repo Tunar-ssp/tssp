@@ -19,7 +19,7 @@
   let {
     x = 0,
     y = 0,
-    visible = false,
+    visible = $bindable(false),
     items = [],
     onClose,
   }: $$Props = $props();

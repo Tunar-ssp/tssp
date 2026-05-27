@@ -53,12 +53,31 @@ impl SqliteFileRepository {
     ///
     /// Returns [`SqliteRepositoryError`] when the database cannot be opened,
     /// configured, checked, or migrated.
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteRepositoryError> {
-        let manager = SqliteConnectionManager::file(path.as_ref());
-        let pool = Pool::builder()
-            .max_size(30)
+    /// Creates a connection pool for a `SQLite` database file with proper initialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SqliteRepositoryError`] when the pool cannot be built.
+    pub fn create_pool(
+        path: impl AsRef<Path>,
+        max_size: u32,
+    ) -> Result<Pool<SqliteConnectionManager>, SqliteRepositoryError> {
+        let manager = SqliteConnectionManager::file(path.as_ref())
+            .with_init(|c| connection::configure_connection(c));
+        Pool::builder()
+            .max_size(max_size)
             .build(manager)
-            .map_err(|error| SqliteRepositoryError::Open(error.to_string()))?;
+            .map_err(|error| SqliteRepositoryError::Open(error.to_string()))
+    }
+
+    /// Opens a `SQLite` database file, configures the pool, and runs embedded migrations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SqliteRepositoryError`] when the database cannot be opened,
+    /// configured, checked, or migrated.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteRepositoryError> {
+        let pool = Self::create_pool(path, 30)?;
 
         let connection = pool
             .get()
@@ -76,7 +95,8 @@ impl SqliteFileRepository {
     /// Returns [`SqliteRepositoryError`] when the database cannot be configured
     /// or migrated.
     pub fn open_in_memory() -> Result<Self, SqliteRepositoryError> {
-        let manager = SqliteConnectionManager::memory();
+        let manager =
+            SqliteConnectionManager::memory().with_init(|c| connection::configure_connection(c));
         let pool = Pool::builder()
             .max_size(1) // Single connection for in-memory tests to maintain state
             .build(manager)
@@ -100,16 +120,15 @@ impl SqliteFileRepository {
     }
 }
 
-/// Configures and migrates an existing `SQLite` connection.
+/// Runs one-time initialization tasks for the database (migrations and integrity check).
 ///
-/// This is used by startup code that already owns the pool and only needs the schema
-/// to be ready before repositories start executing queries.
+/// Pragmas and connection-specific settings should be handled via the pool manager's
+/// initialization hook instead.
 ///
 /// # Errors
 ///
-/// Returns [`SqliteRepositoryError`] if configuration, integrity checks, or migrations fail.
+/// Returns [`SqliteRepositoryError`] if integrity checks or migrations fail.
 pub fn initialize_connection(connection: &Connection) -> Result<(), SqliteRepositoryError> {
-    connection::configure_connection(connection)?;
     connection::run_integrity_check(connection)?;
     migrations::run_migrations(connection)?;
     Ok(())

@@ -28,7 +28,7 @@
   function getIcon(kind: string) {
     switch (kind) {
       case 'function':
-        return Icons.Function;
+        return Icons.Code2;
       case 'variable':
         return Icons.Variable;
       case 'class':

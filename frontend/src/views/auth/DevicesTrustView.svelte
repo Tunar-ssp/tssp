@@ -10,12 +10,7 @@
   interface Device {
     id: string;
     name: string;
-    fingerprint: string;
-    last_seen: number;
-    created_at: number;
-    is_current: boolean;
-    ip_address?: string;
-    user_agent?: string;
+    trusted_at?: number;
   }
 
   let devices = $state<Device[]>([]);
@@ -86,43 +81,26 @@
           <div class="device-card">
             <div class="device-header">
               <div class="device-icon">
-                {#if device.user_agent?.includes('Mobile')}
-                  <Icons.Smartphone size={20} />
-                {:else if device.user_agent?.includes('Mac')}
-                  <Icons.Apple size={20} />
-                {:else}
-                  <Icons.Monitor size={20} />
-                {/if}
+                <Icons.Monitor size={20} />
               </div>
               <div class="device-info">
-                <div class="device-name">
-                  {device.name}
-                  {#if device.is_current}
-                    <span class="device-current">Current</span>
-                  {/if}
-                </div>
-                <div class="device-meta">
-                  {device.ip_address || 'Unknown IP'} • Last seen {formatDate(device.last_seen)}
-                </div>
+                <div class="device-name">{device.name}</div>
+                {#if device.trusted_at}
+                  <div class="device-meta">Trusted {formatDate(device.trusted_at)}</div>
+                {/if}
               </div>
               <StatusDot tone="ok" />
             </div>
 
             <div class="device-footer">
-              <div class="device-fingerprint">
-                <span class="label">Fingerprint:</span>
-                <code>{device.fingerprint.substring(0, 16)}...</code>
-              </div>
-              {#if !device.is_current}
-                <Btn
-                  kind="danger"
-                  size="sm"
-                  on:click={() => revokeDevice(device.id)}
-                >
-                  <Icons.Trash2 size={14} />
-                  Revoke
-                </Btn>
-              {/if}
+              <Btn
+                kind="danger"
+                size="sm"
+                onclick={() => revokeDevice(device.id)}
+              >
+                <Icons.Trash2 size={14} />
+                Revoke
+              </Btn>
             </div>
           </div>
         </Card>
@@ -247,16 +225,6 @@
     gap: var(--s-2);
   }
 
-  .device-current {
-    display: inline-flex;
-    padding: 2px 8px;
-    background: var(--green-subtle);
-    color: var(--green);
-    border-radius: var(--r-1);
-    font-size: var(--fs-11);
-    font-weight: 600;
-  }
-
   .device-meta {
     font-size: var(--fs-12);
     color: var(--muted);
@@ -266,27 +234,8 @@
   .device-footer {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding-top: var(--s-4);
     border-top: 1px solid var(--border);
-  }
-
-  .device-fingerprint {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    font-size: var(--fs-12);
-  }
-
-  .device-fingerprint .label {
-    color: var(--muted);
-  }
-
-  .device-fingerprint code {
-    background: var(--surface-2);
-    padding: 2px 6px;
-    border-radius: var(--r-1);
-    font-family: var(--ff-mono);
-    color: var(--text-2);
   }
 </style>
