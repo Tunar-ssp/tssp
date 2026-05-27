@@ -22,7 +22,8 @@
   import DriveToolbarRow from './components/toolbar/DriveToolbarRow.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
-  import { formatBytes, formatRelative } from '$lib/utils';
+  import { clipboard } from '$lib/stores/clipboard';
+  import { formatBytes, formatRelative, registerKeyboardShortcuts } from '$lib/utils';
 
   type DriveLens = 'all' | 'images' | 'videos' | 'documents' | 'public' | 'trash';
   type Status = Awaited<ReturnType<typeof api.getStatus>>;
@@ -66,22 +67,8 @@
       }
     };
 
-    const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        filteredLibraryFiles.forEach(f => selectedFileIds.add(f.id));
-        selectedFileIds = new Set(selectedFileIds);
-      }
-      if (e.key === 'Escape') {
-        selectedFileIds.clear();
-        selectedFileIds = new Set();
-        selectedFile = null;
-      }
-    };
-
     if (typeof document !== 'undefined') {
       document.addEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
-      document.addEventListener('keydown', handleKeydown);
     }
 
     void loadLibrary(true).then(() => consumeIntent());
@@ -89,9 +76,49 @@
     return () => {
       if (typeof document !== 'undefined') {
         document.removeEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
+  });
+
+  const handleDriveKeydown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      filteredLibraryFiles.forEach(f => selectedFileIds.add(f.id));
+      selectedFileIds = new Set(selectedFileIds);
+    }
+    if (e.key === 'Escape') {
+      selectedFileIds.clear();
+      selectedFileIds = new Set();
+      selectedFile = null;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      if (selectedFileIds.size > 0) {
+        const selectedFiles = filteredLibraryFiles.filter(f => selectedFileIds.has(f.id));
+        clipboard.copy(selectedFiles.map(f => ({ id: f.id, name: f.name, type: 'file' })));
+        success('Copied', `${selectedFileIds.size} file(s) copied to clipboard`);
+      }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+      e.preventDefault();
+      void handlePasteFiles();
+    }
+  };
+
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+
+    const cleanup = registerKeyboardShortcuts(
+      [
+        { key: 'a', ctrl: true, handler: handleDriveKeydown },
+        { key: 'Escape', handler: handleDriveKeydown },
+        { key: 'c', ctrl: true, handler: handleDriveKeydown },
+        { key: 'v', ctrl: true, handler: handleDriveKeydown },
+      ],
+      document
+    );
+
+    return cleanup;
   });
 
   let isTrashView = $derived(activeLens === 'trash');
@@ -348,6 +375,17 @@
     } catch (cause) {
       error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete file');
     }
+  }
+
+  async function handlePasteFiles() {
+    const clipboardItems = clipboard.paste();
+    if (clipboardItems.length === 0) {
+      info('Clipboard Empty', 'No files to paste');
+      return;
+    }
+
+    info('Paste', `${clipboardItems.length} file(s) will be pasted to ${currentFolder || 'root'}`);
+    // Note: Actual paste implementation would require backend support for copying/moving files in bulk
   }
 
   async function handleRestore(file: FileRecord) {

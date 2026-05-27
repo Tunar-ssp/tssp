@@ -22,6 +22,16 @@ export {
 
 // Keyboard utilities
 export { registerShortcuts } from './keyboard';
+export {
+  createShortcutHandler,
+  registerKeyboardShortcuts,
+  COMMON_SHORTCUTS,
+  type KeyboardHandler,
+  type Shortcut,
+} from './shortcuts';
+
+// Dialog utilities
+export { handleBackdropClick, handleModalKeydown, type DialogState } from './dialog';
 
 // Workspace utilities
 export type { WorkspaceTreeNode } from './workspace';
