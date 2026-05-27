@@ -101,12 +101,13 @@ impl UploadSession {
         mime_type: Option<String>,
     ) -> Self {
         let num_chunks = total_size.div_ceil(CHUNK_SIZE);
+        let chunks_count = usize::try_from(num_chunks).unwrap_or(usize::MAX);
         Self {
             id,
             filename,
             total_size,
             chunk_size: CHUNK_SIZE,
-            uploaded_chunks: vec![false; usize::try_from(num_chunks).unwrap_or(0)],
+            uploaded_chunks: vec![false; chunks_count],
             folder_path,
             owner_id,
             tags,
@@ -134,8 +135,9 @@ impl UploadSession {
             return 0;
         }
         let uploaded = self.uploaded_chunks.iter().filter(|&&u| u).count();
-        ((u32::try_from(uploaded).unwrap_or(0) * 100)
-            / u32::try_from(self.uploaded_chunks.len()).unwrap_or(0))
+        let total = self.uploaded_chunks.len();
+        ((u32::try_from(uploaded).unwrap_or(u32::MAX) * 100)
+            / u32::try_from(total).unwrap_or(u32::MAX))
         .min(100)
     }
 }

@@ -104,32 +104,23 @@ pub(crate) async fn get_note(
         Err(error) => return error.response(),
     };
     let provider = state.note_provider.clone();
-    let provider_clone = provider.clone();
-    let note_id_clone = note_id.clone();
-
-    let record = match run_blocking(provider_clone, move |provider| {
-        provider.get_note(note_id_clone)
-    })
-    .await
-    {
-        Ok(record) => record,
-        Err(response) => return response,
-    };
-
-    // Check authorization: admin can read all, others can only read their own
-    if !(auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id)) {
-        return HttpNoteError::Forbidden {
-            message: "you do not have permission to read this note".to_owned(),
-        }
-        .response();
-    }
 
     match run_blocking(provider, move |provider| provider.get_note(note_id)).await {
-        Ok(record) => (
-            StatusCode::OK,
-            Json(NoteRecordResponse::from_record(&record)),
-        )
-            .into_response(),
+        Ok(record) => {
+            // Check authorization: admin can read all, others can only read their own
+            if !(auth.is_admin() || record.owner_id.as_ref() == Some(&auth.user_id)) {
+                return HttpNoteError::Forbidden {
+                    message: "you do not have permission to read this note".to_owned(),
+                }
+                .response();
+            }
+
+            (
+                StatusCode::OK,
+                Json(NoteRecordResponse::from_record(&record)),
+            )
+                .into_response()
+        }
         Err(response) => response,
     }
 }
@@ -144,10 +135,18 @@ pub(crate) async fn update_note(
         Ok(value) => value,
         Err(error) => return error.response(),
     };
-    let provider = state.note_provider.clone();
 
+    // If body is provided, validate it early
+    if let Some(ref b) = body.body {
+        if let Err(error) = validate_note_body(b) {
+            return error.response();
+        }
+    }
+
+    let provider = state.note_provider.clone();
     let provider_clone = provider.clone();
     let note_id_clone = note_id.clone();
+
     let existing = match run_blocking(provider_clone, move |provider| {
         provider.get_note(note_id_clone)
     })
@@ -162,13 +161,6 @@ pub(crate) async fn update_note(
             message: "you do not have permission to update this note".to_owned(),
         }
         .response();
-    }
-
-    // If body is provided, validate it
-    if let Some(ref b) = body.body {
-        if let Err(error) = validate_note_body(b) {
-            return error.response();
-        }
     }
 
     let final_body = if let Some(b) = body.body {
