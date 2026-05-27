@@ -211,12 +211,14 @@
   }
 
   .dock.autohide {
-    opacity: 0.8;
-    transform: translateX(-50%) translateY(52px);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(80px);
   }
 
   .dock.autohide:hover {
     opacity: 1;
+    pointer-events: all;
     transform: translateX(-50%) translateY(0);
   }
 

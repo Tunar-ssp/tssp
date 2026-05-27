@@ -35,15 +35,6 @@
 
 <header class="topbar {className || ''}">
   <div class="brand-strip">
-    <button type="button" class="brand-mark" onclick={onHome} aria-label="Open launcher">
-      <Icons.SlidersHorizontal size={18} />
-      <Icons.Power size={18} />
-    </button>
-
-    <button type="button" class="brand-wordmark" onclick={onHome} aria-label="Open TSSP home">
-      tssp
-    </button>
-
     <div class="crumbs" aria-label="Current app">
       {#each crumbs as crumb, index (crumb)}
         {#if index > 0}
@@ -118,8 +109,6 @@
     min-width: 0;
   }
 
-  .brand-mark,
-  .brand-wordmark,
   .action-btn,
   .icon-btn,
   .profile-chip,
@@ -128,29 +117,6 @@
     background: rgba(255, 255, 255, 0.02);
     color: var(--text);
     transition: transform var(--duration-normal) var(--ease-smooth), border-color var(--duration-normal) var(--ease-smooth), background var(--duration-normal) var(--ease-smooth);
-  }
-
-  .brand-mark {
-    width: 48px;
-    height: 48px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    border-radius: 12px;
-    color: var(--green);
-    box-shadow: var(--shadow-card);
-    flex-shrink: 0;
-  }
-
-  .brand-wordmark {
-    border: none;
-    background: transparent;
-    font-family: var(--ff-hand);
-    font-size: 28px;
-    line-height: 1;
-    padding: 0;
-    min-width: 0;
   }
 
   .crumbs {
@@ -314,7 +280,6 @@
     font-size: 11px;
   }
 
-  .brand-mark:hover,
   .search-surface:hover,
   .action-btn:hover,
   .icon-btn:hover,
