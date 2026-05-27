@@ -46,7 +46,7 @@
   let showSlashMenu = $state(false);
   let slashMenuPos = $state({ x: 0, y: 0 });
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let isCreating = false;
+  let isCreating = $state(false);
 
   onMount(async () => {
     await loadNotes();
