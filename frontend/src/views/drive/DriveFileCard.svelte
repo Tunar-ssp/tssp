@@ -66,7 +66,7 @@
       {#if thumbnailUrl && !thumbnailError}
         <img src={thumbnailUrl} alt={file.name} class="thumbnail-image" />
       {:else}
-        <FileIcon filename={file.name} mime={file.mime_type} size={48} />
+        <FileIcon name={file.name} mimeType={file.mime_type} size={48} />
       {/if}
     </div>
     <div class="card-info">
@@ -97,11 +97,11 @@
     tabindex="0"
   >
     <div class="list-thumbnail">
-      <FileIcon filename={file.name} mime={file.mime_type} size={24} />
+      <FileIcon name={file.name} mimeType={file.mime_type} size={24} />
     </div>
     <div class="list-info">
       <div class="list-name">{file.name}</div>
-      <div class="list-meta">{formatDate(file.updated_at || file.created_at)}</div>
+      <div class="list-meta">{formatDate(file.updated_at || file.uploaded_at)}</div>
     </div>
     <div class="list-details">
       <span class="file-type">{file.mime_type}</span>

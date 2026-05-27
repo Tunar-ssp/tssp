@@ -451,7 +451,7 @@
                 value={bodyDraft}
                 language={selectedLanguage}
                 onChange={handleEditorInput}
-                onCursorChange={(position) => {
+                onCursorChange={(position: any) => {
                   cursorLine = position.line;
                   cursorColumn = position.column;
                 }}

@@ -127,7 +127,7 @@
         type="button"
         class="filter-tab"
         class:active={filterStatus === status}
-        onclick={() => (filterStatus = status)}
+        onclick={() => (filterStatus = status as 'all' | 'todo' | 'done' | 'in-progress')}
       >
         {status.replace('-', ' ')}
       </button>

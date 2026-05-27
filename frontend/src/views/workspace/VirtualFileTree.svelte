@@ -132,9 +132,10 @@
 
     while (stack.length > 0) {
       const item = stack.shift();
+      if (!item) continue;
       result.push(item);
       if (item.is_dir && item.expanded && item.children) {
-        stack.unshift(...item.children.reverse());
+        stack.unshift(...(item.children as any[]).reverse());
       }
     }
     return result;

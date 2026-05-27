@@ -26,7 +26,7 @@
 
     try {
       const result = await api.getSharedFile(shareId);
-      file = result.file;
+      file = result.file as any as SharedFile;
 
       if (file?.expires_at && file.expires_at < Date.now() / 1000) {
         error = 'This shared file has expired';
@@ -107,7 +107,7 @@
       {#if isExpired}
         <p class="expired-info">The file owner may be able to re-share it with you.</p>
       {/if}
-      <Btn kind="ghost" on:click={() => (window.location.href = '/')}>
+      <Btn kind="ghost" onclick={() => (window.location.href = '/')}>
         <Icons.Home size={14} />
         Return Home
       </Btn>
@@ -131,7 +131,7 @@
             </div>
           {/if}
         </div>
-        <Btn kind="primary" on:click={downloadFile}>
+        <Btn kind="primary" onclick={downloadFile}>
           <Icons.Download size={14} />
           Download
         </Btn>

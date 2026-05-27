@@ -66,11 +66,11 @@
 
     <div class="metric-card">
       <div class="metric-label">Memory</div>
-      <div class="metric-value" class={memoryStatus}>
+      <div class="metric-value {memoryStatus}">
         {currentMemory.toFixed(1)}%
       </div>
       <div class="metric-bar">
-        <div class="metric-bar" style="width: {currentMemory}%; background: {memoryStatus === 'good' ? 'var(--green)' : memoryStatus === 'warning' ? 'var(--orange)' : 'var(--danger)'}"></div>
+        <div class="bar-fill" style="width: {currentMemory}%; background: {memoryStatus === 'good' ? 'var(--green)' : memoryStatus === 'warning' ? 'var(--orange)' : 'var(--danger)'}"></div>
       </div>
     </div>
 

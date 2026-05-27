@@ -17,7 +17,6 @@ export { default as EditorSettings } from './EditorSettings.svelte';
 export { default as WorkspaceStats } from './WorkspaceStats.svelte';
 export { default as TaskPanel } from './TaskPanel.svelte';
 export { default as DebugPanel } from './DebugPanel.svelte';
-export { default as PerformanceMonitor } from './PerformanceMonitor.svelte';
 export { default as VersionControl } from './VersionControl.svelte';
 export { default as DependencyGraph } from './DependencyGraph.svelte';
 export { default as DiffViewer } from './DiffViewer.svelte';

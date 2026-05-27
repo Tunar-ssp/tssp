@@ -40,7 +40,7 @@ export async function handleFileInputChange(
   if (!files || files.length === 0) return;
 
   try {
-    await uploadFiles(Array.from(files), targetFolder);
+    await uploadFiles(files, targetFolder);
   } catch (err) {
     console.error('Upload failed:', err);
   } finally {

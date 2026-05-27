@@ -4,11 +4,26 @@
   import SideNav from "./SideNav.svelte";
   import TopBar from "./TopBar.svelte";
   import type { AppId } from "../router";
+  import type { AppView } from "../stores/ui";
   import { openCommandPalette } from "../stores/ui";
 
-  export let app: AppId;
+  interface $$Props {
+    currentView: AppId;
+    title: string;
+  }
 
-  let mobileOpen = false;
+  let { currentView, title }: $$Props = $props();
+  let mobileOpen = $state(false);
+
+  function mapAppIdToAppView(id: AppId): AppView {
+    const map: Record<AppId, AppView> = {
+      drive: 'drive',
+      knowledge: 'notes',
+      workspace: 'workspace',
+      operations: 'admin',
+    };
+    return map[id] || 'drive';
+  }
 
   function closeMobile() {
     mobileOpen = false;
@@ -16,20 +31,22 @@
 </script>
 
 <div class="app-shell">
-  <SideNav {app} {mobileOpen} onCloseMobile={closeMobile} />
+  <SideNav app={currentView} {mobileOpen} onCloseMobile={closeMobile} />
   {#if mobileOpen}
     <button
       type="button"
       class="sidebar-backdrop"
       aria-label="Close menu"
-      on:click={closeMobile}
+      onclick={closeMobile}
     ></button>
   {/if}
   <div class="app-main">
     <TopBar
-      {app}
-      onOpenPalette={openCommandPalette}
-      onToggleMenu={() => (mobileOpen = !mobileOpen)}
+      currentView={mapAppIdToAppView(currentView)}
+      {title}
+      onHome={() => openCommandPalette()}
+      onCommandPalette={openCommandPalette}
+      onUpload={() => {}}
     />
     <Banner />
     <main class="page-shell">

@@ -36,7 +36,7 @@
   function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
     if (input.files) {
-      onUpload(input.files, $currentFolder);
+      onUpload(input.files, currentFolder);
       input.value = '';
     }
   }
