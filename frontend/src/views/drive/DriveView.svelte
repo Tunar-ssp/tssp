@@ -52,6 +52,8 @@
   let filterQuery = $state('');
   let activeLens = $state<DriveLens>('all');
   let viewMode = $state<'grid' | 'list'>(get(preferences).defaultDriveView || 'grid');
+  let sortBy = $state<'name' | 'date' | 'size'>('date');
+  let sortOrder = $state<'asc' | 'desc'>('desc');
   let contextMenu = $state({
     visible: false,
     x: 0,
@@ -171,9 +173,21 @@
         );
       })
       .sort((left, right) => {
-        const leftScore = left.pinned_at ? 2_000_000_000 + left.pinned_at : left.updated_at || left.uploaded_at;
-        const rightScore = right.pinned_at ? 2_000_000_000 + right.pinned_at : right.updated_at || right.uploaded_at;
-        return rightScore - leftScore;
+        // Pinned files always come first
+        if (left.pinned_at && !right.pinned_at) return -1;
+        if (!left.pinned_at && right.pinned_at) return 1;
+
+        let comparison = 0;
+        if (sortBy === 'name') {
+          comparison = left.name.localeCompare(right.name);
+        } else if (sortBy === 'size') {
+          comparison = (left.size_bytes || 0) - (right.size_bytes || 0);
+        } else {
+          // date (default)
+          comparison = (left.updated_at || left.uploaded_at) - (right.updated_at || right.uploaded_at);
+        }
+
+        return sortOrder === 'asc' ? comparison : -comparison;
       })
   );
 
