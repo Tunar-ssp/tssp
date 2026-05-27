@@ -9,14 +9,15 @@
     type VisibilityResponse,
   } from '$lib/api';
   import { driveStateManager } from '$lib/services/driveStateService';
-  import FileIcon from '$lib/components/FileIcon.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { isDriveFolder, createWorkspaceFromFolder } from '$lib/services/driveWorkspaceIntegration';
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import SharingModal from '$lib/components/SharingModal.svelte';
   import MoveFileDialog from './MoveFileDialog.svelte';
   import DriveDetailsPanel from './DriveDetailsPanel.svelte';
-  import TrashView from './TrashView.svelte';
+  import DriveHeader from './DriveHeader.svelte';
+  import DriveSidebar from './DriveSidebar.svelte';
+  import DriveContent from './DriveContent.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
   import { formatBytes, formatRelative } from '$lib/utils';
@@ -439,129 +440,36 @@
 </script>
 
 <div class="drive-shell">
-  <aside class="drive-sidebar">
-    <button type="button" class="upload-cta" onclick={requestUpload}>
-      <Icons.Upload size={15} />
-      <span>Upload</span>
-    </button>
-
-    <div class="sidebar-group">
-      <div class="group-label">Views</div>
-      {#each libraryFilters as filter (filter.id)}
-        {@const Icon = filter.icon}
-        <button
-          type="button"
-          class="sidebar-item"
-          class:active={activeLens === filter.id}
-          onclick={() => setLens(filter.id)}
-        >
-          <Icon size={14} />
-          <span>{filter.label}</span>
-          {#if filter.id === 'public'}
-            <small>{files.filter((file) => file.visibility === 'public').length}</small>
-          {:else if filter.id === 'trash'}
-            <small>{trash.length}</small>
-          {/if}
-        </button>
-      {/each}
-    </div>
-
-    <div class="sidebar-group folders">
-      <div class="group-label">Folders</div>
-      <button
-        type="button"
-        class="sidebar-item"
-        class:active={currentFolder === ''}
-        onclick={() => {
-          currentFolder = '';
-          if (activeLens === 'trash') activeLens = 'all';
-        }}
-      >
-        <Icons.FolderOpen size={14} />
-        <span>Bucket root</span>
-      </button>
-
-      {#each folderEntries as folder (folder.path)}
-        <button
-          type="button"
-          class="sidebar-item"
-          class:active={currentFolder === folder.path}
-          onclick={() => {
-            currentFolder = folder.path;
-            if (activeLens === 'trash') activeLens = 'all';
-          }}
-        >
-          <Icons.Folder size={14} />
-          <span>{folder.path}</span>
-          <small>{folderCount(folder.path)}</small>
-        </button>
-      {/each}
-    </div>
-
-    <div class="sidebar-storage">
-      <div class="group-label">Storage</div>
-      <strong>{formatBytes(status?.storage_bytes_used || 0)}</strong>
-      <span>{status?.file_count || 0} tracked objects</span>
-    </div>
-  </aside>
+  <DriveSidebar
+    filters={libraryFilters}
+    {activeLens}
+    folders={folderEntries}
+    {currentFolder}
+    publicCount={files.filter((f) => f.visibility === 'public').length}
+    trashCount={trash.length}
+    usedBytes={status?.storage_bytes_used || 0}
+    totalObjects={status?.file_count || files.length}
+    onLensChange={setLens}
+    onFolderChange={(path) => {
+      currentFolder = path;
+      if (activeLens === 'trash') activeLens = 'all';
+    }}
+  />
 
   <section class="drive-main">
-    <header class="drive-header">
-      <div>
-        <div class="breadcrumbs">
-          <span>Cloud Drive</span>
-          {#if currentFolder}
-            <Icons.ChevronRight size={12} />
-            <span>{currentFolder}</span>
-          {/if}
-        </div>
-        <h1>{isTrashView ? 'Trash' : 'Cloud Drive'}</h1>
-        <p>
-          {#if isTrashView}
-            Restore or permanently purge deleted objects.
-          {:else}
-            Browse, upload, preview, share, and manage your local cloud objects.
-          {/if}
-        </p>
-      </div>
-
-      <div class="header-actions">
-        <button type="button" class="ghost-btn" onclick={handleRefresh}>
-          <Icons.RefreshCcw size={14} />
-          Refresh
-        </button>
-        {#if isTrashView}
-          <button type="button" class="danger-btn" onclick={handlePurgeExpiredTrash} disabled={trash.length === 0}>
-            <Icons.Trash2 size={14} />
-            Purge expired
-          </button>
-        {:else}
-          <button type="button" class="accent-btn" onclick={requestUpload}>
-            <Icons.Upload size={15} />
-            Upload files
-          </button>
-        {/if}
-      </div>
-    </header>
-
-    <div class="summary-grid">
-      <article class="summary-card">
-        <span>Objects</span>
-        <strong>{status?.file_count || files.length}</strong>
-      </article>
-      <article class="summary-card">
-        <span>Visible here</span>
-        <strong>{isTrashView ? filteredTrash.length : filteredLibraryFiles.length}</strong>
-      </article>
-      <article class="summary-card">
-        <span>Pinned</span>
-        <strong>{status?.pinned_count || files.filter((file) => file.pinned_at).length}</strong>
-      </article>
-      <article class="summary-card">
-        <span>Public</span>
-        <strong>{files.filter((file) => file.visibility === 'public').length}</strong>
-      </article>
-    </div>
+    <DriveHeader
+      title={isTrashView ? 'Trash' : 'Cloud Drive'}
+      {currentFolder}
+      {isTrashView}
+      fileCount={status?.file_count || files.length}
+      visibleCount={isTrashView ? filteredTrash.length : filteredLibraryFiles.length}
+      pinnedCount={status?.pinned_count || files.filter((f) => f.pinned_at).length}
+      publicCount={files.filter((f) => f.visibility === 'public').length}
+      onRefresh={handleRefresh}
+      onUpload={requestUpload}
+      onPurgeTrash={handlePurgeExpiredTrash}
+      trashEmpty={trash.length === 0}
+    />
 
     <div class="toolbar">
       <div class="search-box">
@@ -585,133 +493,40 @@
       </div>
     </div>
 
-    <div class="drive-content">
-      <div class="content-main">
-        {#if isTrashView}
-          <TrashView
-            files={filteredTrash}
-            isLoading={trashLoading}
-            onRestore={handleRestore}
-            onDelete={handlePermanentDelete}
-            onEmptyTrash={handlePurgeExpiredTrash}
-            onContextMenu={showContextMenu}
-          />
-        {:else if isLoading}
-          <div class="loading-panel">
-            <div class="spinner"></div>
-            <strong>Loading Drive</strong>
-            <p>Fetching files, folders, and storage state.</p>
-          </div>
-        {:else if filteredLibraryFiles.length === 0}
-          <div class="empty-panel">
-            <Icons.Cloud size={28} />
-            <strong>No files in this view</strong>
-            <p>Upload files or change the folder and lens filters.</p>
-            <button type="button" class="accent-btn" onclick={requestUpload}>
-              <Icons.Upload size={15} />
-              Upload into Drive
-            </button>
-          </div>
-        {:else if viewMode === 'grid'}
-          <div class="file-grid">
-            {#each filteredLibraryFiles as file (file.id)}
-              <button
-                type="button"
-                class="file-card"
-                class:selected={selectedFile?.id === file.id}
-                onclick={() => selectFile(file)}
-                ondblclick={() => openPreview(file)}
-                oncontextmenu={(event) => showContextMenu(event, file)}
-              >
-                <div class="file-surface">
-                  <FileIcon mimeType={file.mime_type} name={file.name} size={34} />
-                  {#if file.visibility === 'public'}
-                    <span class="inline-badge public">Public</span>
-                  {/if}
-                  {#if file.pinned_at}
-                    <span class="inline-badge pinned"><Icons.Pin size={10} /></span>
-                  {/if}
-                </div>
-                <div class="file-copy">
-                  <strong>{file.name}</strong>
-                  <span>{formatBytes(file.size_bytes)} · {formatRelative(file.updated_at || file.uploaded_at)}</span>
-                </div>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <div class="file-list">
-            <div class="list-head">
-              <span>Name</span>
-              <span>Size</span>
-              <span>Updated</span>
-              <span>Folder</span>
-              <span>State</span>
-            </div>
+    <DriveContent
+      files={filteredLibraryFiles}
+      trash={filteredTrash}
+      {isLoading}
+      {isTrashView}
+      {viewMode}
+      selectedFileId={selectedFile?.id}
+      {hasMore}
+      {isLoadingMore}
+      onSelectFile={selectFile}
+      onPreviewFile={openPreview}
+      onContextMenu={showContextMenu}
+      onLoadMore={() => loadLibrary(false)}
+      onRestore={handleRestore}
+      onDelete={handlePermanentDelete}
+      onPurgeTrash={handlePurgeExpiredTrash}
+      onUpload={requestUpload}
+    />
 
-            {#each filteredLibraryFiles as file (file.id)}
-              <button
-                type="button"
-                class="list-row"
-                class:selected={selectedFile?.id === file.id}
-                onclick={() => selectFile(file)}
-                ondblclick={() => openPreview(file)}
-                oncontextmenu={(event) => showContextMenu(event, file)}
-              >
-                <div class="name-cell">
-                  <FileIcon mimeType={file.mime_type} name={file.name} size={20} />
-                  <span>{file.name}</span>
-                </div>
-                <span>{formatBytes(file.size_bytes)}</span>
-                <span>{formatRelative(file.updated_at || file.uploaded_at)}</span>
-                <span>{file.folder_path || 'Bucket root'}</span>
-                <div class="state-cell">
-                  {#if file.visibility === 'public'}
-                    <span class="inline-badge public">Public</span>
-                  {/if}
-                  {#if file.pinned_at}
-                    <span class="inline-badge pinned">Pinned</span>
-                  {/if}
-                  {#if file.visibility !== 'public' && !file.pinned_at}
-                    <span class="muted-state">Private</span>
-                  {/if}
-                </div>
-              </button>
-            {/each}
-          </div>
-        {/if}
-
-        {#if !isTrashView && hasMore}
-          <div class="load-more-row">
-            <button type="button" class="ghost-btn" onclick={() => loadLibrary(false)} disabled={isLoadingMore}>
-              {#if isLoadingMore}
-                <div class="spinner small"></div>
-                Loading more
-              {:else}
-                <Icons.ChevronsDown size={14} />
-                Load more
-              {/if}
-            </button>
-          </div>
-        {/if}
-      </div>
-
-      {#if selectedFile}
-        <DriveDetailsPanel
-          file={selectedFile}
-          onToggleVisibility={handleToggleVisibility}
-          onShare={() => {
-            if (selectedFile) shareFile = selectedFile;
-          }}
-          onMove={() => {
-            if (selectedFile) {
-              moveDialogFile = selectedFile;
-              isMoveDialogOpen = true;
-            }
-          }}
-        />
-      {/if}
-    </div>
+    {#if selectedFile}
+      <DriveDetailsPanel
+        file={selectedFile}
+        onToggleVisibility={handleToggleVisibility}
+        onShare={() => {
+          if (selectedFile) shareFile = selectedFile;
+        }}
+        onMove={() => {
+          if (selectedFile) {
+            moveDialogFile = selectedFile;
+            isMoveDialogOpen = true;
+          }
+        }}
+      />
+    {/if}
   </section>
 </div>
 
@@ -940,18 +755,6 @@
     gap: 8px;
   }
 
-  .summary-card span {
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-family: var(--ff-mono);
-  }
-
-  .summary-card strong {
-    font-size: 26px;
-    color: var(--text);
-  }
 
   .toolbar {
     margin: 0 24px 16px;
@@ -1023,253 +826,13 @@
     border-radius: 10px;
   }
 
-  .drive-content {
-    flex: 1;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    gap: 0;
-    overflow: hidden;
-  }
-
-  .content-main {
-    min-width: 0;
-    padding: 0 24px 130px;
-    overflow: auto;
-  }
-
-  .loading-panel,
-  .empty-panel {
-    min-height: 320px;
-    border: 1px dashed var(--border);
-    border-radius: 18px;
-    background: rgba(18, 20, 27, 0.42);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: var(--muted);
-    text-align: center;
-  }
-
-  .loading-panel strong,
-  .empty-panel strong {
-    color: var(--text);
-  }
-
-  .empty-panel p,
-  .loading-panel p {
-    margin: 0;
-    max-width: 340px;
-  }
-
-  .file-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-  }
-
-  .file-card {
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: inherit;
-    border-radius: 16px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .file-card:hover,
-  .list-row:hover {
-    background: var(--surface-2);
-    border-color: var(--border-2);
-  }
-
-  .file-card.selected,
-  .list-row.selected {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px rgba(110, 168, 255, 0.12);
-  }
-
-  .file-surface {
-    position: relative;
-    aspect-ratio: 4 / 3;
-    border-radius: 12px;
-    background:
-      radial-gradient(circle at top, rgba(255, 255, 255, 0.05), transparent 60%),
-      linear-gradient(180deg, rgba(22, 24, 31, 0.96), rgba(14, 16, 21, 0.98));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .inline-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 20px;
-    padding: 0 8px;
-    border-radius: 999px;
-    font-size: 10px;
-    font-family: var(--ff-mono);
-  }
-
-  .inline-badge.public {
-    background: rgba(110, 168, 255, 0.14);
-    color: var(--blue);
-  }
-
-  .inline-badge.pinned {
-    background: rgba(255, 95, 162, 0.14);
-    color: var(--pink);
-  }
-
-  .file-surface .inline-badge {
-    position: absolute;
-    top: 8px;
-  }
-
-  .file-surface .inline-badge.public {
-    left: 8px;
-  }
-
-  .file-surface .inline-badge.pinned {
-    right: 8px;
-  }
-
-  .file-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .file-copy strong {
-    color: var(--text);
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .file-copy span,
-  .muted-state {
-    color: var(--muted);
-    font-size: 11px;
-  }
-
-  .file-list {
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    background: var(--surface);
-  }
-
-  .list-head,
-  .list-row {
-    display: grid;
-    grid-template-columns: minmax(0, 2.2fr) 0.7fr 0.7fr 1fr 0.9fr;
-    gap: 12px;
-    align-items: center;
-  }
-
-  .list-head {
-    padding: 11px 14px;
-    border-bottom: 1px solid var(--hairline);
-    font-size: 10px;
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-family: var(--ff-mono);
-  }
-
-  .list-row {
-    width: 100%;
-    padding: 12px 14px;
-    border: none;
-    border-bottom: 1px solid var(--hairline);
-    background: transparent;
-    color: var(--text-2);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .list-row:last-child {
-    border-bottom: none;
-  }
-
-  .name-cell,
-  .state-cell {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex-wrap: wrap;
-  }
-
-  .name-cell span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .load-more-row {
-    display: flex;
-    justify-content: center;
-    padding: 18px 0 0;
-  }
-
-  .spinner {
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    border: 2px solid rgba(255, 255, 255, 0.12);
-    border-top-color: var(--blue);
-    animation: spin 0.8s linear infinite;
-  }
-
-  .spinner.small {
-    width: 14px;
-    height: 14px;
-    border-width: 2px;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
   @media (max-width: 1200px) {
     .drive-shell {
-      grid-template-columns: 1fr;
-    }
-
-    .drive-sidebar {
-      display: none;
-    }
-
-    .drive-content {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 760px) {
-    .drive-header,
-    .summary-grid,
-    .content-main {
-      padding-left: 16px;
-      padding-right: 16px;
-    }
-
-    .summary-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .toolbar {
       margin-left: 16px;
       margin-right: 16px;
@@ -1279,19 +842,6 @@
 
     .toolbar-right {
       justify-content: space-between;
-    }
-
-    .file-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .list-head {
-      display: none;
-    }
-
-    .list-row {
-      grid-template-columns: 1fr;
-      gap: 8px;
     }
   }
 </style>
