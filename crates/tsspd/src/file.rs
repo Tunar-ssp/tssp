@@ -5,6 +5,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
+use std::os::unix::io::IntoRawFd;
 use tssp_domain::{FileId, Visibility};
 
 use crate::upload::FileRecordResponse;
@@ -90,10 +91,53 @@ pub(crate) struct ThumbnailQuery {
     size: Option<String>,
 }
 
+/// Pixel dimensions for thumbnail size variants.
+fn thumbnail_pixels(size: &str) -> u32 {
+    match size {
+        "small" => 128,
+        "large" => 512,
+        _ => 256, // medium
+    }
+}
+
+/// Returns the JPEG bytes of a thumbnail, generating and caching it on first request.
+///
+/// Cache path: `<data_dir>/.thumbnails/<blake3_hash>-<size>.jpg`
+fn generate_or_load_thumbnail(
+    source_path: impl AsRef<std::path::Path>,
+    cache_path: &std::path::Path,
+    max_px: u32,
+) -> Result<Vec<u8>, String> {
+    if let Ok(bytes) = std::fs::read(cache_path) {
+        return Ok(bytes);
+    }
+
+    let img = image::open(source_path).map_err(|e| format!("image decode failed: {e}"))?;
+    let thumb = img.thumbnail(max_px, max_px);
+
+    // Ensure cache directory exists.
+    if let Some(parent) = cache_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cache dir create failed: {e}"))?;
+    }
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    thumb
+        .write_to(&mut buf, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("jpeg encode failed: {e}"))?;
+    let bytes = buf.into_inner();
+
+    // Write to cache atomically using a temp file in the same directory.
+    let tmp = cache_path.with_extension("tmp");
+    std::fs::write(&tmp, &bytes).map_err(|e| format!("cache write failed: {e}"))?;
+    std::fs::rename(&tmp, cache_path).map_err(|e| format!("cache rename failed: {e}"))?;
+
+    Ok(bytes)
+}
+
 /// GET /api/v1/files/{id}/thumbnail?size={small|medium|large}
 ///
-/// Returns 404 for non-image files.
-/// Returns 501 Not Implemented because thumbnail generation is not yet implemented.
+/// Generates a JPEG thumbnail and caches it in `<data_dir>/.thumbnails/`.
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn get_file_thumbnail(
     State(state): State<HttpState>,
     crate::auth::OptionalAuthContext(auth): crate::auth::OptionalAuthContext,
@@ -178,17 +222,82 @@ pub(crate) async fn get_file_thumbnail(
             .into_response();
     }
 
-    // Thumbnail generation is not implemented yet.
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: "not_implemented",
-                message: "thumbnail generation is not yet implemented".to_owned(),
-            },
-        }),
-    )
-        .into_response()
+    // Locate the blob file on disk.
+    let blob_reader = state.blob_reader.clone();
+    let storage_handle = record.storage_handle.clone();
+    let source_file =
+        match tokio::task::spawn_blocking(move || blob_reader.open_blob(&storage_handle)).await {
+            Ok(Ok(file)) => file,
+            Ok(Err(e)) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "blob_unavailable",
+                            message: format!("could not open blob: {e}"),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: ErrorBody {
+                            code: "task_failed",
+                            message: format!("worker failed: {e}"),
+                        },
+                    }),
+                )
+                    .into_response();
+            }
+        };
+
+    // Determine cache path using the content hash (BLAKE3) and size.
+    let cache_dir = state.settings().data_dir.join(".thumbnails");
+    let cache_filename = format!("{}-{size}.jpg", record.content_hash.as_str());
+    let cache_path = cache_dir.join(&cache_filename);
+    let max_px = thumbnail_pixels(size);
+
+    // Use /proc/self/fd/<fd> to pass the already-open file to image decoder.
+    let source_path_result = tokio::task::spawn_blocking(move || {
+        let path = format!("/proc/self/fd/{}", source_file.into_raw_fd());
+        generate_or_load_thumbnail(path, &cache_path, max_px)
+    })
+    .await;
+
+    match source_path_result {
+        Ok(Ok(bytes)) => (
+            StatusCode::OK,
+            [
+                (axum::http::header::CONTENT_TYPE, "image/jpeg"),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Ok(Err(message)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "thumbnail_failed",
+                    message,
+                },
+            }),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "task_failed",
+                    message: format!("thumbnail worker failed: {e}"),
+                },
+            }),
+        )
+            .into_response(),
+    }
 }
 
 #[allow(clippy::result_large_err)]

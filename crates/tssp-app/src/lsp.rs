@@ -42,6 +42,12 @@ impl LspService {
             .collect()
     }
 
+    /// Get server config for a language, returning `None` if not configured.
+    #[must_use]
+    pub fn config_for_language(&self, language: &str) -> Option<LspServerConfig> {
+        self.provider.get_config(language)
+    }
+
     /// Get server config for a language.
     ///
     /// # Errors

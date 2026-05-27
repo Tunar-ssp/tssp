@@ -89,6 +89,9 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         0, // Background scan will update this
     );
 
+    // Restore in-progress upload sessions from SQLite (enables resume after restart).
+    state.upload_session_manager.init_from_db().await;
+
     spawn_startup_integrity_scan(
         repository.clone(),
         Arc::new(storage.clone()),
@@ -352,6 +355,7 @@ fn build_http_state(
 ) -> HttpState {
     let public_urls = PublicUrlBuilder::from_settings(settings);
     let storage = Arc::new(storage);
+    let upload_pool = pool.clone();
     let workspace_store = Arc::new(WorkspaceStore::new(pool));
     let id_generator = tssp_adapter_system::UuidV7FileIdGenerator;
     let clock = tssp_adapter_system::SystemClock;
@@ -387,6 +391,7 @@ fn build_http_state(
         public_urls,
         corrupt_file_count,
     )
+    .with_upload_session_pool(upload_pool)
     .with_auth(auth_service)
     .with_workspaces(workspace_store)
     .with_repository(repository.clone())

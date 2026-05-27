@@ -527,6 +527,46 @@ pub(crate) async fn export_notes(
     }
 }
 
+/// `GET /api/v1/notes/{id}/backlinks` — returns IDs of notes that link to this note.
+pub(crate) async fn get_note_backlinks(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    let note_id = match parse_note_id(id) {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+    let provider = state.note_provider.clone();
+
+    // Verify the note exists and that the caller can read it.
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to view this note's backlinks".to_owned(),
+        }
+        .response();
+    }
+
+    match run_blocking(provider, move |provider| provider.get_backlinks(note_id)).await {
+        Ok(ids) => {
+            let id_strings: Vec<String> = ids.iter().map(|id| id.as_str().to_owned()).collect();
+            (StatusCode::OK, Json(id_strings)).into_response()
+        }
+        Err(response) => response,
+    }
+}
+
 async fn run_blocking<T, F>(
     provider: std::sync::Arc<dyn NoteProvider>,
     work: F,

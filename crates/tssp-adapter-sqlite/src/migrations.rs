@@ -99,7 +99,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_workspace_files_table(connection)?;
     migrate_session_creator_column(connection)?;
     migrate_public_link_expiry(connection)?;
-    migrate_upload_sessions_table(connection)
+    migrate_upload_sessions_table(connection)?;
+    migrate_note_links_table(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -496,4 +497,31 @@ pub(crate) fn record_migration(
         )
         .map(|_rows| ())
         .map_err(SqliteRepositoryError::Migration)
+}
+
+/// Creates the `note_links` table for backlink tracking (migration 19).
+pub(crate) fn migrate_note_links_table(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 19)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS note_links (
+                source_id TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                PRIMARY KEY (source_id, target_id)
+            ) STRICT;
+
+            CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_id);
+            CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_id);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 19)?;
+    Ok(())
 }

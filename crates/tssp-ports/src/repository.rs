@@ -366,6 +366,25 @@ pub trait NoteRepository {
     ///
     /// Returns [`RepositoryError`] when either search backend fails.
     fn search_all(&self, query: &str) -> Result<Vec<SearchHit>, RepositoryError>;
+
+    /// Replaces all outgoing links from `source_id` with `target_ids`.
+    /// Called after every note save to keep the link graph consistent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] on database error.
+    fn update_note_links(
+        &self,
+        source_id: &NoteId,
+        target_ids: &[NoteId],
+    ) -> Result<(), RepositoryError>;
+
+    /// Returns the IDs of all notes that link TO `target_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] on database error.
+    fn get_note_backlinks(&self, target_id: &NoteId) -> Result<Vec<NoteId>, RepositoryError>;
 }
 
 impl<T> FileRepository for Arc<T>
@@ -610,5 +629,17 @@ where
 
     fn search_all(&self, query: &str) -> Result<Vec<SearchHit>, RepositoryError> {
         self.as_ref().search_all(query)
+    }
+
+    fn update_note_links(
+        &self,
+        source_id: &NoteId,
+        target_ids: &[NoteId],
+    ) -> Result<(), RepositoryError> {
+        self.as_ref().update_note_links(source_id, target_ids)
+    }
+
+    fn get_note_backlinks(&self, target_id: &NoteId) -> Result<Vec<NoteId>, RepositoryError> {
+        self.as_ref().get_note_backlinks(target_id)
     }
 }

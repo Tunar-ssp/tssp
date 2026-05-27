@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::RwLock;
 
 use crate::upload::HttpUploadRequest;
@@ -142,12 +143,11 @@ impl UploadSession {
     }
 }
 
-/// Session manager for chunked uploads (in-memory only).
+/// Session manager for chunked uploads with `SQLite` write-through persistence.
 ///
-/// WARNING: Sessions are stored in-memory and are lost on daemon restart.
-/// This means clients CANNOT resume uploads after the server restarts.
-/// Resumability is only guaranteed within a single daemon lifetime.
-/// Consider implementing database persistence for true resumability.
+/// Sessions are written to both the in-memory map and the `upload_sessions` `SQLite` table.
+/// On startup, [`UploadSessionManager::init_from_db`] restores in-progress sessions so
+/// uploads can be resumed after daemon restarts.
 ///
 /// # Limits
 ///
@@ -156,6 +156,7 @@ impl UploadSession {
 #[derive(Clone)]
 pub struct UploadSessionManager {
     sessions: Arc<RwLock<HashMap<String, UploadSession>>>,
+    pool: Option<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
 }
 
 const MAX_SESSIONS_PER_USER: usize = 100;
@@ -165,7 +166,132 @@ impl UploadSessionManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            pool: None,
         }
+    }
+
+    /// Creates a manager backed by `pool` for persistent session storage.
+    pub fn with_pool(pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>) -> Self {
+        Self {
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            pool: Some(pool),
+        }
+    }
+
+    /// Loads all sessions from the `upload_sessions` `SQLite` table into the in-memory map.
+    /// Call once at startup after the pool is available.
+    pub async fn init_from_db(&self) {
+        let Some(pool) = &self.pool else { return };
+        let Ok(conn) = pool.get() else { return };
+
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT id, filename, total_size, chunk_size, uploaded_chunks,
+                    folder_path, owner_id, tags, mime_type
+             FROM upload_sessions",
+        ) else {
+            return;
+        };
+
+        let rows = stmt.query_map([], |row| {
+            let id_str: String = row.get(0)?;
+            let filename: String = row.get(1)?;
+            let total_size: i64 = row.get(2)?;
+            let chunk_size_raw: i64 = row.get(3)?;
+            let chunks_json: String = row.get(4)?;
+            let folder_path: String = row.get(5)?;
+            let owner_id: Option<String> = row.get(6)?;
+            let tags_json: String = row.get(7)?;
+            let mime_type: Option<String> = row.get(8)?;
+            Ok((
+                id_str,
+                filename,
+                total_size,
+                chunk_size_raw,
+                chunks_json,
+                folder_path,
+                owner_id,
+                tags_json,
+                mime_type,
+            ))
+        });
+
+        let Ok(rows) = rows else { return };
+
+        let mut sessions = self.sessions.write().await;
+        for row in rows.flatten() {
+            let (
+                id_str,
+                filename,
+                total_size,
+                _chunk_size_raw,
+                chunks_json,
+                folder_path,
+                owner_id,
+                tags_json,
+                mime_type,
+            ) = row;
+            let Ok(id) = UploadSessionId::new(id_str.clone()) else {
+                continue;
+            };
+            let uploaded_chunks: Vec<bool> = serde_json::from_str(&chunks_json).unwrap_or_default();
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            let total_size = u64::try_from(total_size).unwrap_or(0);
+
+            let session = UploadSession {
+                id,
+                filename,
+                total_size,
+                chunk_size: CHUNK_SIZE,
+                uploaded_chunks,
+                folder_path,
+                owner_id,
+                tags,
+                mime_type,
+                updated_at: std::time::Instant::now(),
+            };
+            sessions.insert(id_str, session);
+        }
+    }
+
+    /// Persists a session to `SQLite` (best-effort; errors are logged and ignored).
+    fn persist_session(&self, session: &UploadSession) {
+        let Some(pool) = &self.pool else { return };
+        let Ok(conn) = pool.get() else { return };
+        let chunks_json = serde_json::to_string(&session.uploaded_chunks).unwrap_or_default();
+        let tags_json = serde_json::to_string(&session.tags).unwrap_or_default();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+            .unwrap_or(0);
+        let total_size = i64::try_from(session.total_size).unwrap_or(i64::MAX);
+        let chunk_size = i64::try_from(session.chunk_size).unwrap_or(i64::MAX);
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO upload_sessions
+             (id, filename, total_size, chunk_size, uploaded_chunks, folder_path, owner_id, tags, mime_type, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, COALESCE((SELECT created_at FROM upload_sessions WHERE id=?1), ?10), ?10)",
+            rusqlite::params![
+                session.id.as_str(),
+                session.filename,
+                total_size,
+                chunk_size,
+                chunks_json,
+                session.folder_path,
+                session.owner_id,
+                tags_json,
+                session.mime_type,
+                now,
+            ],
+        );
+    }
+
+    /// Deletes a session from `SQLite`.
+    fn delete_from_db(&self, id: &UploadSessionId) {
+        let Some(pool) = &self.pool else { return };
+        let Ok(conn) = pool.get() else { return };
+        let _ = conn.execute(
+            "DELETE FROM upload_sessions WHERE id = ?1",
+            rusqlite::params![id.as_str()],
+        );
     }
 
     pub async fn create_session(&self, session: UploadSession) -> Result<UploadSessionId, String> {
@@ -193,7 +319,8 @@ impl UploadSessionManager {
             ));
         }
 
-        sessions.insert(id.0.clone(), session);
+        sessions.insert(id.0.clone(), session.clone());
+        self.persist_session(&session);
         Ok(id)
     }
 
@@ -202,13 +329,23 @@ impl UploadSessionManager {
     }
 
     pub async fn mark_chunk_uploaded(&self, id: &UploadSessionId, chunk_index: usize) {
-        if let Some(session) = self.sessions.write().await.get_mut(&id.0) {
-            session.mark_chunk_uploaded(chunk_index);
+        let session_snapshot = {
+            let mut sessions = self.sessions.write().await;
+            if let Some(session) = sessions.get_mut(&id.0) {
+                session.mark_chunk_uploaded(chunk_index);
+                Some(session.clone())
+            } else {
+                None
+            }
+        };
+        if let Some(session) = session_snapshot {
+            self.persist_session(&session);
         }
     }
 
     pub async fn delete_session(&self, id: &UploadSessionId) {
         self.sessions.write().await.remove(&id.0);
+        self.delete_from_db(id);
     }
 
     /// Removes sessions that haven't been updated for a while.

@@ -81,6 +81,13 @@ pub trait NoteProvider: Send + Sync {
     ///
     /// Returns [`HttpNoteError`] when the note is missing or persistence fails.
     fn unpin_note(&self, id: NoteId) -> Result<(), HttpNoteError>;
+
+    /// Returns the IDs of notes that link to `target_id` via `[[Title]]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] on database error.
+    fn get_backlinks(&self, target_id: NoteId) -> Result<Vec<NoteId>, HttpNoteError>;
 }
 
 /// Placeholder provider used before wiring the application service.
@@ -129,6 +136,10 @@ impl NoteProvider for StaticNoteProvider {
     }
 
     fn unpin_note(&self, _id: NoteId) -> Result<(), HttpNoteError> {
+        Err(unavailable())
+    }
+
+    fn get_backlinks(&self, _target_id: NoteId) -> Result<Vec<NoteId>, HttpNoteError> {
         Err(unavailable())
     }
 }
@@ -226,5 +237,11 @@ where
             .unpin_note(&id)
             .map_err(map_note_error)
             .map(|_| ())
+    }
+
+    fn get_backlinks(&self, target_id: NoteId) -> Result<Vec<NoteId>, HttpNoteError> {
+        self.service
+            .get_backlinks(&target_id)
+            .map_err(map_note_error)
     }
 }

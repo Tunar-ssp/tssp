@@ -1,4 +1,7 @@
 //! Login rate limiting with token bucket per IP.
+//!
+//! Uses a bounded `HashMap`: evicts expired entries when the map exceeds `MAX_TRACKED_IPS`
+//! to prevent OOM from bots spamming random source IPs.
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -8,6 +11,10 @@ use tokio::sync::RwLock;
 
 const MAX_ATTEMPTS: u32 = 5;
 const LOCKOUT_SECONDS: u64 = 1800; // 30 minutes
+
+/// Hard cap on tracked IPs. When exceeded, expired entries are purged first;
+/// if still over capacity the write is dropped (fail-open for new IPs).
+const MAX_TRACKED_IPS: usize = 10_000;
 
 /// Rate limiter state for a single IP.
 #[derive(Debug, Clone)]
@@ -82,19 +89,23 @@ impl RateLimiter {
     /// Check if an IP is allowed to attempt login.
     /// Returns true if the attempt is allowed, false if rate-limited.
     pub async fn check_and_record_attempt(&self, ip: IpAddr) -> bool {
-        let mut buckets = self.buckets.write().await;
-        let bucket = buckets.entry(ip).or_insert_with(BucketState::new);
-
-        if bucket.is_locked_out() {
-            return false;
-        }
-
-        true
+        let buckets = self.buckets.read().await;
+        !matches!(buckets.get(&ip), Some(bucket) if bucket.is_locked_out())
     }
 
     /// Record a failed login attempt.
     pub async fn record_failure(&self, ip: IpAddr) {
         let mut buckets = self.buckets.write().await;
+
+        // Enforce capacity: purge expired entries first.
+        if buckets.len() >= MAX_TRACKED_IPS && !buckets.contains_key(&ip) {
+            buckets.retain(|_, b| !b.is_expired());
+            // Still over cap after eviction — drop this entry (fail-open).
+            if buckets.len() >= MAX_TRACKED_IPS {
+                return;
+            }
+        }
+
         buckets
             .entry(ip)
             .or_insert_with(BucketState::new)

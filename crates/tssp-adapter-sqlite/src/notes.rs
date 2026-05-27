@@ -432,6 +432,49 @@ impl NoteRepository for SqliteFileRepository {
         hits.truncate(100);
         Ok(hits)
     }
+
+    fn update_note_links(
+        &self,
+        source_id: &NoteId,
+        target_ids: &[NoteId],
+    ) -> Result<(), RepositoryError> {
+        let connection = self.connect()?;
+        connection
+            .execute(
+                "DELETE FROM note_links WHERE source_id = ?1",
+                params![source_id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        for target_id in target_ids {
+            connection
+                .execute(
+                    "INSERT OR IGNORE INTO note_links (source_id, target_id) VALUES (?1, ?2)",
+                    params![source_id.as_str(), target_id.as_str()],
+                )
+                .map_err(map_rusqlite_repository_error)?;
+        }
+        Ok(())
+    }
+
+    fn get_note_backlinks(&self, target_id: &NoteId) -> Result<Vec<NoteId>, RepositoryError> {
+        let connection = self.connect()?;
+        let mut stmt = connection
+            .prepare("SELECT source_id FROM note_links WHERE target_id = ?1")
+            .map_err(map_rusqlite_repository_error)?;
+        let rows = stmt
+            .query_map(params![target_id.as_str()], |row: &rusqlite::Row<'_>| {
+                row.get::<_, String>(0)
+            })
+            .map_err(map_rusqlite_repository_error)?;
+        let mut result = Vec::new();
+        for row in rows {
+            let id_str = row.map_err(map_rusqlite_repository_error)?;
+            if let Ok(id) = NoteId::new(id_str) {
+                result.push(id);
+            }
+        }
+        Ok(result)
+    }
 }
 
 use tssp_ports::FileRepository;

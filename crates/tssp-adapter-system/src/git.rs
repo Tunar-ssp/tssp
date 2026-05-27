@@ -1,9 +1,14 @@
+//! Git provider backed by the `git2` native crate.
+//!
+//! Reads `.git` directory metadata without spawning a child process —
+//! significantly faster and more reliable than parsing `git` CLI output,
+//! especially on Orange Pi where process spawning is expensive.
+
 use std::path::Path;
-use std::process::Command;
 use tssp_domain::GitStatus;
 use tssp_ports::GitProvider;
 
-/// System implementation of Git provider using the `git` binary.
+/// System implementation of Git provider using the `git2` crate.
 pub struct SystemGitProvider;
 
 impl SystemGitProvider {
@@ -25,77 +30,93 @@ impl GitProvider for SystemGitProvider {
     async fn get_status(&self, workspace_root: &Path) -> Result<GitStatus, String> {
         let workspace_root = workspace_root.to_path_buf();
 
-        tokio::task::spawn_blocking(move || {
-            let git_dir = workspace_root.join(".git");
-            if !git_dir.exists() {
-                return Ok(GitStatus {
-                    is_repo: false,
-                    branch: None,
-                    changed_count: 0,
-                    staged_count: 0,
-                    untracked_count: 0,
-                });
-            }
-
-            let branch = get_current_branch(&workspace_root);
-            let (changed, staged, untracked) = get_status_counts(&workspace_root);
-
-            Ok(GitStatus {
-                is_repo: true,
-                branch,
-                changed_count: changed,
-                staged_count: staged,
-                untracked_count: untracked,
-            })
-        })
-        .await
-        .map_err(|e| e.to_string())?
+        tokio::task::spawn_blocking(move || git_status_blocking(&workspace_root))
+            .await
+            .map_err(|e| e.to_string())?
     }
 }
 
-fn get_current_branch(workspace_root: &Path) -> Option<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(workspace_root)
-        .output()
-        .ok()?;
-
-    if output.status.success() {
-        String::from_utf8(output.stdout)
-            .ok()
-            .map(|s| s.trim().to_string())
-    } else {
-        None
-    }
-}
-
-fn get_status_counts(workspace_root: &Path) -> (u32, u32, u32) {
-    let Ok(output) = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(workspace_root)
-        .output()
-    else {
-        return (0, 0, 0);
+fn git_status_blocking(workspace_root: &Path) -> Result<GitStatus, String> {
+    // Discover the repository from the workspace root (walks up if needed).
+    let repo = match git2::Repository::discover(workspace_root) {
+        Ok(repo) => repo,
+        Err(e) if e.code() == git2::ErrorCode::NotFound => {
+            return Ok(GitStatus {
+                is_repo: false,
+                branch: None,
+                changed_count: 0,
+                staged_count: 0,
+                untracked_count: 0,
+            });
+        }
+        Err(e) => return Err(format!("git discover failed: {e}")),
     };
 
-    if !output.status.success() {
-        return (0, 0, 0);
-    }
+    let branch = head_branch_name(&repo);
 
-    let status_text = String::from_utf8_lossy(&output.stdout);
+    let mut status_opts = git2::StatusOptions::new();
+    status_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(false)
+        .include_ignored(false)
+        .renames_head_to_index(false)
+        .renames_index_to_workdir(false);
+
+    let statuses = repo
+        .statuses(Some(&mut status_opts))
+        .map_err(|e| format!("git status failed: {e}"))?;
+
     let mut changed = 0u32;
     let mut staged = 0u32;
     let mut untracked = 0u32;
 
-    for line in status_text.lines() {
-        if line.starts_with("??") {
+    for entry in statuses.iter() {
+        let flags = entry.status();
+
+        if flags.contains(git2::Status::WT_NEW) {
             untracked += 1;
-        } else if line.starts_with(['M', 'A', 'D']) {
+            continue;
+        }
+
+        // Index (staged) changes.
+        if flags.intersects(
+            git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::INDEX_TYPECHANGE,
+        ) {
             staged += 1;
-        } else if line.ends_with(['M', 'A', 'D']) {
+        }
+
+        // Worktree (unstaged) changes.
+        if flags.intersects(
+            git2::Status::WT_MODIFIED
+                | git2::Status::WT_DELETED
+                | git2::Status::WT_TYPECHANGE
+                | git2::Status::WT_RENAMED,
+        ) {
             changed += 1;
         }
     }
 
-    (changed, staged, untracked)
+    Ok(GitStatus {
+        is_repo: true,
+        branch,
+        changed_count: changed,
+        staged_count: staged,
+        untracked_count: untracked,
+    })
+}
+
+/// Returns the short name of the current HEAD branch (e.g. "main"), or `None` for detached HEAD.
+fn head_branch_name(repo: &git2::Repository) -> Option<String> {
+    let head = repo.head().ok()?;
+    if head.is_branch() {
+        head.shorthand().map(ToOwned::to_owned)
+    } else {
+        // Detached HEAD: return the abbreviated commit hash.
+        let oid = head.target()?;
+        Some(oid.to_string()[..7].to_owned())
+    }
 }

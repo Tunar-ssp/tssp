@@ -253,6 +253,16 @@ impl HttpState {
         self
     }
 
+    /// Replaces the upload session manager with one backed by a `SQLite` pool.
+    #[must_use]
+    pub fn with_upload_session_pool(
+        mut self,
+        pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
+    ) -> Self {
+        self.upload_session_manager = Arc::new(UploadSessionManager::with_pool(pool));
+        self
+    }
+
     #[cfg(test)]
     /// Builds test HTTP state with default daemon settings.
     #[must_use]

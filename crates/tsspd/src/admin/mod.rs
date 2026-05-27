@@ -1,5 +1,6 @@
 //! Admin API for storage, system, and maintenance operations.
 
+mod backup;
 mod console;
 mod editor;
 mod handlers;
@@ -7,6 +8,7 @@ mod sessions;
 mod system;
 mod users;
 
+pub(crate) use backup::admin_backup;
 pub use console::{list_commands, run_command};
 pub(crate) use editor::{
     admin_editor_check, admin_editor_create_document, admin_editor_delete_document,

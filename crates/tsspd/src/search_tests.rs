@@ -353,6 +353,21 @@ impl NoteRepository for MockRepo {
     ) -> Result<Vec<tssp_ports::SearchHit>, tssp_ports::RepositoryError> {
         Ok(vec![])
     }
+
+    fn update_note_links(
+        &self,
+        _source_id: &tssp_domain::NoteId,
+        _target_ids: &[tssp_domain::NoteId],
+    ) -> Result<(), tssp_ports::RepositoryError> {
+        Ok(())
+    }
+
+    fn get_note_backlinks(
+        &self,
+        _target_id: &tssp_domain::NoteId,
+    ) -> Result<Vec<tssp_domain::NoteId>, tssp_ports::RepositoryError> {
+        Ok(vec![])
+    }
 }
 
 #[tokio::test]
@@ -629,6 +644,21 @@ impl NoteRepository for FailingMockRepo {
         Err(tssp_ports::RepositoryError::OperationFailed {
             message: "db error".into(),
         })
+    }
+
+    fn update_note_links(
+        &self,
+        _source_id: &tssp_domain::NoteId,
+        _target_ids: &[tssp_domain::NoteId],
+    ) -> Result<(), tssp_ports::RepositoryError> {
+        Ok(())
+    }
+
+    fn get_note_backlinks(
+        &self,
+        _target_id: &tssp_domain::NoteId,
+    ) -> Result<Vec<tssp_domain::NoteId>, tssp_ports::RepositoryError> {
+        Ok(vec![])
     }
 }
 

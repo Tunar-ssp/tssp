@@ -42,6 +42,12 @@ uuid.workspace = true
 qrcode.workspace = true
 which = "5.0"
 
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+tar = "0.4"
+walkdir = "2.5"
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures.workspace = true
+
 [dev-dependencies]
 serde_json.workspace = true
 tower = { workspace = true, features = ["util"] }

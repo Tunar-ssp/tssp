@@ -79,11 +79,12 @@ where
         )?;
         let pinned_at = request.pin.then_some(1_u32);
 
-        self.repository
+        let record = self
+            .repository
             .insert_note(NewNoteRecord {
-                id,
+                id: id.clone(),
                 title,
-                body,
+                body: body.clone(),
                 created_at: now,
                 updated_at: now,
                 tags,
@@ -91,7 +92,15 @@ where
                 folder_path: String::new(),
                 owner_id: request.owner_id,
             })
-            .map_err(NoteError::Repository)
+            .map_err(NoteError::Repository)?;
+
+        // Best-effort: populate note_links from [[Title]] references.
+        let linked = self.resolve_wiki_links(body.as_str());
+        if !linked.is_empty() {
+            let _ = self.repository.update_note_links(&id, &linked);
+        }
+
+        Ok(record)
     }
 
     /// Returns one note by id.
@@ -126,19 +135,65 @@ where
         };
         let updated_at = self.clock.now();
 
-        self.repository
+        let record = self
+            .repository
             .update_note(id, &title, &body, updated_at)
-            .map_err(NoteError::Repository)
+            .map_err(NoteError::Repository)?;
+
+        // Best-effort: refresh note_links from [[Title]] references.
+        let linked = self.resolve_wiki_links(body.as_str());
+        let _ = self.repository.update_note_links(id, &linked);
+
+        Ok(record)
     }
 
-    /// Deletes a note.
+    /// Deletes a note and cleans up its link graph entries.
     ///
     /// # Errors
     ///
     /// Returns [`NoteError`] when deletion fails.
     pub fn delete_note(&self, id: &NoteId) -> Result<bool, NoteError> {
-        self.repository
+        let deleted = self
+            .repository
             .delete_note(id)
+            .map_err(NoteError::Repository)?;
+        if deleted {
+            // Best-effort: remove outgoing links; ignore errors.
+            let _ = self.repository.update_note_links(id, &[]);
+        }
+        Ok(deleted)
+    }
+
+    /// Resolves `[[Title]]` links in `body` to `NoteId`s via exact title match.
+    fn resolve_wiki_links(&self, body: &str) -> Vec<NoteId> {
+        let titles = extract_wiki_links(body);
+        let mut ids = Vec::new();
+        for title in titles {
+            let query = NoteListQuery {
+                limit: 10,
+                title_substring: Some(title.clone()),
+                ..NoteListQuery::default()
+            };
+            if let Ok(page) = self.repository.list_notes(&query) {
+                for note in page.notes {
+                    if note.title.as_str().eq_ignore_ascii_case(&title) {
+                        ids.push(note.id);
+                        break;
+                    }
+                }
+            }
+        }
+        ids
+    }
+
+    /// Returns all notes that contain a `[[link]]` pointing to `target_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NoteError`] when the lookup fails.
+    pub fn get_backlinks(&self, target_id: &NoteId) -> Result<Vec<NoteId>, NoteError> {
+        self.repository
+            .get_note_backlinks(target_id)
             .map_err(NoteError::Repository)
     }
 
@@ -248,6 +303,26 @@ fn normalize_tags(tags: &[String]) -> Result<Vec<Tag>, DomainError> {
 
 fn normalize_tag_refs(tags: &[&str]) -> Result<Vec<Tag>, DomainError> {
     normalize_tags(&tags.iter().map(|tag| (*tag).to_owned()).collect::<Vec<_>>())
+}
+
+/// Extracts all `[[Title]]` wiki-link targets from a note body.
+/// Returns raw title strings; callers must resolve them to `NoteId`s.
+fn extract_wiki_links(body: &str) -> Vec<String> {
+    let mut links = Vec::new();
+    let mut search = body;
+    while let Some(start) = search.find("[[") {
+        let after_open = &search[start + 2..];
+        if let Some(end) = after_open.find("]]") {
+            let title = after_open[..end].trim().to_owned();
+            if !title.is_empty() {
+                links.push(title);
+            }
+            search = &after_open[end + 2..];
+        } else {
+            break;
+        }
+    }
+    links
 }
 
 #[cfg(test)]

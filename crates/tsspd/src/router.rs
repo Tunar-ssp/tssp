@@ -202,6 +202,10 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::notes::duplicate_note).options(options_response),
         )
         .route(
+            "/api/v1/notes/{id}/backlinks",
+            get(crate::notes::get_note_backlinks).options(options_response),
+        )
+        .route(
             "/api/v1/notes/{id}/tags",
             post(crate::notes::add_note_tags)
                 .put(crate::notes::replace_note_tags)
@@ -323,6 +327,10 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::admin::admin_cleanup_sessions).options(options_response),
         )
         .route(
+            "/api/v1/admin/backup",
+            get(crate::admin::admin_backup).options(options_response),
+        )
+        .route(
             "/api/v1/admin/users",
             get(crate::admin::admin_list_users)
                 .post(crate::admin::admin_create_user)
@@ -433,6 +441,10 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/workspaces/{id}/lsp",
             get(crate::workspaces::lsp_status).options(options_response),
+        )
+        .route(
+            "/api/v1/workspaces/{id}/lsp/ws",
+            get(crate::lsp_ws::upgrade_lsp_ws),
         )
         .route(
             "/api/v1/workspaces/{id}/git",
