@@ -384,8 +384,28 @@
       return;
     }
 
-    info('Paste', `${clipboardItems.length} file(s) will be pasted to ${currentFolder || 'root'}`);
-    // Note: Actual paste implementation would require backend support for copying/moving files in bulk
+    const fileIds = clipboardItems.map(item => item.id);
+    const operation = clipboardItems[0]?.operation;
+
+    try {
+      if (operation === 'cut') {
+        const success_op = await driveStateManager.moveFiles(fileIds, '', currentFolder);
+        if (success_op) {
+          success('Files Moved', `${fileIds.length} file(s) moved to ${currentFolder || 'root'}`);
+        } else {
+          error('Move Failed', 'Could not move files');
+        }
+      } else if (operation === 'copy') {
+        const success_op = await driveStateManager.copyFiles(fileIds, currentFolder);
+        if (success_op) {
+          success('Files Copied', `${fileIds.length} file(s) copied to ${currentFolder || 'root'}`);
+        } else {
+          error('Copy Failed', 'Could not copy files');
+        }
+      }
+    } catch (cause) {
+      error('Paste Failed', cause instanceof Error ? cause.message : 'Could not paste files');
+    }
   }
 
   async function handleRestore(file: FileRecord) {

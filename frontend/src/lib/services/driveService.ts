@@ -606,3 +606,54 @@ export async function uploadFiles(files: FileList, folder: string = ''): Promise
     throw err;
   }
 }
+
+export async function copyFiles(fileIds: string[], targetFolder: string): Promise<void> {
+  try {
+    if (!fileIds.length) return;
+
+    validatePath(targetFolder);
+
+    const results = await Promise.allSettled(
+      fileIds.map(id => copyFile(id, `copy_${Date.now()}`))
+    );
+
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) {
+      log('copyFiles', `${failed}/${fileIds.length} copies failed`);
+    }
+  } catch (err) {
+    throw new DriveServiceError(
+      'COPY_ERROR',
+      `Failed to copy files: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      err instanceof Error ? err : undefined
+    );
+  }
+}
+
+export async function moveFiles(fileIds: string[], fromFolder: string, targetFolder: string): Promise<void> {
+  try {
+    if (!fileIds.length) return;
+
+    validatePath(fromFolder);
+    validatePath(targetFolder);
+
+    if (fromFolder === targetFolder) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      fileIds.map(id => moveFile(id, fromFolder, targetFolder))
+    );
+
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) {
+      log('moveFiles', `${failed}/${fileIds.length} moves failed`);
+    }
+  } catch (err) {
+    throw new DriveServiceError(
+      'MOVE_ERROR',
+      `Failed to move files: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      err instanceof Error ? err : undefined
+    );
+  }
+}

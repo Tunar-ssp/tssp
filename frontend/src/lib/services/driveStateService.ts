@@ -199,6 +199,28 @@ class DriveStateManager {
     DriveService.downloadFile(file.id, file.name);
   }
 
+  async copyFiles(fileIds: string[], targetFolder: string): Promise<boolean> {
+    try {
+      await DriveService.copyFiles(fileIds, targetFolder);
+      await this.loadLibrary(false);
+      return true;
+    } catch (err) {
+      this.errorStore.set(err instanceof Error ? err.message : 'Failed to copy files');
+      return false;
+    }
+  }
+
+  async moveFiles(fileIds: string[], fromFolder: string, targetFolder: string): Promise<boolean> {
+    try {
+      await DriveService.moveFiles(fileIds, fromFolder, targetFolder);
+      await this.loadLibrary(false);
+      return true;
+    } catch (err) {
+      this.errorStore.set(err instanceof Error ? err.message : 'Failed to move files');
+      return false;
+    }
+  }
+
   private updateFileInStore(updated: FileRecord): void {
     this.filesStore.update((files) =>
       files.map((f) => (f.id === updated.id ? updated : f))
