@@ -509,9 +509,6 @@
     color: var(--text-2);
   }
 
-  .stat-header svg {
-    color: var(--muted);
-  }
 
   .stat-value {
     font-size: var(--fs-28);
@@ -574,15 +571,6 @@
     border-bottom: none;
   }
 
-  .action-item svg:first-of-type {
-    color: var(--blue);
-    flex-shrink: 0;
-  }
-
-  .action-item svg:last-of-type {
-    color: var(--muted);
-    margin-left: auto;
-  }
 
   .action-text {
     flex: 1;
@@ -612,14 +600,6 @@
     color: var(--muted);
   }
 
-  .empty-state h3 {
-    margin: 0;
-    color: var(--text-2);
-  }
-
-  .empty-state p {
-    margin: 0;
-  }
 
   .list-container {
     display: flex;
