@@ -340,10 +340,11 @@ export function moveBlockUp(blockId: string) {
           [result[i], result[i - 1]] = [result[i - 1], result[i]];
           return result;
         }
-        if (result[i].children) {
-          const updated = moveRecursive(result[i].children);
-          result[i].children = updated;
-          if (updated !== result[i].children) {
+        if (result[i].children && result[i].children!.length > 0) {
+          const original = result[i].children!;
+          const updated = moveRecursive(original);
+          if (updated !== original) {
+            result[i].children = updated;
             return result;
           }
         }
@@ -372,10 +373,11 @@ export function moveBlockDown(blockId: string) {
           [result[i], result[i + 1]] = [result[i + 1], result[i]];
           return result;
         }
-        if (result[i].children) {
-          const updated = moveRecursive(result[i].children);
-          result[i].children = updated;
-          if (updated !== result[i].children) {
+        if (result[i].children && result[i].children!.length > 0) {
+          const original = result[i].children!;
+          const updated = moveRecursive(original);
+          if (updated !== original) {
+            result[i].children = updated;
             return result;
           }
         }

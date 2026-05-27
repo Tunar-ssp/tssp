@@ -327,6 +327,7 @@
   x={contextMenu.x}
   y={contextMenu.y}
   items={contextMenu.workspace ? getContextItems(contextMenu.workspace) : []}
+  onClose={() => contextMenu.visible = false}
 />
 
 <style>

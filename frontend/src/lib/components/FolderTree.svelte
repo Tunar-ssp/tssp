@@ -1,12 +1,19 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { currentFolder } from '$lib/stores/drive';
 
-  export let folders: string[] = [];
-  export let onSelectFolder: (path: string) => void = () => {};
+  interface $$Props {
+    folders?: string[];
+    currentFolder?: string;
+    onSelectFolder?: (path: string) => void;
+  }
+
+  let {
+    folders = [],
+    currentFolder = '',
+    onSelectFolder = () => {},
+  }: $$Props = $props();
 
   function selectFolder(path: string) {
-    $currentFolder = path;
     onSelectFolder(path);
   }
 </script>
@@ -14,22 +21,24 @@
 <div class="folder-tree">
   <div class="tree-section">
     <button
+      type="button"
       class="folder-item root"
-      class:active={$currentFolder === ''}
-      on:click={() => selectFolder('')}
+      class:active={currentFolder === ''}
+      onclick={() => selectFolder('')}
     >
       <Icons.HardDrive size={16} />
       <span>My Drive</span>
     </button>
 
     {#if folders.length > 0}
-      <div class="divider" />
+      <div class="divider"></div>
       <div class="folder-list">
         {#each folders as folder (folder)}
           <button
+            type="button"
             class="folder-item"
-            class:active={$currentFolder === folder}
-            on:click={() => selectFolder(folder)}
+            class:active={currentFolder === folder}
+            onclick={() => selectFolder(folder)}
           >
             <Icons.Folder size={16} />
             <span class="folder-name">{folder || 'Root'}</span>
@@ -40,7 +49,7 @@
   </div>
 
   <div class="tree-section bottom">
-    <button class="folder-item">
+    <button type="button" class="folder-item">
       <Icons.Trash2 size={16} />
       <span>Trash</span>
     </button>

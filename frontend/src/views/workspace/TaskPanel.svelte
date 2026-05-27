@@ -51,7 +51,6 @@
       title: newTaskTitle,
       status: 'todo',
       priority: 'medium',
-      createdAt: Date.now(),
     });
     newTaskTitle = '';
     showNewTaskForm = false;

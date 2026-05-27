@@ -75,6 +75,11 @@ export const driveApi = {
     };
   },
   listFolders: () => request<{ schema_version: number; folders: FolderEntry[] }>('/folders'),
+  createFolder: (name: string, parentPath?: string) =>
+    request<FileRecord>('/folders', {
+      method: 'POST',
+      body: JSON.stringify({ name, parent_path: parentPath || '' }),
+    }),
   getFile: async (id: string) => normalizeFileRecord(await request<FileRecord>(`/files/${id}`)),
   deleteFile: (id: string) =>
     request(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),

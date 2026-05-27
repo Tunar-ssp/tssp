@@ -12,7 +12,6 @@
     isSaving,
   } from '$lib/stores/workspace';
   import { success, error } from '$lib/stores/notifications';
-  import MonacoEditor from '$lib/components/MonacoEditor.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
   import FindReplaceWidget from '$lib/components/FindReplaceWidget.svelte';
   import MarkdownPreview from '$lib/components/MarkdownPreview.svelte';
@@ -30,6 +29,10 @@
   import WorkspaceInspector from './WorkspaceInspector.svelte';
   import WorkspaceStageHead from './WorkspaceStageHead.svelte';
   import WorkspaceHomepage from './WorkspaceHomepage.svelte';
+
+  // Lazy load Monaco Editor to reduce initial bundle size
+  let MonacoEditor: any = null;
+  let monacoLoading = $state(false);
 
   type InspectorTab = 'preview' | 'outline' | 'terminal';
 
@@ -126,6 +129,27 @@
   let languageCount = $derived(new Set($workspaces.map((workspace) => workspace.language)).size);
   let recentWorkspaces = $derived(filteredWorkspaces.slice(0, 6));
   let isMarkdownFile = $derived(selectedLanguage === 'markdown');
+
+  async function loadMonacoEditor() {
+    if (MonacoEditor) return;
+    if (monacoLoading) return;
+    monacoLoading = true;
+    try {
+      const module = await import('$lib/components/MonacoEditor.svelte');
+      MonacoEditor = module.default;
+    } catch (err) {
+      console.error('Failed to load Monaco Editor:', err);
+      error('Editor', 'Could not load code editor');
+    } finally {
+      monacoLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (!isMarkdownFile && !$activeWorkspace?.id) {
+      void loadMonacoEditor();
+    }
+  });
 
   function syncOpenTabs() {
     if (!$activeWorkspace) return;
@@ -421,8 +445,9 @@
                 onTogglePreview={() => {}}
                 onChange={handleEditorInput}
               />
-            {:else}
-              <MonacoEditor
+            {:else if MonacoEditor && !monacoLoading}
+              <svelte:component
+                this={MonacoEditor}
                 value={bodyDraft}
                 language={selectedLanguage}
                 onChange={handleEditorInput}
@@ -433,6 +458,16 @@
                 height="100%"
                 showToolbar={false}
               />
+            {:else if monacoLoading}
+              <div class="editor-loading">
+                <div class="spinner"></div>
+                <span>Loading editor...</span>
+              </div>
+            {:else}
+              <div class="editor-error">
+                <Icons.AlertCircle size={32} />
+                <span>Code editor unavailable</span>
+              </div>
             {/if}
           </div>
         </div>
@@ -574,6 +609,30 @@
     padding: 16px;
   }
 
+  .editor-loading,
+  .editor-error {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: var(--fs-13);
+  }
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--surface-3);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 
   @media (max-width: 1400px) {
     .editor-layout {

@@ -44,21 +44,24 @@
   const queueUploads = $derived(
     uploads.length
       ? uploads
-      : queueState.items.map((item) => ({
-          id: item.id,
-          name: item.filename,
-          progress: item.uploadedBytes,
-          total: item.fileSize,
-          status:
+      : queueState.items.map((item): Upload => {
+          const mappedStatus: 'pending' | 'uploading' | 'success' | 'error' =
             item.status === 'completed'
               ? 'success'
               : item.status === 'failed'
                 ? 'error'
                 : item.status === 'uploading'
                   ? 'uploading'
-                  : 'pending',
-          error: item.lastError,
-        })),
+                  : 'pending';
+          return {
+            id: item.id,
+            name: item.filename,
+            progress: item.uploadedBytes,
+            total: item.fileSize,
+            status: mappedStatus,
+            error: item.lastError,
+          };
+        }),
   );
 
   let activeUploads = $derived(

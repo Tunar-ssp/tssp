@@ -70,7 +70,7 @@ class DriveStateManager {
         path,
         label: path.split('/').pop() || 'root',
         depth: path.split('/').length,
-        count: files.filter((f) => f.folder_path === path).length,
+        file_count: files.filter((f) => f.folder_path === path).length,
       })));
     } catch (err) {
       this.errorStore.set(err instanceof Error ? err.message : 'Failed to load files');
@@ -142,8 +142,8 @@ class DriveStateManager {
 
   async togglePin(file: FileRecord): Promise<boolean> {
     try {
-      await DriveService.togglePin(file.id);
-      const updated = { ...file, pinned_at: file.pinned_at ? null : Date.now() };
+      await DriveService.togglePin(file.id, !!file.pinned_at);
+      const updated = { ...file, pinned_at: file.pinned_at ? undefined : Date.now() };
       this.updateFileInStore(updated);
       return true;
     } catch (err) {
@@ -152,9 +152,9 @@ class DriveStateManager {
     }
   }
 
-  async moveFile(fileId: string, folderPath: string): Promise<boolean> {
+  async moveFile(file: FileRecord, folderPath: string): Promise<boolean> {
     try {
-      await DriveService.moveFile(fileId, folderPath);
+      await DriveService.moveFile(file.id, file.folder_path || '', folderPath);
       await this.loadLibrary(false);
       return true;
     } catch (err) {
@@ -163,7 +163,7 @@ class DriveStateManager {
     }
   }
 
-  async setFileVisibility(fileId: string, isPublic: boolean): Promise<VisibilityResponse | null> {
+  async setFileVisibility(fileId: string, isPublic: boolean): Promise<FileRecord | null> {
     try {
       const result = await DriveService.toggleFileVisibility(fileId, isPublic);
       if (result) {

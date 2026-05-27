@@ -330,7 +330,12 @@
   async function handleMove(fileId: string, folderPath: string) {
     try {
       isMoving = true;
-      const success_op = await driveStateManager.moveFile(fileId, folderPath);
+      const file = files.find(f => f.id === fileId);
+      if (!file) {
+        error('Move Failed', 'File not found');
+        return;
+      }
+      const success_op = await driveStateManager.moveFile(file, folderPath);
       if (success_op) {
         await refreshMetadata();
         success('Moved', `File moved to ${folderPath || 'Bucket root'}`);
@@ -342,11 +347,11 @@
     }
   }
 
-  async function handleShareChange(fileId: string, isPublic: boolean): Promise<VisibilityResponse | null> {
+  async function handleShareChange(fileId: string, isPublic: boolean): Promise<FileRecord | null> {
     try {
       const response = await driveStateManager.setFileVisibility(fileId, isPublic);
       if (response) {
-        success(isPublic ? 'Public Link Enabled' : 'Made Private', response.file?.name || 'File');
+        success(isPublic ? 'Public Link Enabled' : 'Made Private', response.name || 'File');
       }
       return response;
     } catch (cause) {

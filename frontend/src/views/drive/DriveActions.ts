@@ -74,7 +74,7 @@ export class DriveActions {
 
   async permanentlyDeleteFile(file: FileRecord): Promise<boolean> {
     try {
-      await api.permanentlyDeleteFile(file.id);
+      await api.permanentDeleteFile(file.id);
       this.notifySuccess(`${file.name} permanently deleted`);
       return true;
     } catch (err) {

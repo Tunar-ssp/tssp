@@ -56,7 +56,7 @@
   <div class="metrics-grid">
     <div class="metric-card">
       <div class="metric-label">CPU Usage</div>
-      <div class="metric-value" class={cpuStatus}>
+      <div class="metric-value {cpuStatus}">
         {currentCpu.toFixed(1)}%
       </div>
       <div class="metric-bar">

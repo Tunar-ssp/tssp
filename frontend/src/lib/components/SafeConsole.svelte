@@ -4,7 +4,7 @@
   interface ConsoleCommand {
     id: string;
     name: string;
-    description: string;
+    description?: string;
     category: string;
   }
 

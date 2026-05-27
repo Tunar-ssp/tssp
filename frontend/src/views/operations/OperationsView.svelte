@@ -7,6 +7,7 @@
   import { formatBytes, formatRelative } from '$lib/utils';
 
   type AdminSection = 'overview' | 'users' | 'sessions' | 'devices' | 'public' | 'activity' | 'maintenance';
+  type NavItem = { id: AdminSection; label: string; icon: any };
 
   let activeSection = $state<AdminSection>('overview');
   let loading = $state(true);
@@ -21,31 +22,31 @@
   let devices = $state<Array<{ id: string; token: string; trusted_at?: number }>>([]);
   let publicFiles = $state<FileRecord[]>([]);
   let activityItems = $state<AdminActivityItem[]>([]);
-  let commands = $state<Array<{ id: string; name: string; description?: string }>>([]);
+  let commands = $state<Array<{ id: string; name: string; description?: string; category?: string }>>([]);
 
-  const navGroups = [
+  const navGroups: Array<{ label: string; items: NavItem[] }> = [
     {
       label: 'System',
       items: [
-        { id: 'overview' as const, label: 'Overview', icon: Icons.Activity },
-        { id: 'maintenance' as const, label: 'Maintenance', icon: Icons.Wrench },
-        { id: 'activity' as const, label: 'Activity log', icon: Icons.History },
+        { id: 'overview', label: 'Overview', icon: Icons.Activity },
+        { id: 'maintenance', label: 'Maintenance', icon: Icons.Wrench },
+        { id: 'activity', label: 'Activity log', icon: Icons.History },
       ],
     },
     {
       label: 'Access',
       items: [
-        { id: 'users' as const, label: 'Users', icon: Icons.Users },
-        { id: 'sessions' as const, label: 'Sessions', icon: Icons.BadgeCheck },
-        { id: 'devices' as const, label: 'Devices', icon: Icons.Smartphone },
+        { id: 'users', label: 'Users', icon: Icons.Users },
+        { id: 'sessions', label: 'Sessions', icon: Icons.BadgeCheck },
+        { id: 'devices', label: 'Devices', icon: Icons.Smartphone },
       ],
     },
     {
       label: 'Sharing',
-      items: [{ id: 'public' as const, label: 'Public links', icon: Icons.Globe }],
+      items: [{ id: 'public', label: 'Public links', icon: Icons.Globe }],
     },
   ];
-  const navItems = navGroups.flatMap((group) => group.items);
+  const navItems: NavItem[] = navGroups.flatMap((group) => group.items);
 
   onMount(async () => {
     await loadAdmin();
@@ -530,7 +531,7 @@
   isOpen={showConsole}
   onClose={() => (showConsole = false)}
   onExecuteCommand={executeSafeConsoleCommand}
-  {commands}
+  commands={commands.map((cmd) => ({ ...cmd, category: cmd.category || 'general' }))}
 />
 
 <style>

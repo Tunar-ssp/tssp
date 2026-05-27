@@ -1,17 +1,18 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { currentFolder } from '$lib/stores/drive';
 
   interface $$Props {
+    currentFolder?: string;
     onUpload?: (files: FileList, folder: string) => void;
   }
 
   let {
+    currentFolder = '',
     onUpload = () => {},
   }: $$Props = $props();
 
-  let isDragging = false;
-  let fileInput: HTMLInputElement;
+  let isDragging = $state(false);
+  let fileInput: HTMLInputElement | undefined;
 
   function handleDrop(e: DragEvent) {
     e.preventDefault();
@@ -19,7 +20,7 @@
 
     const files = e.dataTransfer?.files;
     if (files) {
-      onUpload(files, $currentFolder);
+      onUpload(files, currentFolder);
     }
   }
 

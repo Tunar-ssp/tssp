@@ -58,12 +58,12 @@ export function getFile(fileId: string): FileRecord | null {
 export async function loadFiles(reset = false): Promise<void> {
   driveState.update(state => ({ ...state, isLoading: reset }));
   try {
-    const response = await api.listFiles(undefined, reset ? undefined : undefined, 50);
+    const response = await api.listFiles(50, reset ? undefined : undefined);
     driveState.update(state => ({
       ...state,
       files: reset ? response.files : [...state.files, ...response.files],
-      nextCursor: response.next_cursor,
-      hasMore: !!response.next_cursor,
+      nextCursor: response.nextCursor,
+      hasMore: !!response.nextCursor,
       isLoading: false,
       isLoadingMore: false,
     }));
@@ -79,7 +79,7 @@ export async function loadFiles(reset = false): Promise<void> {
 export async function loadTrash(): Promise<void> {
   driveState.update(state => ({ ...state, trashLoading: true }));
   try {
-    const response = await api.listTrashedFiles(50);
+    const response = await api.listTrash();
     driveState.update(state => ({
       ...state,
       trash: response.files,

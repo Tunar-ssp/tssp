@@ -84,11 +84,13 @@
   {:else}
     <div class="snippets-list">
       {#each filteredSnippets as snippet (snippet.id)}
-        <button
-          type="button"
+        <div
           class="snippet-item"
           class:selected={selectedSnippetId === snippet.id}
           onclick={() => onSelectSnippet(snippet)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectSnippet(snippet); }}
+          role="button"
+          tabindex="0"
         >
           <div class="snippet-head">
             <span class="snippet-title">{snippet.title}</span>
@@ -135,7 +137,7 @@
               </button>
             </div>
           </div>
-        </button>
+        </div>
       {/each}
     </div>
   {/if}

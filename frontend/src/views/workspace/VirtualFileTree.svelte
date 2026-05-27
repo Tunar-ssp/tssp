@@ -36,6 +36,17 @@
   let searchQuery = $state('');
   let contextMenu = $state({ visible: false, x: 0, y: 0, path: '' });
 
+  function formatSize(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return `${size.toFixed(1)}${units[unitIndex]}`;
+  }
+
   function getFileIcon(path: string, isDir: boolean) {
     if (isDir) return '📁';
     const ext = path.split('.').pop()?.toLowerCase();
@@ -102,8 +113,10 @@
 
   let filteredItems = $derived(filterItems(items, searchQuery));
 
-  function renderTree(items: TreeItem[], depth = 0) {
-    return items.map((item) => ({
+  type RenderedItem = TreeItem & { depth: number; expanded: boolean; children: RenderedItem[] };
+
+  function renderTree(items: TreeItem[], depth = 0): RenderedItem[] {
+    return items.map((item): RenderedItem => ({
       ...item,
       depth,
       expanded: expandedDirs[item.path] || false,
@@ -456,16 +469,3 @@
     color: var(--danger);
   }
 </style>
-
-<script>
-  function formatSize(bytes: number): string {
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let size = bytes;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-    return `${size.toFixed(1)}${units[unitIndex]}`;
-  }
-</script>
