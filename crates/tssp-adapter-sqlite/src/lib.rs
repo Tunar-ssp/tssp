@@ -118,6 +118,22 @@ impl SqliteFileRepository {
                 message: format!("metadata connection pool failure: {error}"),
             })
     }
+
+    /// Checkpoints the WAL file, truncating it to minimize disk growth.
+    ///
+    /// This should be called periodically (e.g., daily) to prevent unbounded WAL growth.
+    /// Uses RESTART mode to reset the WAL after checkpointing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] if the checkpoint operation fails.
+    pub fn checkpoint_wal(&self) -> Result<(), RepositoryError> {
+        let connection = self.connect()?;
+        connection
+            .execute("PRAGMA wal_checkpoint(RESTART)", [])
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(())
+    }
 }
 
 /// Runs one-time initialization tasks for the database (migrations and integrity check).

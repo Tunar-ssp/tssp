@@ -212,6 +212,22 @@ fn spawn_background_tasks(
             }
         }
     });
+
+    let repository_wal = repository.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400)); // Once per day
+        loop {
+            interval.tick().await;
+            match repository_wal.checkpoint_wal() {
+                Ok(()) => {
+                    tracing::debug!("WAL checkpoint completed successfully");
+                }
+                Err(e) => {
+                    tracing::warn!("WAL checkpoint failed: {e}");
+                }
+            }
+        }
+    });
 }
 
 fn load_settings(cli: &Cli) -> Result<DaemonSettings, String> {
