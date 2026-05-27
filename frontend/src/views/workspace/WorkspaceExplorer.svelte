@@ -96,8 +96,8 @@
   />
 
   {#if showNewFileDialog}
-    <div class="dialog-overlay" onclick={() => (showNewFileDialog = false)}>
-      <div class="dialog" onclick={(e) => e.stopPropagation()}>
+    <div class="dialog-overlay" onclick={() => (showNewFileDialog = false)} role="presentation">
+      <div class="dialog" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="0" onkeydown={(e) => { if (e.key === 'Escape') showNewFileDialog = false; }}>
         <h3>Create New File</h3>
         <input
           type="text"
@@ -107,7 +107,6 @@
             if (e.key === 'Enter') handleCreateFile();
             if (e.key === 'Escape') (showNewFileDialog = false);
           }}
-          autofocus
         />
         <div class="dialog-actions">
           <button type="button" class="btn btn-primary" onclick={handleCreateFile}>

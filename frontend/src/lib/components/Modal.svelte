@@ -48,7 +48,7 @@
 </script>
 
 {#if isOpen}
-  <div class="modal-backdrop" onclick={handleBackdropClick}>
+  <div class="modal-backdrop" onclick={handleBackdropClick} role="presentation">
     <div class="modal {sizeClasses[size]} {className || ''}" {...rest}>
       <div class="modal-header">
         <h2 class="modal-title">{title}</h2>

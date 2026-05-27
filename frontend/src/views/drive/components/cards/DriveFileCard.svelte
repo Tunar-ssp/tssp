@@ -59,6 +59,12 @@
     class:selected={isSelected}
     onclick={() => onSelect?.(file)}
     oncontextmenu={(e) => onContextMenu?.(e, file)}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onSelect?.(file);
+      }
+    }}
     role="button"
     tabindex="0"
   >
@@ -93,6 +99,12 @@
     class:selected={isSelected}
     onclick={() => onSelect?.(file)}
     oncontextmenu={(e) => onContextMenu?.(e, file)}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onSelect?.(file);
+      }
+    }}
     role="button"
     tabindex="0"
   >

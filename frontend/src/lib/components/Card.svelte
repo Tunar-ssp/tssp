@@ -25,11 +25,7 @@
 >
   {#if head}
     <div class="card-head">
-      {#if typeof head === 'function'}
-        <svelte:component this={head} />
-      {:else if head}
-        {@render head()}
-      {/if}
+      {@render head()}
     </div>
   {/if}
 
@@ -41,11 +37,7 @@
 
   {#if foot}
     <div class="card-foot">
-      {#if typeof foot === 'function'}
-        <svelte:component this={foot} />
-      {:else if foot}
-        {@render foot()}
-      {/if}
+      {@render foot()}
     </div>
   {/if}
 </div>

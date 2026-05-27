@@ -36,6 +36,7 @@
     class="tooltip-trigger"
     onmouseenter={onMouseEnter}
     onmouseleave={onMouseLeave}
+    role="tooltip"
   >
     {#if children}
       {@render children()}
@@ -43,7 +44,7 @@
   </div>
 
   {#if showTooltip && content}
-    <div class="tooltip-content" onmouseenter={onMouseEnter} onmouseleave={onMouseLeave}>
+    <div class="tooltip-content" onmouseenter={onMouseEnter} onmouseleave={onMouseLeave} role="tooltip">
       <div class="tooltip-text">{content}</div>
       {#if kbd}
         <div class="tooltip-kbd">{kbd}</div>

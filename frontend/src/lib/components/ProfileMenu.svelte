@@ -41,7 +41,7 @@
 </script>
 
 {#if isOpen && $user}
-  <div class="menu-backdrop" onclick={handleBackdropClick}>
+  <div class="menu-backdrop" onclick={handleBackdropClick} role="presentation">
     <div class="profile-menu {className || ''}">
       <div class="menu-header">
         <div class="user-avatar">

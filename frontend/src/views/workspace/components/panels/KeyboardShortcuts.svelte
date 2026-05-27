@@ -60,8 +60,8 @@
 </script>
 
 {#if isOpen}
-  <div class="shortcuts-overlay" onclick={onClose}>
-    <div class="shortcuts-dialog" onclick={(e) => e.stopPropagation()}>
+  <div class="shortcuts-overlay" onclick={onClose} role="presentation">
+    <div class="shortcuts-dialog" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="0" onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <div class="dialog-header">
         <h2>Keyboard Shortcuts</h2>
         <button

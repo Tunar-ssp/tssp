@@ -25,7 +25,7 @@
 </script>
 
 {#if isOpen}
-  <div class="sheet-backdrop" onclick={handleBackdropClick}>
+  <div class="sheet-backdrop" onclick={handleBackdropClick} role="presentation">
     <div
       class="sheet sheet-{side} {className || ''}"
       {...rest}

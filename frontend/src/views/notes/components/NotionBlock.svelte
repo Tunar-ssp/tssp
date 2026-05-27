@@ -113,6 +113,8 @@
         class={`block-editor ${blockClass}`}
         oninput={handleInput}
         onkeydown={handleKeyDown}
+        role="textbox"
+        tabindex="0"
       >
         {block.content}
       </div>
@@ -122,6 +124,8 @@
         class={`block-editor ${blockClass}`}
         oninput={handleInput}
         onkeydown={handleKeyDown}
+        role="textbox"
+        tabindex="0"
         data-placeholder={`Type '/' for commands`}
       >
         {block.content}

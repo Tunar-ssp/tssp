@@ -75,6 +75,14 @@
           class:selected={selectedFile?.id === file.id}
           onclick={() => onSelectFile(file)}
           oncontextmenu={(e) => onContextMenu(e, file)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelectFile(file);
+            }
+          }}
+          role="button"
+          tabindex="0"
         >
           {#if viewMode === 'grid'}
             <div class="file-icon-large">

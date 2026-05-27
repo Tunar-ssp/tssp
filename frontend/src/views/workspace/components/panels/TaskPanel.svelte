@@ -191,7 +191,6 @@
           if (e.key === 'Enter') handleCreateTask();
           if (e.key === 'Escape') (showNewTaskForm = false);
         }}
-        autofocus
       />
       <div class="form-actions">
         <button type="button" class="btn btn-primary" onclick={handleCreateTask}>
