@@ -32,6 +32,8 @@
   let folderEntries = $state<FolderEntry[]>([]);
   let status = $state<Status | null>(null);
   let selectedFile = $state<FileRecord | null>(null);
+  let selectedFileIds = $state<Set<string>>(new Set());
+  let lastSelectedIndex = $state<number>(-1);
   let previewFile = $state<FileRecord | null>(null);
   let shareFile = $state<FileRecord | null>(null);
   let moveDialogFile = $state<FileRecord | null>(null);
@@ -64,8 +66,22 @@
       }
     };
 
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        filteredLibraryFiles.forEach(f => selectedFileIds.add(f.id));
+        selectedFileIds = new Set(selectedFileIds);
+      }
+      if (e.key === 'Escape') {
+        selectedFileIds.clear();
+        selectedFileIds = new Set();
+        selectedFile = null;
+      }
+    };
+
     if (typeof document !== 'undefined') {
       document.addEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
+      document.addEventListener('keydown', handleKeydown);
     }
 
     void loadLibrary(true).then(() => consumeIntent());
@@ -73,6 +89,7 @@
     return () => {
       if (typeof document !== 'undefined') {
         document.removeEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
+        document.removeEventListener('keydown', handleKeydown);
       }
     };
   });
@@ -224,8 +241,39 @@
     return folderEntries.find((entry) => entry.path === path)?.file_count || 0;
   }
 
-  function selectFile(file: FileRecord) {
+  function selectFile(file: FileRecord, event?: MouseEvent) {
     selectedFile = file;
+
+    if (!event) {
+      selectedFileIds.clear();
+      selectedFileIds.add(file.id);
+      selectedFileIds = new Set(selectedFileIds);
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      if (selectedFileIds.has(file.id)) {
+        selectedFileIds.delete(file.id);
+      } else {
+        selectedFileIds.add(file.id);
+      }
+      selectedFileIds = new Set(selectedFileIds);
+      lastSelectedIndex = filteredLibraryFiles.findIndex(f => f.id === file.id);
+    } else if (event.shiftKey && lastSelectedIndex >= 0) {
+      const currentIndex = filteredLibraryFiles.findIndex(f => f.id === file.id);
+      const start = Math.min(lastSelectedIndex, currentIndex);
+      const end = Math.max(lastSelectedIndex, currentIndex);
+      selectedFileIds.clear();
+      for (let i = start; i <= end; i++) {
+        selectedFileIds.add(filteredLibraryFiles[i].id);
+      }
+      selectedFileIds = new Set(selectedFileIds);
+    } else {
+      selectedFileIds.clear();
+      selectedFileIds.add(file.id);
+      selectedFileIds = new Set(selectedFileIds);
+      lastSelectedIndex = filteredLibraryFiles.findIndex(f => f.id === file.id);
+    }
   }
 
   function openPreview(file: FileRecord) {
@@ -503,6 +551,7 @@
       {isTrashView}
       {viewMode}
       selectedFileId={selectedFile?.id}
+      {selectedFileIds}
       {hasMore}
       {isLoadingMore}
       onSelectFile={selectFile}

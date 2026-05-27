@@ -12,9 +12,10 @@
     isTrashView?: boolean;
     viewMode?: 'grid' | 'list';
     selectedFileId?: string;
+    selectedFileIds?: Set<string>;
     hasMore?: boolean;
     isLoadingMore?: boolean;
-    onSelectFile?: (file: FileRecord) => void;
+    onSelectFile?: (file: FileRecord, event?: MouseEvent) => void;
     onPreviewFile?: (file: FileRecord) => void;
     onContextMenu?: (event: MouseEvent, file: FileRecord) => void;
     onLoadMore?: () => void;
@@ -31,6 +32,7 @@
     isTrashView = false,
     viewMode = 'grid',
     selectedFileId,
+    selectedFileIds = new Set(),
     hasMore = false,
     isLoadingMore = false,
     onSelectFile = () => {},
@@ -80,7 +82,8 @@
             type="button"
             class="file-card"
             class:selected={selectedFileId === file.id}
-            onclick={() => onSelectFile?.(file)}
+            class:multi-selected={selectedFileIds.has(file.id)}
+            onclick={(e) => onSelectFile?.(file, e)}
             ondblclick={() => onPreviewFile?.(file)}
             oncontextmenu={(event) => onContextMenu?.(event, file)}
           >
@@ -115,7 +118,8 @@
             type="button"
             class="list-row"
             class:selected={selectedFileId === file.id}
-            onclick={() => onSelectFile?.(file)}
+            class:multi-selected={selectedFileIds.has(file.id)}
+            onclick={(e) => onSelectFile?.(file, e)}
             ondblclick={() => onPreviewFile?.(file)}
             oncontextmenu={(event) => onContextMenu?.(event, file)}
           >
@@ -242,6 +246,12 @@
     background: rgba(59, 130, 246, 0.1);
   }
 
+  .file-card.multi-selected {
+    border-color: var(--blue);
+    background: rgba(59, 130, 246, 0.15);
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
+  }
+
   .file-surface {
     display: flex;
     align-items: center;
@@ -342,6 +352,11 @@
 
   .list-row.selected {
     background: rgba(59, 130, 246, 0.1);
+  }
+
+  .list-row.multi-selected {
+    background: rgba(59, 130, 246, 0.15);
+    border-left: 3px solid var(--blue);
   }
 
   .list-row:last-child {
