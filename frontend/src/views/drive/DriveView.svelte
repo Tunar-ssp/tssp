@@ -83,14 +83,24 @@
     files
       .filter((file) => {
         if (currentFolder && (file.folder_path || '') !== currentFolder) return false;
-        if (activeLens === 'images' && !file.mime_type.startsWith('image/')) return false;
-        if (activeLens === 'videos' && !file.mime_type.startsWith('video/')) return false;
-        if (
-          activeLens === 'documents' &&
-          (file.mime_type.startsWith('image/') ||
-            file.mime_type.startsWith('video/'))
-        ) {
-          return false;
+
+        const mime = file.mime_type || '';
+        if (activeLens === 'images' && !mime.startsWith('image/')) return false;
+        if (activeLens === 'videos' && !mime.startsWith('video/')) return false;
+        if (activeLens === 'documents') {
+          if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) return false;
+          const isDocument =
+            mime.startsWith('text/') ||
+            mime.startsWith('application/') ||
+            mime.includes('pdf') ||
+            mime.includes('word') ||
+            mime.includes('sheet') ||
+            mime.includes('presentation') ||
+            mime.includes('json') ||
+            mime.includes('xml') ||
+            mime.includes('code') ||
+            ['.md', '.doc', '.docx', '.txt', '.pdf', '.xls', '.xlsx', '.ppt', '.pptx', '.csv'].some(ext => file.name.toLowerCase().endsWith(ext));
+          if (!isDocument) return false;
         }
         if (activeLens === 'public' && file.visibility !== 'public') return false;
 
