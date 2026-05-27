@@ -3,7 +3,7 @@
  * Manages file upload triggers and event routing
  */
 
-import { uploadFiles } from './fileService';
+import { uploadFiles } from './driveService';
 
 /**
  * Handle upload file selection

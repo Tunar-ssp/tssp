@@ -26,6 +26,7 @@
 
 import type { FileRecord, FolderEntry } from '$lib/api';
 import { api } from '$lib/api';
+import { uploadQueue } from '$lib/stores/uploadQueue';
 
 function log(context: string, message: string, data?: any) {
   console.debug(`[driveService] ${context}: ${message}`, data || '');
@@ -571,6 +572,37 @@ export async function downloadFile(fileId: string, fileName: string): Promise<vo
     window.location.href = `/api/v1/files/${encodeURIComponent(fileId)}/download`;
   } catch (err) {
     error(`Failed to download file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    throw err;
+  }
+}
+
+export async function uploadFiles(files: FileList, folder: string = ''): Promise<boolean> {
+  try {
+    const count = files.length;
+    if (!count) return false;
+
+    await uploadQueue.addFiles(files, folder);
+
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = uploadQueue.subscribe((state) => {
+      const allDone = state.items.every((item) =>
+        item.status === 'completed' || item.status === 'failed' || item.status === 'paused'
+      );
+      if (allDone && state.items.length > 0) {
+        if (state.items.some((item) => item.status === 'completed')) {
+          void loadFiles();
+        }
+        unsubscribe();
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+      }
+    });
+
+    timeout = setTimeout(() => unsubscribe(), 3_600_000);
+    return true;
+  } catch (err) {
+    error(`Failed to upload files: ${err instanceof Error ? err.message : 'Unknown error'}`);
     throw err;
   }
 }

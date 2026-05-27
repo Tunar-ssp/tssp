@@ -2,7 +2,7 @@
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import { uploadFiles } from '$lib/services/fileService';
+  import { uploadFiles } from '$lib/services/driveService';
   import { isAdmin, isLoading as authLoading, probeAuth, user } from '$lib/stores/auth';
   import {
     banner,
