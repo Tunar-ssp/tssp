@@ -1,8 +1,8 @@
 <script lang="ts">
   import { get } from 'svelte/store';
-  import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { uploadFiles } from '$lib/services/driveService';
+  import { registerGlobalKeyboardHandlers } from '$lib/services/keyboardService';
   import { isAdmin, isLoading as authLoading, probeAuth, user } from '$lib/stores/auth';
   import {
     banner,
@@ -36,54 +36,21 @@
 
   let uploadInput: HTMLInputElement | null = $state(null);
 
-  onMount(() => {
+  $effect(() => {
     void probeAuth();
+  });
 
-    const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        toggleCommandPalette();
-      }
-      if (e.key === 'Escape') {
-        if (get(commandPaletteOpen)) {
-          commandPaletteOpen.set(false);
-          return;
-        }
-        if (get(settingsTrayOpen)) {
-          settingsTrayOpen.set(false);
-          return;
-        }
-        if (get(shortcutsOverlayOpen)) {
-          shortcutsOverlayOpen.set(false);
-        }
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-        e.preventDefault();
-        toggleSettingsTray();
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === '?') {
-        e.preventDefault();
-        toggleShortcutsOverlay();
-      }
-      if ((e.ctrlKey || e.metaKey) && /^[1-5]$/.test(e.key)) {
-        e.preventDefault();
-        const mapping: AppView[] = ['home', 'drive', 'notes', 'workspace', 'admin'];
-        const nextView = mapping[Number(e.key) - 1];
-        if (nextView === 'admin' && !get(isAdmin)) {
-          return;
-        }
-        navigateTo(nextView);
-      }
-    };
+  $effect(() => {
+    const cleanupKeyboard = registerGlobalKeyboardHandlers();
 
     const handleUploadRequest = () => {
       uploadInput?.click();
     };
 
-    document.addEventListener('keydown', handleKeydown);
     document.addEventListener('tssp:request-upload', handleUploadRequest as EventListener);
+
     return () => {
-      document.removeEventListener('keydown', handleKeydown);
+      cleanupKeyboard();
       document.removeEventListener('tssp:request-upload', handleUploadRequest as EventListener);
     };
   });

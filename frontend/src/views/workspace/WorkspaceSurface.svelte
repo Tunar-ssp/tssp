@@ -19,7 +19,7 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent, navigateTo } from '$lib/stores/ui';
   import { renderMarkdownLite } from '$lib/utils/markdown';
-  import { formatRelative, getWordCount } from '$lib/utils';
+  import { formatRelative, getWordCount, registerKeyboardShortcuts } from '$lib/utils';
   import { getWorkspaceCapabilities } from '$lib/services/workspaceService';
   import type { WorkspaceCapabilities } from '$lib/api';
   import { findMatches, replaceMatches } from '$lib/services/workspaceSearchService';
@@ -83,22 +83,25 @@
     isLoading = false;
   });
 
-  const handleKeydown = (e: KeyboardEvent) => {
+  const handleWorkspaceKeydown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-      e.preventDefault();
       showSidebar = !showSidebar;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-      e.preventDefault();
       showFindWidget = !showFindWidget;
     }
   };
 
   $effect(() => {
-    if (typeof document !== 'undefined') {
-      document.addEventListener('keydown', handleKeydown);
-      return () => document.removeEventListener('keydown', handleKeydown);
-    }
+    if (typeof document === 'undefined') return;
+    const cleanup = registerKeyboardShortcuts(
+      [
+        { key: 'b', ctrl: true, handler: handleWorkspaceKeydown },
+        { key: 'f', ctrl: true, handler: handleWorkspaceKeydown },
+      ],
+      document
+    );
+    return cleanup;
   });
 
   onDestroy(() => {

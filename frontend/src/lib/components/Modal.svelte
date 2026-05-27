@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { registerKeyboardShortcuts } from '$lib/utils';
   import type { ModalProps } from './primitives.svelte';
   import type { Snippet } from 'svelte';
 
@@ -30,20 +30,21 @@
     }
   }
 
-  onMount(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen && onClose) {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeydown);
+  const handleModalKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && onClose) {
+      onClose();
     }
+  };
 
-    return () => {
-      document.removeEventListener('keydown', handleKeydown);
-    };
+  $effect(() => {
+    if (!isOpen) return;
+
+    const cleanup = registerKeyboardShortcuts(
+      [{ key: 'Escape', handler: handleModalKeydown }],
+      document
+    );
+
+    return cleanup;
   });
 </script>
 

@@ -19,6 +19,7 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { estimateBlockCount, renderMarkdownLite } from '$lib/utils/markdown';
+  import { registerKeyboardShortcuts, getWordCount } from '$lib/utils';
   import NotesEditor from './NotesEditor.svelte';
   import NotesList from './NotesList.svelte';
   import NotesSearch from './NotesSearch.svelte';
@@ -49,13 +50,6 @@
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let isCreating = $state(false);
 
-  const handleKeydown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-      e.preventDefault();
-      showSidebar = !showSidebar;
-    }
-  };
-
   onMount(async () => {
     await loadNotes();
     const intent = consumeSelectionIntent();
@@ -65,16 +59,29 @@
 
     if (typeof window !== 'undefined') {
       window.addEventListener('insert', handleInsertSnippet as EventListener);
-      window.addEventListener('keydown', handleKeydown);
     }
 
     isLoading = false;
   });
 
+  const handleNotesKeydown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      showSidebar = !showSidebar;
+    }
+  };
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const cleanup = registerKeyboardShortcuts(
+      [{ key: 'b', ctrl: true, handler: handleNotesKeydown }],
+      window
+    );
+    return cleanup;
+  });
+
   onDestroy(() => {
     if (saveTimer) clearTimeout(saveTimer);
     if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('insert', handleInsertSnippet as EventListener);
     }
   });
@@ -269,10 +276,6 @@
       hour: '2-digit',
       minute: '2-digit',
     });
-  }
-
-  function getWordCount(text: string): number {
-    return text.trim().split(/\s+/).filter(Boolean).length;
   }
 </script>
 
