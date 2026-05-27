@@ -13,6 +13,8 @@
     viewMode?: 'grid' | 'list';
     selectedFileId?: string;
     selectedFileIds?: Set<string>;
+    clipboardFileIds?: Set<string>;
+    clipboardOperation?: 'copy' | 'cut' | null;
     hasMore?: boolean;
     isLoadingMore?: boolean;
     onSelectFile?: (file: FileRecord, event?: MouseEvent) => void;
@@ -33,6 +35,8 @@
     viewMode = 'grid',
     selectedFileId,
     selectedFileIds = new Set(),
+    clipboardFileIds = new Set(),
+    clipboardOperation = null,
     hasMore = false,
     isLoadingMore = false,
     onSelectFile = () => {},
@@ -83,6 +87,8 @@
             class="file-card"
             class:selected={selectedFileId === file.id}
             class:multi-selected={selectedFileIds.has(file.id)}
+            class:clipboard-copy={clipboardFileIds.has(file.id) && clipboardOperation === 'copy'}
+            class:clipboard-cut={clipboardFileIds.has(file.id) && clipboardOperation === 'cut'}
             onclick={(e) => onSelectFile?.(file, e)}
             ondblclick={() => onPreviewFile?.(file)}
             oncontextmenu={(event) => onContextMenu?.(event, file)}
@@ -119,6 +125,8 @@
             class="list-row"
             class:selected={selectedFileId === file.id}
             class:multi-selected={selectedFileIds.has(file.id)}
+            class:clipboard-copy={clipboardFileIds.has(file.id) && clipboardOperation === 'copy'}
+            class:clipboard-cut={clipboardFileIds.has(file.id) && clipboardOperation === 'cut'}
             onclick={(e) => onSelectFile?.(file, e)}
             ondblclick={() => onPreviewFile?.(file)}
             oncontextmenu={(event) => onContextMenu?.(event, file)}
@@ -252,6 +260,18 @@
     box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
   }
 
+  .file-card.clipboard-copy {
+    border-color: var(--green-soft, #5be39a);
+    background: rgba(91, 227, 154, 0.08);
+    opacity: 0.85;
+  }
+
+  .file-card.clipboard-cut {
+    border-color: var(--orange-soft, #ff8a3d);
+    background: rgba(255, 138, 61, 0.08);
+    opacity: 0.7;
+  }
+
   .file-surface {
     display: flex;
     align-items: center;
@@ -357,6 +377,18 @@
   .list-row.multi-selected {
     background: rgba(59, 130, 246, 0.15);
     border-left: 3px solid var(--blue);
+  }
+
+  .list-row.clipboard-copy {
+    background: rgba(91, 227, 154, 0.08);
+    border-left: 3px solid #5be39a;
+    opacity: 0.85;
+  }
+
+  .list-row.clipboard-cut {
+    background: rgba(255, 138, 61, 0.08);
+    border-left: 3px solid #ff8a3d;
+    opacity: 0.7;
   }
 
   .list-row:last-child {

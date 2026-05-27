@@ -60,7 +60,7 @@
   });
 
   let clipboardFileIds = $derived(clipboard.getItemIds());
-  let clipboardState = $derived(clipboard.getState());
+  let clipboardOperation: 'copy' | 'cut' | null = $state(null);
 
   onMount(() => {
     const handleExternalRefresh = () => {
@@ -99,6 +99,7 @@
       if (selectedFileIds.size > 0) {
         const selectedFiles = filteredLibraryFiles.filter(f => selectedFileIds.has(f.id));
         clipboard.copy(selectedFiles.map(f => ({ id: f.id, name: f.name, type: 'file' })));
+        clipboardOperation = 'copy';
         success('Copied', `${selectedFileIds.size} file(s) copied to clipboard`);
       }
     }
@@ -107,6 +108,7 @@
       if (selectedFileIds.size > 0) {
         const selectedFiles = filteredLibraryFiles.filter(f => selectedFileIds.has(f.id));
         clipboard.cut(selectedFiles.map(f => ({ id: f.id, name: f.name, type: 'file' })));
+        clipboardOperation = 'cut';
         success('Cut', `${selectedFileIds.size} file(s) cut to clipboard`);
       }
     }
@@ -403,6 +405,7 @@
       if (operation === 'cut') {
         const success_op = await driveStateManager.moveFiles(fileIds, '', currentFolder);
         if (success_op) {
+          clipboardOperation = null;
           success('Files Moved', `${fileIds.length} file(s) moved to ${currentFolder || 'root'}`);
         } else {
           error('Move Failed', 'Could not move files');
@@ -622,6 +625,8 @@
       {viewMode}
       selectedFileId={selectedFile?.id}
       {selectedFileIds}
+      clipboardFileIds={new Set(clipboardFileIds)}
+      {clipboardOperation}
       {hasMore}
       {isLoadingMore}
       onSelectFile={selectFile}
