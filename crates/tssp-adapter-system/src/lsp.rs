@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use tssp_domain::{LanguageServerAvailability, LspServerConfig};
 use tssp_ports::LspProvider;
-use std::collections::HashMap;
 
 /// System implementation of LSP provider using `which` to detect binaries.
 pub struct SystemLspProvider {
@@ -13,31 +13,45 @@ impl SystemLspProvider {
     pub fn new() -> Self {
         let mut configs = HashMap::new();
 
-        configs.insert("rust".to_string(), LspServerConfig {
-            language: "rust".to_string(),
-            binary: "rust-analyzer".to_string(),
-            args: vec![],
-        });
+        configs.insert(
+            "rust".to_string(),
+            LspServerConfig {
+                language: "rust".to_string(),
+                binary: "rust-analyzer".to_string(),
+                args: vec![],
+            },
+        );
 
-        configs.insert("typescript".to_string(), LspServerConfig {
-            language: "typescript".to_string(),
-            binary: "typescript-language-server".to_string(),
-            args: vec!["--stdio".to_string()],
-        });
+        configs.insert(
+            "typescript".to_string(),
+            LspServerConfig {
+                language: "typescript".to_string(),
+                binary: "typescript-language-server".to_string(),
+                args: vec!["--stdio".to_string()],
+            },
+        );
 
-        configs.insert("javascript".to_string(), LspServerConfig {
-            language: "javascript".to_string(),
-            binary: "typescript-language-server".to_string(),
-            args: vec!["--stdio".to_string()],
-        });
+        configs.insert(
+            "javascript".to_string(),
+            LspServerConfig {
+                language: "javascript".to_string(),
+                binary: "typescript-language-server".to_string(),
+                args: vec!["--stdio".to_string()],
+            },
+        );
 
-        configs.insert("python".to_string(), LspServerConfig {
-            language: "python".to_string(),
-            binary: "pylsp".to_string(),
-            args: vec![],
-        });
+        configs.insert(
+            "python".to_string(),
+            LspServerConfig {
+                language: "python".to_string(),
+                binary: "pylsp".to_string(),
+                args: vec![],
+            },
+        );
 
-        Self { static_configs: configs }
+        Self {
+            static_configs: configs,
+        }
     }
 }
 
@@ -49,7 +63,8 @@ impl Default for SystemLspProvider {
 
 impl LspProvider for SystemLspProvider {
     fn detect_servers(&self) -> Vec<LspServerConfig> {
-        self.static_configs.values()
+        self.static_configs
+            .values()
             .filter(|config| which::which(&config.binary).is_ok())
             .cloned()
             .collect()

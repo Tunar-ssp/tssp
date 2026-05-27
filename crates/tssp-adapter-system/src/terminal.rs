@@ -1,9 +1,9 @@
 use std::io;
 use std::path::Path;
 use std::process::Stdio;
+use tokio::process::Command;
 use tssp_domain::{SandboxStrategy, TerminalConfig};
 use tssp_ports::terminal::{PtyProcess, TerminalProvider};
-use tokio::process::Command;
 
 /// Linux implementation of terminal provider using bubblewrap or systemd-nspawn.
 pub struct LinuxTerminalProvider;
@@ -32,7 +32,10 @@ impl TerminalProvider for LinuxTerminalProvider {
         // Canonicalize workspace root and verify it exists
         let abs_workspace = workspace_root.canonicalize()?;
         if !abs_workspace.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "workspace root is not a directory"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "workspace root is not a directory",
+            ));
         }
 
         // Verify the requested directory is within the workspace root
@@ -57,14 +60,17 @@ impl TerminalProvider for LinuxTerminalProvider {
                 cmd.arg("--ro-bind").arg("/proc").arg("/proc");
 
                 // Change to requested subdirectory relative to /workspace
-                let rel_requested = requested_dir.strip_prefix(&abs_workspace)
+                let rel_requested = requested_dir
+                    .strip_prefix(&abs_workspace)
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid path"))?;
                 let target_dir = Path::new("/workspace").join(rel_requested);
 
                 cmd.arg("--chdir").arg(target_dir);
                 cmd.arg("--setenv").arg("HOME").arg("/workspace");
                 cmd.arg("--clearenv");
-                cmd.arg("--setenv").arg("PATH").arg("/usr/local/bin:/usr/bin:/bin");
+                cmd.arg("--setenv")
+                    .arg("PATH")
+                    .arg("/usr/local/bin:/usr/bin:/bin");
                 cmd.arg("--setenv").arg("TERM").arg("xterm-256color");
                 cmd.arg("--setenv").arg("SHELL").arg("/bin/bash");
 

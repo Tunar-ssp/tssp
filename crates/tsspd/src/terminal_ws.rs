@@ -221,10 +221,7 @@ async fn handle_terminal_ws(
         }
     };
 
-    if let Some(child) = pty_process
-        .child
-        .downcast_mut::<tokio::process::Child>()
-    {
+    if let Some(child) = pty_process.child.downcast_mut::<tokio::process::Child>() {
         if let (Some(mut stdin), Some(mut stdout)) = (child.stdin.take(), child.stdout.take()) {
             let connect_msg =
                 json!({"type": "connected", "session_id": session_id.as_str()}).to_string();
@@ -283,80 +280,4 @@ async fn handle_terminal_ws(
         "stopped",
         Some(session_id.as_str()),
     );
-}
-
-async fn handle_ws_msg(
-    msg: Option<Result<axum::extract::ws::Message, axum::Error>>,
-    socket: &mut axum::extract::ws::WebSocket,
-    terminal_manager: &Arc<TerminalManager>,
-    session_id: &crate::terminal::TerminalSessionId,
-    pty_session: &mut PtySession,
-) -> bool {
-    match msg {
-        Some(Ok(axum::extract::ws::Message::Text(text))) => {
-            if text.len() > MAX_WS_INPUT_SIZE {
-                let err_msg = json!({"error": "message too large (max 64KB)"}).to_string();
-                let _ = socket
-                    .send(axum::extract::ws::Message::Text(err_msg.into()))
-                    .await;
-                return false;
-            }
-
-            let _ = terminal_manager.update_activity(session_id).await;
-
-            if let Ok(input_msg) = serde_json::from_str::<serde_json::Value>(text.as_str()) {
-                if let Some(input_data) = input_msg.get("input").and_then(|v| v.as_str()) {
-                    if input_data.len() > MAX_WS_INPUT_SIZE {
-                        let err_msg =
-                            json!({"error": "input field too large (max 64KB)"}).to_string();
-                        let _ = socket
-                            .send(axum::extract::ws::Message::Text(err_msg.into()))
-                            .await;
-                        return false;
-                    }
-                    if let Err(e) = pty_session.write_input(input_data.as_bytes()).await {
-                        let err_msg = json!({"error": format!("Write failed: {e}")}).to_string();
-                        let _ = socket
-                            .send(axum::extract::ws::Message::Text(err_msg.into()))
-                            .await;
-                        return false;
-                    }
-                }
-            }
-            true
-        }
-        Some(Ok(axum::extract::ws::Message::Close(_)) | Err(_)) | None => false,
-        _ => true,
-    }
-}
-
-async fn handle_pty_output(
-    socket: &mut axum::extract::ws::WebSocket,
-    terminal_manager: &Arc<TerminalManager>,
-    session_id: &crate::terminal::TerminalSessionId,
-    pty_session: &mut PtySession,
-) -> bool {
-    match pty_session.read_output().await {
-        Ok(data) if data.is_empty() => {
-            let _ = socket
-                .send(axum::extract::ws::Message::Text(
-                    json!({"type": "exit", "code": 0}).to_string().into(),
-                ))
-                .await;
-            false
-        }
-        Ok(data) => {
-            let _ = terminal_manager.update_activity(session_id).await;
-            let output_msg = json!({
-                "type": "output",
-                "data": String::from_utf8_lossy(&data)
-            })
-            .to_string();
-            socket
-                .send(axum::extract::ws::Message::Text(output_msg.into()))
-                .await
-                .is_ok()
-        }
-        Err(_) => false,
-    }
 }

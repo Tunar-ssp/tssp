@@ -47,7 +47,9 @@ impl GitProvider for SystemGitProvider {
                 staged_count: staged,
                 untracked_count: untracked,
             })
-        }).await.map_err(|e| e.to_string())?
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
 }
 

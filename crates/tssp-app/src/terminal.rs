@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
-use tssp_domain::{
-    TerminalConfig, TerminalError, TerminalSession, TerminalSessionId,
-};
+use tssp_domain::{TerminalConfig, TerminalError, TerminalSession, TerminalSessionId};
 use tssp_ports::terminal::TerminalProvider;
 
 /// Internal state of a terminal session.
@@ -96,7 +94,10 @@ impl TerminalService {
     /// # Errors
     ///
     /// Returns `TerminalError::SessionNotFound` if the session ID does not exist.
-    pub async fn get_session(&self, id: &TerminalSessionId) -> Result<TerminalSession, TerminalError> {
+    pub async fn get_session(
+        &self,
+        id: &TerminalSessionId,
+    ) -> Result<TerminalSession, TerminalError> {
         let sessions = self.sessions.lock().await;
         sessions
             .get(id.as_str())

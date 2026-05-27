@@ -7,16 +7,17 @@ use std::time::Instant;
 
 use tokio::net::TcpListener;
 use tssp_app::{
-    DeleteFileService, FolderService, GitService, LspService,
-    NoteService, PinService, PurgeDeletedFilesService, RestoreFileService, SessionService,
-    TagService, TerminalService, UploadService, WorkspaceFileService,
+    DeleteFileService, FolderService, GitService, LspService, NoteService, PinService,
+    PurgeDeletedFilesService, RestoreFileService, SessionService, TagService, TerminalService,
+    UploadService, WorkspaceFileService,
 };
 use tsspd::auth::initialize_database as initialize_auth_database;
 use tsspd::workspaces::WorkspaceStore;
 use tsspd::{
     auth::{AuthService, AuthStore, DeviceStore, UserStore},
     bind_error_message, build_router, collect_garbage, spawn_advertisement,
-    spawn_startup_integrity_scan, trash_cleanup::purge_expired_trash,
+    spawn_startup_integrity_scan,
+    trash_cleanup::purge_expired_trash,
     ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileRestoreProvider,
     ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationFolderProvider,
     ApplicationNoteProvider, ApplicationSessionProvider, CliOverrides, DaemonSettings, HttpState,
@@ -95,11 +96,11 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     );
 
     spawn_background_tasks(
-        state.clone(),
-        Arc::new(storage),
-        repository,
-        settings,
-        paths,
+        &state,
+        &Arc::new(storage),
+        &repository,
+        &settings,
+        &paths,
     );
 
     let router = build_router(state);
@@ -117,11 +118,11 @@ pub async fn run(cli: Cli) -> Result<(), String> {
 }
 
 fn spawn_background_tasks(
-    state: HttpState,
-    storage: Arc<tssp_adapter_fs::FilesystemBlobStore>,
-    repository: Arc<tssp_adapter_sqlite::SqliteFileRepository>,
-    settings: Arc<DaemonSettings>,
-    paths: RuntimePaths,
+    state: &HttpState,
+    storage: &Arc<tssp_adapter_fs::FilesystemBlobStore>,
+    repository: &Arc<tssp_adapter_sqlite::SqliteFileRepository>,
+    settings: &Arc<DaemonSettings>,
+    paths: &RuntimePaths,
 ) {
     let storage_gc = storage.clone();
     let repository_gc = repository.clone();
@@ -241,7 +242,7 @@ fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, Stri
     Ok(RuntimePaths {
         data_dir,
         metadata_path,
-         _blob_dir: blob_dir,
+        _blob_dir: blob_dir,
         upload_temp_dir,
     })
 }
@@ -300,6 +301,7 @@ fn open_storage(settings: &DaemonSettings) -> Result<tssp_adapter_fs::Filesystem
         .map_err(|error| format!("could not open blob storage: {error}"))
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn start_session_service(
     pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
     _upload_temp_dir: &Path,
@@ -308,6 +310,7 @@ fn start_session_service(
     Ok(SessionService::new(repository))
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn start_auth_service(
     pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
     settings: &DaemonSettings,
@@ -342,23 +345,15 @@ fn build_http_state(
     let id_generator = tssp_adapter_system::UuidV7FileIdGenerator;
     let clock = tssp_adapter_system::SystemClock;
 
-    let upload_service = UploadService::new(
-        storage.clone(),
-        repository.clone(),
-        id_generator,
-        clock,
-    );
+    let upload_service =
+        UploadService::new(storage.clone(), repository.clone(), id_generator, clock);
 
     let folder_service = FolderService::new(repository.clone());
     let delete_service = DeleteFileService::new(storage.clone(), repository.clone());
     let restore_service = RestoreFileService::new(repository.clone());
     let tag_service = TagService::new(repository.clone());
     let pin_service = PinService::new(repository.clone());
-    let note_service = NoteService::new(
-        repository.clone(),
-        clock,
-        id_generator,
-    );
+    let note_service = NoteService::new(repository.clone(), clock, id_generator);
 
     let workspace_file_store = Arc::new(tssp_adapter_fs::FilesystemWorkspaceFileStore::new(
         paths.data_dir.join("workspaces"),
@@ -391,10 +386,15 @@ fn build_http_state(
     .with_upload_provider(Arc::new(ApplicationFileUploadProvider::new(upload_service)))
     .with_folder_provider(Arc::new(ApplicationFolderProvider::new(folder_service)))
     .with_delete_provider(Arc::new(ApplicationFileDeleteProvider::new(delete_service)))
-    .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(restore_service)))
+    .with_restore_provider(Arc::new(ApplicationFileRestoreProvider::new(
+        restore_service,
+    )))
     .with_tag_provider(Arc::new(ApplicationFileTagProvider::new(tag_service)))
     .with_pin_provider(Arc::new(ApplicationFilePinProvider::new(pin_service)))
-    .with_session_provider(Arc::new(ApplicationSessionProvider::new(session_service, clock)))
+    .with_session_provider(Arc::new(ApplicationSessionProvider::new(
+        session_service,
+        clock,
+    )))
     .with_note_provider(Arc::new(ApplicationNoteProvider::new(note_service)))
     .with_search_provider(Arc::new(RepositoryFileSearchProvider::new(repository)))
     .with_blob_reader(storage)

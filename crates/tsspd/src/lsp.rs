@@ -1,12 +1,12 @@
 //! Language Server Protocol (LSP) support for workspaces.
 
+use crate::auth::AuthContext;
+use crate::state::HttpState;
 use axum::{
     extract::{Path, State},
     Json,
 };
 use tssp_domain::LspCapability;
-use crate::state::HttpState;
-use crate::auth::AuthContext;
 
 /// Lists available language servers detected on this system.
 #[allow(dead_code)]
