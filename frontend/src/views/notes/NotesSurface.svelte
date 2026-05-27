@@ -108,6 +108,23 @@
     Array.from(new Set($sortedNotes.flatMap((note) => note.tags || []))).sort((left, right) => left.localeCompare(right))
   );
 
+  let tagFrequency = $derived.by(() => {
+    const freq = new Map<string, number>();
+    $sortedNotes.forEach(note => {
+      (note.tags || []).forEach(tag => {
+        freq.set(tag, (freq.get(tag) || 0) + 1);
+      });
+    });
+    return freq;
+  });
+
+  let frequentTags = $derived(
+    Array.from(tagFrequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag]) => tag)
+  );
+
   let filteredNotes = $derived.by(() =>
     $sortedNotes.filter((note) => {
       if (collectionFilter === 'pinned' && !note.pinned_at) return false;
