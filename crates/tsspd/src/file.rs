@@ -103,6 +103,7 @@ fn thumbnail_pixels(size: &str) -> u32 {
 /// Returns the JPEG bytes of a thumbnail, generating and caching it on first request.
 ///
 /// Cache path: `<data_dir>/.thumbnails/<blake3_hash>-<size>.jpg`
+/// Rejects images over 4K resolution (8192×8192) to prevent decompression bomb attacks.
 fn generate_or_load_thumbnail(
     source_path: impl AsRef<std::path::Path>,
     cache_path: &std::path::Path,
@@ -110,6 +111,20 @@ fn generate_or_load_thumbnail(
 ) -> Result<Vec<u8>, String> {
     if let Ok(bytes) = std::fs::read(cache_path) {
         return Ok(bytes);
+    }
+
+    let source_path = source_path.as_ref();
+    let reader = image::ImageReader::open(source_path)
+        .map_err(|e| format!("image open failed: {e}"))?;
+    let (width, height) = reader.into_dimensions()
+        .map_err(|e| format!("image dimension check failed: {e}"))?;
+
+    const MAX_DIMENSION: u32 = 8192;
+    if width > MAX_DIMENSION || height > MAX_DIMENSION {
+        return Err(format!(
+            "image resolution too large: {}×{} exceeds {}×{} limit (decompression bomb risk)",
+            width, height, MAX_DIMENSION, MAX_DIMENSION
+        ));
     }
 
     let img = image::open(source_path).map_err(|e| format!("image decode failed: {e}"))?;

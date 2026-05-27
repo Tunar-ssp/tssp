@@ -17,6 +17,15 @@ use tssp_ports::{BlobStore, Clock, FileRepository, IdGenerator, RepositoryError}
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
+/// Sniff MIME type from file magic bytes, overriding untrusted client-provided type.
+fn sniff_mime_type(path: &Path) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("could not read file for MIME sniffing: {e}"))?;
+    let mime = infer::get(&bytes)
+        .map(|info| info.mime_type().to_string())
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    Ok(mime)
+}
+
 /// Max files in a batch upload (prevents `DoS` attacks).
 const MAX_BATCH_FILES: usize = 100;
 
@@ -546,7 +555,7 @@ fn unknown_field(name: &str) -> HttpUploadError {
 #[allow(clippy::too_many_arguments)]
 fn finish_staged_upload(
     filename: Option<String>,
-    mime_type: Option<String>,
+    _mime_type: Option<String>,
     tags: Vec<String>,
     pinned: bool,
     folder_path: String,
@@ -562,9 +571,21 @@ fn finish_staged_upload(
 
     sync_staged_upload(&mut temp_file)?;
 
+    // Sniff MIME type from file magic bytes. Prefer client hint if sniffing returns generic type.
+    let final_mime = match sniff_mime_type(temp_file.path()) {
+        Ok(sniffed) if sniffed != "application/octet-stream" => {
+            // Trust sniffed type if it detected something specific
+            sniffed
+        }
+        _ => {
+            // Fall back to client hint if sniffing failed or returned generic type
+            _mime_type.unwrap_or_else(|| "application/octet-stream".to_string())
+        }
+    };
+
     Ok(StagedMultipartUpload {
         filename,
-        mime_type,
+        mime_type: Some(final_mime),
         tags,
         pinned,
         folder_path,
