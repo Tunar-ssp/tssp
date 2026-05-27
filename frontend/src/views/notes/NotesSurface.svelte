@@ -33,6 +33,7 @@
   type HomeLayout = 'grid' | 'list';
 
   let showSidebar = $state(true);
+  let showInspector = $state(false);
   let contextMenu = $state({ visible: false, x: 0, y: 0, note: null as any });
   let searchQuery = $state('');
   let isLoading = $state(true);
@@ -329,13 +330,15 @@
       <NoteEditorHeader
         note={$activeNote}
         isSaving={$isSaving}
+        showInspector={showInspector}
         onPin={() => handlePinNote($activeNote)}
         onDuplicate={() => handleDuplicateNote($activeNote.id)}
         onDelete={() => handleDeleteNote($activeNote.id)}
         onSlashMenu={openSlashMenu}
+        onToggleInspector={() => showInspector = !showInspector}
       />
 
-      <div class="stage-body">
+      <div class="stage-body" class:inspector-open={showInspector}>
         <article class="note-canvas">
           <NotesEditor
             note={$activeNote}
@@ -361,16 +364,18 @@
           />
         </article>
 
-        <NoteInspector
-          tab={inspectorTab}
-          {previewHtml}
-          content={bodyDraft}
-          createdAt={$activeNote.created_at}
-          updatedAt={$activeNote.updated_at}
-          wordCount={totalWords}
-          {blockCount}
-          onTabChange={(t) => (inspectorTab = t)}
-        />
+        {#if showInspector}
+          <NoteInspector
+            tab={inspectorTab}
+            {previewHtml}
+            content={bodyDraft}
+            createdAt={$activeNote.created_at}
+            updatedAt={$activeNote.updated_at}
+            wordCount={totalWords}
+            {blockCount}
+            onTabChange={(t) => (inspectorTab = t)}
+          />
+        {/if}
       </div>
     </section>
   {/if}
@@ -496,7 +501,11 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage-body.inspector-open {
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 
   .note-canvas {

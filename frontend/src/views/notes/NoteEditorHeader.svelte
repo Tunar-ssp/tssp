@@ -4,13 +4,15 @@
   interface $$Props {
     note: any;
     isSaving: boolean;
+    showInspector?: boolean;
     onPin: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
     onSlashMenu: (event: MouseEvent) => void;
+    onToggleInspector?: () => void;
   }
 
-  let { note, isSaving, onPin, onDuplicate, onDelete, onSlashMenu }: $$Props = $props();
+  let { note, isSaving, showInspector = false, onPin, onDuplicate, onDelete, onSlashMenu, onToggleInspector }: $$Props = $props();
 </script>
 
 <header class="stage-header">
@@ -37,6 +39,12 @@
       <Icons.Sparkles size={14} />
       Slash blocks
     </button>
+    {#if onToggleInspector}
+      <button type="button" class="action-btn" class:active={showInspector} onclick={onToggleInspector} title="Toggle details panel">
+        <Icons.Eye size={14} />
+        Details
+      </button>
+    {/if}
     <button type="button" class="action-btn" onclick={onDuplicate}>
       <Icons.Copy size={14} />
       Duplicate
@@ -141,6 +149,12 @@
   .icon-btn:hover {
     color: var(--text);
     background: rgba(25, 29, 40, 0.96);
+  }
+
+  .action-btn.active {
+    color: var(--text);
+    background: rgba(110, 168, 255, 0.15);
+    border-color: rgba(110, 168, 255, 0.3);
   }
 
   .icon-btn {
