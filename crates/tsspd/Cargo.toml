@@ -41,6 +41,7 @@ local-ip-address.workspace = true
 uuid.workspace = true
 qrcode.workspace = true
 which = "5.0"
+nix.workspace = true
 
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 tar = "0.4"
