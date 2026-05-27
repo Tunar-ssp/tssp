@@ -236,6 +236,7 @@ async fn handle_terminal_ws(
             }
 
             let mut buf = [0u8; 4096];
+            let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(30));
             loop {
                 tokio::select! {
                     msg = socket.recv() => {
@@ -251,6 +252,7 @@ async fn handle_terminal_ws(
                                     }
                                 } else { break; }
                             }
+                            Some(Ok(axum::extract::ws::Message::Pong(_))) => {} // pong response to our ping
                             _ => break,
                         }
                     }
@@ -263,6 +265,10 @@ async fn handle_terminal_ws(
                                 if socket.send(axum::extract::ws::Message::Text(output_msg.into())).await.is_err() { break; }
                             }
                         }
+                    }
+                    _ = ping_interval.tick() => {
+                        use axum::body::Bytes;
+                        if socket.send(axum::extract::ws::Message::Ping(Bytes::new())).await.is_err() { break; }
                     }
                 }
             }

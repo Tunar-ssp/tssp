@@ -116,6 +116,7 @@ async fn handle_lsp_ws(
 
     // LSP uses HTTP-like headers: "Content-Length: N\r\n\r\n<json>"
     // We read content-length from the header then read exactly that many bytes.
+    let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(30));
     loop {
         tokio::select! {
             // Client → LSP
@@ -131,7 +132,8 @@ async fn handle_lsp_ws(
                     }
                     None
                     | Some(Ok(axum::extract::ws::Message::Close(_)) | Err(_)) => break,
-                    Some(Ok(_)) => {} // ignore binary / ping frames
+                    Some(Ok(axum::extract::ws::Message::Pong(_))) => {} // pong response to our ping
+                    Some(Ok(_)) => {} // ignore other frames
                 }
             }
             // LSP → client: parse Content-Length framing and forward raw JSON.
@@ -147,6 +149,13 @@ async fn handle_lsp_ws(
                         }
                     }
                     Ok(None) | Err(_) => break, // LSP exited cleanly or errored
+                }
+            }
+            // Periodic ping to keep connection alive through idle proxies/firewalls.
+            _ = ping_interval.tick() => {
+                use axum::body::Bytes;
+                if socket.send(axum::extract::ws::Message::Ping(Bytes::new())).await.is_err() {
+                    break;
                 }
             }
         }
