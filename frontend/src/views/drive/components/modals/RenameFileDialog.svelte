@@ -42,7 +42,7 @@
   <div class="dialog-overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()}>
     <div class="dialog">
       <div class="dialog-header">
-        <h3>Rename File</h3>
+        <h3>Rename: <strong>{file.name}</strong></h3>
         <button type="button" class="close-btn" onclick={onClose}>
           <Icons.X size={18} />
         </button>
@@ -50,7 +50,7 @@
 
       <div class="dialog-content">
         <div class="form-group">
-          <label for="rename-input">File Name</label>
+          <label for="rename-input">New Name</label>
           <input
             id="rename-input"
             type="text"
@@ -118,6 +118,11 @@
     margin: 0;
     font-size: var(--fs-16);
     font-weight: 600;
+  }
+
+  .dialog-header strong {
+    color: var(--blue);
+    font-weight: 700;
   }
 
   .close-btn {
