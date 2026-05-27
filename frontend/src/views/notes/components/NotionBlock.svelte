@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import { createBlock, type Block, type BlockType, BLOCK_LABELS, SLASH_COMMANDS } from './NotionBlockTypes';
+  import NotionBlock from './NotionBlock.svelte';
 
   interface Props {
     block?: Block;
@@ -148,7 +149,7 @@
   {#if block.children && block.children.length > 0 && !block.collapsed}
     <div class="block-children">
       {#each block.children as child (child.id)}
-        <svelte:self
+        <NotionBlock
           block={child}
           isSelected={isSelected}
           onUpdate={onUpdate}
