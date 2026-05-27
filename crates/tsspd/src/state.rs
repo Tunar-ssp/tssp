@@ -605,6 +605,13 @@ impl FileRepository for StaticFileRepository {
             next_cursor: None,
         })
     }
+
+    fn prune_old_audit_events(
+        &self,
+        _older_than: tssp_domain::UnixTimestamp,
+    ) -> Result<u64, tssp_ports::RepositoryError> {
+        Ok(0)
+    }
 }
 
 /// No-op folder provider for testing.

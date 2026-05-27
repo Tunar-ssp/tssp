@@ -334,6 +334,13 @@ impl FileRepository for FakeRepository {
             next_cursor: None,
         })
     }
+
+    fn prune_old_audit_events(
+        &self,
+        _older_than: UnixTimestamp,
+    ) -> Result<u64, RepositoryError> {
+        Ok(0)
+    }
 }
 
 fn clone_repository_error(error: &RepositoryError) -> RepositoryError {

@@ -263,6 +263,13 @@ pub trait FileRepository {
         &self,
         query: &AuditEventQuery,
     ) -> Result<PagedAuditEvents, RepositoryError>;
+
+    /// Deletes audit events older than the given timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the delete operation fails.
+    fn prune_old_audit_events(&self, older_than: UnixTimestamp) -> Result<u64, RepositoryError>;
 }
 
 /// Persists and queries Markdown notes.
@@ -562,6 +569,10 @@ where
         query: &AuditEventQuery,
     ) -> Result<PagedAuditEvents, RepositoryError> {
         self.as_ref().list_audit_events(query)
+    }
+
+    fn prune_old_audit_events(&self, older_than: UnixTimestamp) -> Result<u64, RepositoryError> {
+        self.as_ref().prune_old_audit_events(older_than)
     }
 }
 

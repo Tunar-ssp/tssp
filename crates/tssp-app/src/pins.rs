@@ -307,6 +307,13 @@ mod tests {
                 next_cursor: None,
             })
         }
+
+        fn prune_old_audit_events(
+            &self,
+            _older_than: UnixTimestamp,
+        ) -> Result<u64, RepositoryError> {
+            Ok(0)
+        }
     }
 
     #[test]

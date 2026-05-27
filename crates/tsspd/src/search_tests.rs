@@ -274,6 +274,13 @@ impl FileRepository for MockRepo {
     ) -> Result<tssp_ports::PagedAuditEvents, tssp_ports::RepositoryError> {
         unimplemented!()
     }
+
+    fn prune_old_audit_events(
+        &self,
+        _: tssp_domain::UnixTimestamp,
+    ) -> Result<u64, tssp_ports::RepositoryError> {
+        Ok(0)
+    }
 }
 
 impl NoteRepository for MockRepo {
@@ -563,6 +570,15 @@ impl FileRepository for FailingMockRepo {
         _: &tssp_ports::AuditEventQuery,
     ) -> Result<tssp_ports::PagedAuditEvents, tssp_ports::RepositoryError> {
         unimplemented!()
+    }
+
+    fn prune_old_audit_events(
+        &self,
+        _: tssp_domain::UnixTimestamp,
+    ) -> Result<u64, tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "pruning not available in test".to_owned(),
+        })
     }
 }
 

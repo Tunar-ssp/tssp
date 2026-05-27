@@ -1143,6 +1143,17 @@ impl FileRepository for SqliteFileRepository {
             next_cursor,
         })
     }
+
+    fn prune_old_audit_events(&self, older_than: UnixTimestamp) -> Result<u64, RepositoryError> {
+        let connection = self.connect()?;
+        let count = connection
+            .execute(
+                "DELETE FROM audit_events WHERE timestamp < ?",
+                params![older_than.seconds()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(count as u64)
+    }
 }
 
 /// Error type returned by low-level `SQLite` operations.

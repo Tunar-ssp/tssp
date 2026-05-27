@@ -11,6 +11,7 @@ use tssp_app::{
     PurgeDeletedFilesService, RestoreFileService, SessionService, TagService, TerminalService,
     UploadService, WorkspaceFileService,
 };
+use tssp_ports::FileRepository;
 use tsspd::auth::initialize_database as initialize_auth_database;
 use tsspd::workspaces::WorkspaceStore;
 use tsspd::{
@@ -181,6 +182,33 @@ fn spawn_background_tasks(
             interval.tick().await;
             if let Err(e) = terminal_service.cleanup_expired_sessions().await {
                 tracing::warn!("terminal cleanup error: {e}");
+            }
+        }
+    });
+
+    let repository_audit = repository.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400)); // Once per day
+        loop {
+            interval.tick().await;
+            let retention_days = 90_i64;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let cutoff = now - (retention_days * 24 * 60 * 60);
+            let cutoff_ts = tssp_domain::UnixTimestamp::new(cutoff)
+                .unwrap_or_else(|_| tssp_domain::UnixTimestamp::new(0).unwrap());
+
+            match repository_audit.prune_old_audit_events(cutoff_ts) {
+                Ok(count) => {
+                    if count > 0 {
+                        tracing::info!("audit log pruning: deleted {count} events older than {retention_days} days");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("audit log pruning failed: {e}");
+                }
             }
         }
     });

@@ -185,6 +185,13 @@ mod tests {
         ) -> Result<tssp_ports::PagedAuditEvents, RepositoryError> {
             unimplemented!()
         }
+
+        fn prune_old_audit_events(
+            &self,
+            _: tssp_domain::UnixTimestamp,
+        ) -> Result<u64, RepositoryError> {
+            Ok(0)
+        }
     }
 
     #[tokio::test]
