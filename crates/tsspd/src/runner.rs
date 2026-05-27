@@ -95,13 +95,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         state.corrupt_file_count.clone(),
     );
 
-    spawn_background_tasks(
-        &state,
-        &Arc::new(storage),
-        &repository,
-        &settings,
-        &paths,
-    );
+    spawn_background_tasks(&state, &Arc::new(storage), &repository, &settings, &paths);
 
     let router = build_router(state);
 
@@ -239,13 +233,15 @@ fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, Stri
     let upload_temp_dir = data_dir.join("temp").join("uploads");
 
     if !blob_dir.exists() {
-        std::fs::create_dir_all(&blob_dir)
-            .map_err(|error| format!("could not create data directory structure (blobs): {error}"))?;
+        std::fs::create_dir_all(&blob_dir).map_err(|error| {
+            format!("could not create data directory structure (blobs): {error}")
+        })?;
     }
 
     if !upload_temp_dir.exists() {
-        std::fs::create_dir_all(&upload_temp_dir)
-            .map_err(|error| format!("could not create data directory structure (uploads): {error}"))?;
+        std::fs::create_dir_all(&upload_temp_dir).map_err(|error| {
+            format!("could not create data directory structure (uploads): {error}")
+        })?;
     }
 
     Ok(RuntimePaths {
@@ -310,7 +306,8 @@ fn open_storage(settings: &DaemonSettings) -> Result<tssp_adapter_fs::Filesystem
         format!(
             "could not create data directory structure (blobs): {} \
              (check that {} is a directory, not a file)",
-            error, settings.data_dir.display()
+            error,
+            settings.data_dir.display()
         )
     })
 }
