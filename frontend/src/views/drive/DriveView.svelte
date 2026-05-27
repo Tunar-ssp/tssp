@@ -18,6 +18,7 @@
   import DriveHeader from './DriveHeader.svelte';
   import DriveSidebar from './DriveSidebar.svelte';
   import DriveContent from './DriveContent.svelte';
+  import DriveToolbarRow from './components/toolbar/DriveToolbarRow.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
   import { formatBytes, formatRelative } from '$lib/utils';
@@ -471,27 +472,13 @@
       trashEmpty={trash.length === 0}
     />
 
-    <div class="toolbar">
-      <div class="search-box">
-        <Icons.Search size={15} />
-        <input
-          type="text"
-          placeholder={isTrashView ? 'Search trash' : 'Search loaded files'}
-          bind:value={filterQuery}
-        />
-      </div>
-
-      <div class="toolbar-right">
-        <div class="view-toggle">
-          <button type="button" class:active={viewMode === 'grid'} onclick={() => setViewMode('grid')}>
-            <Icons.Grid2x2 size={15} />
-          </button>
-          <button type="button" class:active={viewMode === 'list'} onclick={() => setViewMode('list')}>
-            <Icons.List size={15} />
-          </button>
-        </div>
-      </div>
-    </div>
+    <DriveToolbarRow
+      filterQuery={filterQuery}
+      isTrashView={isTrashView}
+      viewMode={viewMode}
+      onFilterChange={(query) => filterQuery = query}
+      onViewModeChange={setViewMode}
+    />
 
     <DriveContent
       files={filteredLibraryFiles}
@@ -583,75 +570,6 @@
 
 
 
-  .toolbar {
-    margin: 0 24px 16px;
-    padding: 12px 14px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: rgba(16, 18, 24, 0.88);
-    display: flex;
-    gap: 14px;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .search-box {
-    flex: 1;
-    min-width: 0;
-    height: 42px;
-    padding: 0 14px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--muted);
-  }
-
-  .search-box input {
-    flex: 1;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 14px;
-  }
-
-  .toolbar-right {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .view-toggle button {
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-2);
-  }
-
-  .view-toggle button.active {
-    background: var(--surface-hi);
-    border-color: var(--border-2);
-    color: var(--text);
-  }
-
-  .view-toggle {
-    display: inline-flex;
-    gap: 8px;
-  }
-
-  .view-toggle button {
-    width: 36px;
-    padding: 0;
-    justify-content: center;
-    border-radius: 10px;
-  }
 
   @media (max-width: 1200px) {
     .drive-shell {
