@@ -100,7 +100,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_session_creator_column(connection)?;
     migrate_public_link_expiry(connection)?;
     migrate_upload_sessions_table(connection)?;
-    migrate_note_links_table(connection)
+    migrate_note_links_table(connection)?;
+    migrate_workspace_documents_remove_body(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).
@@ -523,5 +524,69 @@ pub(crate) fn migrate_note_links_table(
         .map_err(SqliteRepositoryError::Migration)?;
 
     record_migration(connection, 19)?;
+    Ok(())
+}
+
+/// Removes body column from workspace_documents table (migration 20).
+/// Document content now lives on filesystem via WorkspaceFileService.
+pub(crate) fn migrate_workspace_documents_remove_body(
+    connection: &Connection,
+) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 20)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS workspace_documents_new (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                owner_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'text',
+                is_primary INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0, 1)),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(workspace_id, path)
+            ) STRICT;
+
+            INSERT INTO workspace_documents_new (
+                id,
+                workspace_id,
+                owner_id,
+                path,
+                language,
+                is_primary,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                workspace_id,
+                owner_id,
+                path,
+                language,
+                is_primary,
+                created_at,
+                updated_at
+            FROM workspace_documents;
+
+            DROP TABLE IF EXISTS workspace_documents;
+
+            ALTER TABLE workspace_documents_new RENAME TO workspace_documents;
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_documents_workspace
+                ON workspace_documents(workspace_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_workspace_documents_owner
+                ON workspace_documents(owner_id, updated_at DESC);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_documents_primary
+                ON workspace_documents(workspace_id)
+                WHERE is_primary = 1;
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 20)?;
     Ok(())
 }

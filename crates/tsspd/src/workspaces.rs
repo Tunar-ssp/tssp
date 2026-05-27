@@ -110,6 +110,7 @@ pub(crate) struct WorkspaceSearchRecord {
 }
 
 /// Stored document within an admin-editable workspace.
+/// Document content is stored on filesystem via WorkspaceFileService, not in this record.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct WorkspaceDocumentRecord {
     pub(crate) id: String,
@@ -117,7 +118,6 @@ pub(crate) struct WorkspaceDocumentRecord {
     pub(crate) owner_id: String,
     pub(crate) path: String,
     pub(crate) language: String,
-    pub(crate) body: String,
     pub(crate) is_primary: bool,
     pub(crate) created_at: i64,
     pub(crate) updated_at: i64,
@@ -226,7 +226,6 @@ impl WorkspaceStore {
             owner_id: record.owner_id.clone(),
             path: default_workspace_document_path(&record.name, &record.language),
             language: record.language.clone(),
-            body: record.body.clone(),
             is_primary: true,
             created_at: record.created_at,
             updated_at: record.updated_at,
@@ -256,17 +255,10 @@ impl WorkspaceStore {
             return Err(WorkspaceError::NotFound);
         }
 
-        if let Some(primary_document) = load_primary_document(&transaction, &record.id)? {
+        if let Some(_primary_document) = load_primary_document(&transaction, &record.id)? {
             transaction.execute(
-                "UPDATE workspace_documents
-                 SET language = ?1, body = ?2, updated_at = ?3
-                 WHERE id = ?4",
-                params![
-                    record.language,
-                    record.body,
-                    record.updated_at,
-                    primary_document.id,
-                ],
+                "UPDATE workspace_documents SET language = ?1, updated_at = ?2 WHERE workspace_id = ?3 AND is_primary = 1",
+                params![record.language, record.updated_at, record.id,],
             )?;
         } else {
             let primary_document = WorkspaceDocumentRecord {
@@ -275,7 +267,6 @@ impl WorkspaceStore {
                 owner_id: record.owner_id.clone(),
                 path: default_workspace_document_path(&record.name, &record.language),
                 language: record.language.clone(),
-                body: record.body.clone(),
                 is_primary: true,
                 created_at: record.created_at,
                 updated_at: record.updated_at,
@@ -321,7 +312,7 @@ impl WorkspaceStore {
         self.get(workspace_id, owner_id)?;
         let connection = self.connect()?;
         let mut statement = connection.prepare(
-            "SELECT id, workspace_id, owner_id, path, language, is_primary, updated_at, length(body)
+            "SELECT id, workspace_id, owner_id, path, language, is_primary, updated_at
              FROM workspace_documents
              WHERE workspace_id = ?1
              ORDER BY is_primary DESC, path COLLATE NOCASE ASC",
@@ -356,7 +347,7 @@ impl WorkspaceStore {
         let workspace = self.get(workspace_id, owner_id)?;
         let path = validate_document_path(path)?;
         let language = validate_language(language)?;
-        let body = validate_body(body)?;
+        let _body = validate_body(body)?;
 
         let mut connection = self.connect()?;
         let transaction = connection.transaction()?;
@@ -372,7 +363,6 @@ impl WorkspaceStore {
             owner_id: workspace.owner_id.clone(),
             path,
             language,
-            body,
             is_primary,
             created_at: now,
             updated_at: now,
@@ -402,7 +392,7 @@ impl WorkspaceStore {
         let workspace = self.get(workspace_id, owner_id)?;
         let path = validate_document_path(path)?;
         let language = validate_language(language)?;
-        let body = validate_body(body)?;
+        let _body = validate_body(body)?;
 
         let mut connection = self.connect()?;
         let transaction = connection.transaction()?;
@@ -413,12 +403,11 @@ impl WorkspaceStore {
         }
         transaction.execute(
             "UPDATE workspace_documents
-             SET path = ?1, language = ?2, body = ?3, is_primary = ?4, updated_at = ?5
-             WHERE id = ?6 AND workspace_id = ?7",
+             SET path = ?1, language = ?2, is_primary = ?3, updated_at = ?4
+             WHERE id = ?5 AND workspace_id = ?6",
             params![
                 path,
                 language,
-                body,
                 i32::from(is_primary),
                 now,
                 document_id,
@@ -577,17 +566,15 @@ fn map_document_row(row: &rusqlite::Row<'_>) -> Result<WorkspaceDocumentRecord, 
         owner_id: row.get(2)?,
         path: row.get(3)?,
         language: row.get(4)?,
-        body: row.get(5)?,
-        is_primary: row.get::<_, i64>(6)? != 0,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
+        is_primary: row.get::<_, i64>(5)? != 0,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
     })
 }
 
 fn map_document_summary_row(
     row: &rusqlite::Row<'_>,
 ) -> Result<WorkspaceDocumentSummary, rusqlite::Error> {
-    let size_bytes = row.get::<_, i64>(7)?;
     Ok(WorkspaceDocumentSummary {
         id: row.get(0)?,
         workspace_id: row.get(1)?,
@@ -596,7 +583,7 @@ fn map_document_summary_row(
         language: row.get(4)?,
         is_primary: row.get::<_, i64>(5)? != 0,
         updated_at: row.get(6)?,
-        size_bytes: usize::try_from(size_bytes.max(0)).unwrap_or(0),
+        size_bytes: 0,
     })
 }
 
@@ -607,7 +594,7 @@ fn load_document(
 ) -> Result<WorkspaceDocumentRecord, WorkspaceError> {
     connection
         .query_row(
-            "SELECT id, workspace_id, owner_id, path, language, body, is_primary, created_at, updated_at
+            "SELECT id, workspace_id, owner_id, path, language, is_primary, created_at, updated_at
              FROM workspace_documents
              WHERE workspace_id = ?1 AND id = ?2",
             params![workspace_id, document_id],
@@ -624,7 +611,7 @@ fn load_primary_document(
 ) -> Result<Option<WorkspaceDocumentRecord>, WorkspaceError> {
     connection
         .query_row(
-            "SELECT id, workspace_id, owner_id, path, language, body, is_primary, created_at, updated_at
+            "SELECT id, workspace_id, owner_id, path, language, is_primary, created_at, updated_at
              FROM workspace_documents
              WHERE workspace_id = ?1 AND is_primary = 1",
             params![workspace_id],
@@ -640,7 +627,7 @@ fn load_first_document(
 ) -> Result<Option<WorkspaceDocumentRecord>, WorkspaceError> {
     connection
         .query_row(
-            "SELECT id, workspace_id, owner_id, path, language, body, is_primary, created_at, updated_at
+            "SELECT id, workspace_id, owner_id, path, language, is_primary, created_at, updated_at
              FROM workspace_documents
              WHERE workspace_id = ?1
              ORDER BY updated_at DESC, path COLLATE NOCASE ASC
@@ -685,15 +672,14 @@ fn insert_document_record(
     connection
         .execute(
             "INSERT INTO workspace_documents (
-                id, workspace_id, owner_id, path, language, body, is_primary, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                id, workspace_id, owner_id, path, language, is_primary, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 record.id,
                 record.workspace_id,
                 record.owner_id,
                 record.path,
                 record.language,
-                record.body,
                 i32::from(record.is_primary),
                 record.created_at,
                 record.updated_at,
@@ -725,16 +711,8 @@ fn sync_workspace_to_document(
 ) -> Result<(), WorkspaceError> {
     connection
         .execute(
-            "UPDATE workspaces
-             SET language = ?1, body = ?2, updated_at = ?3
-             WHERE id = ?4 AND owner_id = ?5",
-            params![
-                document.language,
-                document.body,
-                now,
-                workspace.id,
-                workspace.owner_id,
-            ],
+            "UPDATE workspaces SET language = ?1, updated_at = ?2 WHERE id = ?3 AND owner_id = ?4",
+            params![document.language, now, workspace.id, workspace.owner_id,],
         )
         .map(|_| ())
         .map_err(WorkspaceError::Database)
@@ -1966,7 +1944,6 @@ mod tests {
             .get("ws-owned", Some("user-owner"))
             .expect("workspace after promote");
         assert_eq!(workspace.language, "markdown");
-        assert_eq!(workspace.body, "## Revised");
 
         store
             .delete_document("ws-owned", &updated.id, Some("user-owner"), 12)
@@ -1976,7 +1953,6 @@ mod tests {
             .get("ws-owned", Some("user-owner"))
             .expect("workspace after delete");
         assert_eq!(workspace.language, "text");
-        assert_eq!(workspace.body, "body");
 
         let remaining = store
             .list_documents("ws-owned", Some("user-owner"))

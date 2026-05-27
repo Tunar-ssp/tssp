@@ -51,6 +51,19 @@ struct ExecutionCheckResponse {
     message: &'static str,
 }
 
+#[derive(Debug, Serialize)]
+struct EditorDocument {
+    id: String,
+    workspace_id: String,
+    owner_id: String,
+    path: String,
+    language: String,
+    body: String,
+    is_primary: bool,
+    created_at: i64,
+    updated_at: i64,
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct EditorDocumentBody {
     path: String,
@@ -234,16 +247,59 @@ pub(crate) async fn admin_editor_create_document(
     let Some(store) = state.workspaces.as_deref() else {
         return unavailable();
     };
+    if let Err(e) = state
+        .workspace_file_service
+        .init_workspace(&workspace_id)
+        .await
+    {
+        log_audit_event(
+            state.repository.as_ref(),
+            AuditAction::NoteUpdate,
+            Some(&auth.user_id),
+            Some("workspace_document"),
+            None,
+            "failure",
+            Some(&format!("admin failed to initialize workspace {workspace_id}: {e:?}")),
+        );
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "workspace_init_failed",
+            format!("failed to initialize workspace: {e:?}"),
+        );
+    }
+
     match store.create_document(
         &workspace_id,
         None,
         &body.path,
         &body.language,
-        body.body,
+        body.body.clone(),
         body.make_primary,
         now_seconds(),
     ) {
         Ok(document) => {
+            if let Err(e) = state
+                .workspace_file_service
+                .write_file(&workspace_id, &document.path, body.body.as_bytes())
+                .await
+            {
+                log_audit_event(
+                    state.repository.as_ref(),
+                    AuditAction::NoteUpdate,
+                    Some(&auth.user_id),
+                    Some("workspace_document"),
+                    Some(&document.id),
+                    "failure",
+                    Some(&format!(
+                        "admin created document metadata but failed to write body: {e:?}"
+                    )),
+                );
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "file_write_failed",
+                    format!("failed to write document body: {e:?}"),
+                );
+            }
             log_audit_event(
                 state.repository.as_ref(),
                 AuditAction::NoteUpdate, // Workspace document create
@@ -256,7 +312,18 @@ pub(crate) async fn admin_editor_create_document(
                     path = body.path
                 )),
             );
-            (StatusCode::CREATED, Json(document)).into_response()
+            let response = EditorDocument {
+                id: document.id,
+                workspace_id: document.workspace_id,
+                owner_id: document.owner_id,
+                path: document.path,
+                language: document.language,
+                body: body.body,
+                is_primary: document.is_primary,
+                created_at: document.created_at,
+                updated_at: document.updated_at,
+            };
+            (StatusCode::CREATED, Json(response)).into_response()
         }
         Err(error) => {
             log_audit_event(
@@ -292,7 +359,43 @@ pub(crate) async fn admin_editor_get_document(
         return unavailable();
     };
     match store.get_document(&workspace_id, &document_id, None) {
-        Ok(document) => (StatusCode::OK, Json(document)).into_response(),
+        Ok(document) => {
+            match state
+                .workspace_file_service
+                .read_file(&workspace_id, &document.path)
+                .await
+            {
+                Ok(bytes) => {
+                    let body = match String::from_utf8(bytes) {
+                        Ok(s) => s,
+                        Err(_) => {
+                            return error_response(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "invalid_utf8",
+                                "document body is not valid UTF-8".to_owned(),
+                            );
+                        }
+                    };
+                    let response = EditorDocument {
+                        id: document.id,
+                        workspace_id: document.workspace_id,
+                        owner_id: document.owner_id,
+                        path: document.path,
+                        language: document.language,
+                        body,
+                        is_primary: document.is_primary,
+                        created_at: document.created_at,
+                        updated_at: document.updated_at,
+                    };
+                    (StatusCode::OK, Json(response)).into_response()
+                }
+                Err(_) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "file_not_found",
+                    format!("could not read document file at path: {}", document.path),
+                ),
+            }
+        }
         Err(error) => editor_error(error, "workspace document could not be loaded"),
     }
 }
@@ -310,17 +413,61 @@ pub(crate) async fn admin_editor_update_document(
     let Some(store) = state.workspaces.as_deref() else {
         return unavailable();
     };
+
+    if let Err(e) = state
+        .workspace_file_service
+        .init_workspace(&workspace_id)
+        .await
+    {
+        log_audit_event(
+            state.repository.as_ref(),
+            AuditAction::NoteUpdate,
+            Some(&auth.user_id),
+            Some("workspace_document"),
+            None,
+            "failure",
+            Some(&format!("admin failed to initialize workspace {workspace_id}: {e:?}")),
+        );
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "workspace_init_failed",
+            format!("failed to initialize workspace: {e:?}"),
+        );
+    }
+
     match store.update_document(
         &workspace_id,
         &document_id,
         None,
         &body.path,
         &body.language,
-        body.body,
+        body.body.clone(),
         body.make_primary,
         now_seconds(),
     ) {
         Ok(document) => {
+            if let Err(e) = state
+                .workspace_file_service
+                .write_file(&workspace_id, &document.path, body.body.as_bytes())
+                .await
+            {
+                log_audit_event(
+                    state.repository.as_ref(),
+                    AuditAction::NoteUpdate,
+                    Some(&auth.user_id),
+                    Some("workspace_document"),
+                    Some(&document.id),
+                    "failure",
+                    Some(&format!(
+                        "admin updated document metadata but failed to write body: {e:?}"
+                    )),
+                );
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "file_write_failed",
+                    format!("failed to write document body: {e:?}"),
+                );
+            }
             log_audit_event(
                 state.repository.as_ref(),
                 AuditAction::NoteUpdate,
@@ -333,7 +480,18 @@ pub(crate) async fn admin_editor_update_document(
                     path = body.path
                 )),
             );
-            (StatusCode::OK, Json(document)).into_response()
+            let response = EditorDocument {
+                id: document.id,
+                workspace_id: document.workspace_id,
+                owner_id: document.owner_id,
+                path: document.path,
+                language: document.language,
+                body: body.body,
+                is_primary: document.is_primary,
+                created_at: document.created_at,
+                updated_at: document.updated_at,
+            };
+            (StatusCode::OK, Json(response)).into_response()
         }
         Err(error) => {
             log_audit_event(
@@ -428,7 +586,9 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
     use tower::ServiceExt;
+    use tssp_adapter_fs::FilesystemWorkspaceFileStore;
     use tssp_adapter_sqlite::SqliteFileRepository;
+    use tssp_app::WorkspaceFileService;
     use tssp_domain::{UserId, UserRole};
 
     use super::{
@@ -459,14 +619,21 @@ mod tests {
 
     fn app(store: WorkspaceStore, auth: AuthContext) -> Router {
         let settings = Arc::new(crate::DaemonSettings::default());
+        let temp_dir = std::path::PathBuf::from("/tmp");
+        let workspace_root = temp_dir.join("workspaces");
+        let _ = std::fs::create_dir_all(&workspace_root);
+        let fs_store = Arc::new(FilesystemWorkspaceFileStore::new(workspace_root));
+        let workspace_file_service = Arc::new(WorkspaceFileService::new(fs_store));
+
         let state = HttpState::new(
             std::time::Instant::now(),
-            std::path::PathBuf::from("/tmp"),
+            temp_dir,
             settings.clone(),
             PublicUrlBuilder::from_settings(&settings),
             0,
         )
-        .with_workspaces(Arc::new(store));
+        .with_workspaces(Arc::new(store))
+        .with_workspace_file_service(workspace_file_service);
         Router::new()
             .route("/api/v1/workspaces", post(create_workspace))
             .route(
