@@ -220,6 +220,15 @@ fn warn_if_insecure_bind(settings: &DaemonSettings) {
 
 fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, String> {
     let data_dir = settings.data_dir.clone();
+
+    // Verify data_dir is a directory (or can be created as one)
+    if data_dir.exists() && !data_dir.is_dir() {
+        return Err(format!(
+            "could not create data directory: {} is a file, not a directory",
+            data_dir.display()
+        ));
+    }
+
     if !data_dir.exists() {
         std::fs::create_dir_all(&data_dir)
             .map_err(|error| format!("could not create data directory: {error}"))?;
@@ -231,12 +240,12 @@ fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, Stri
 
     if !blob_dir.exists() {
         std::fs::create_dir_all(&blob_dir)
-            .map_err(|error| format!("could not create blob directory: {error}"))?;
+            .map_err(|error| format!("could not create data directory structure (blobs): {error}"))?;
     }
 
     if !upload_temp_dir.exists() {
         std::fs::create_dir_all(&upload_temp_dir)
-            .map_err(|error| format!("could not create upload temp directory: {error}"))?;
+            .map_err(|error| format!("could not create data directory structure (uploads): {error}"))?;
     }
 
     Ok(RuntimePaths {
@@ -297,8 +306,13 @@ fn run_integrity_check(metadata_path: &Path) -> Result<(), String> {
 
 fn open_storage(settings: &DaemonSettings) -> Result<tssp_adapter_fs::FilesystemBlobStore, String> {
     let blob_dir = settings.data_dir.join("blobs");
-    tssp_adapter_fs::FilesystemBlobStore::new(blob_dir)
-        .map_err(|error| format!("could not open blob storage: {error}"))
+    tssp_adapter_fs::FilesystemBlobStore::new(blob_dir).map_err(|error| {
+        format!(
+            "could not create data directory structure (blobs): {} \
+             (check that {} is a directory, not a file)",
+            error, settings.data_dir.display()
+        )
+    })
 }
 
 #[allow(clippy::unnecessary_wraps)]
