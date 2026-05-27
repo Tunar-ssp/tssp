@@ -31,6 +31,8 @@
     onFocus,
   }: Props = $props();
 
+  const inputId = `input-${Math.random().toString(36).slice(2, 9)}`;
+
   const sizeClasses = {
     sm: 'h-32 px-10 text-fs-12',
     md: 'h-36 px-12 text-fs-13',
@@ -46,7 +48,7 @@
 
 <div class="form-field">
   {#if label}
-    <label class="field-label">{label}</label>
+    <label class="field-label" for={inputId}>{label}</label>
   {/if}
 
   <div class="input-wrapper" class:has-error={error}>
@@ -55,14 +57,15 @@
     {/if}
 
     <input
+      id={inputId}
       {type}
       {placeholder}
       {disabled}
       {value}
       class="field-input {sizeClasses[size]}"
-      on:change={(e) => onChange?.(e.currentTarget.value)}
-      on:blur={onBlur}
-      on:focus={onFocus}
+      onchange={(e) => onChange?.(e.currentTarget.value)}
+      onblur={onBlur}
+      onfocus={onFocus}
       aria-invalid={!!error}
       aria-describedby={error ? 'error' : undefined}
     />
