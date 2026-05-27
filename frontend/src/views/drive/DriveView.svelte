@@ -59,6 +59,9 @@
     file: null as FileRecord | null,
   });
 
+  let clipboardFileIds = $derived(clipboard.getItemIds());
+  let clipboardState = $derived(clipboard.getState());
+
   onMount(() => {
     const handleExternalRefresh = () => {
       void loadLibrary(true);

@@ -60,6 +60,22 @@ function createClipboardStore() {
       })();
       return has;
     },
+
+    getItemIds(): string[] {
+      let ids: string[] = [];
+      subscribe(state => {
+        ids = state.items.map(item => item.id);
+      })();
+      return ids;
+    },
+
+    getState() {
+      let state: ClipboardState | null = null;
+      subscribe(s => {
+        state = s;
+      })();
+      return state;
+    },
   };
 }
 
