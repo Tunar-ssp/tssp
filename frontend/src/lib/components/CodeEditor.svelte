@@ -75,7 +75,7 @@
       <div class="header-right">
         {#if $isSaving}
           <div class="saving">
-            <div class="spinner" />
+            <div class="spinner"></div>
             Saving
           </div>
         {:else}
@@ -93,7 +93,7 @@
       value={body}
       on:input={handleBodyChange}
       spellcheck="false"
-    />
+    ></textarea>
   </div>
 {:else}
   <div class="empty-state">

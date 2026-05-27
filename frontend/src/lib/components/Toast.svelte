@@ -53,13 +53,13 @@
   </div>
 
   {#if action}
-    <button class="toast-action" on:click={action}>
+    <button class="toast-action" onclick={action}>
       {actionLabel}
     </button>
   {/if}
 
   {#if onClose}
-    <button class="toast-close" on:click={onClose} aria-label="Close">
+    <button class="toast-close" onclick={onClose} aria-label="Close">
       ×
     </button>
   {/if}

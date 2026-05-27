@@ -6,13 +6,15 @@
   import type { AppId } from "../router";
   import type { AppView } from "../stores/ui";
   import { openCommandPalette } from "../stores/ui";
+  import type { Snippet } from 'svelte';
 
   interface $$Props {
     currentView: AppId;
     title: string;
+    children?: Snippet;
   }
 
-  let { currentView, title }: $$Props = $props();
+  let { currentView, title, children }: $$Props = $props();
   let mobileOpen = $state(false);
 
   function mapAppIdToAppView(id: AppId): AppView {
@@ -50,7 +52,9 @@
     />
     <Banner />
     <main class="page-shell">
-      <slot />
+      {#if children}
+        {@render children()}
+      {/if}
     </main>
   </div>
 </div>

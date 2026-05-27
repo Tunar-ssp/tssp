@@ -48,18 +48,20 @@
 </script>
 
 {#if isOpen}
-  <div class="modal-backdrop" on:click={handleBackdropClick}>
+  <div class="modal-backdrop" onclick={handleBackdropClick}>
     <div class="modal {sizeClasses[size]} {className || ''}" {...rest}>
       <div class="modal-header">
         <h2 class="modal-title">{title}</h2>
         {#if onClose}
-          <button class="modal-close" on:click={onClose} aria-label="Close">
+          <button class="modal-close" onclick={onClose} aria-label="Close">
             ×
           </button>
         {/if}
       </div>
       <div class="modal-body">
-        <slot />
+        {#if children}
+          {@render children()}
+        {/if}
       </div>
     </div>
   </div>

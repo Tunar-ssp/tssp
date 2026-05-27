@@ -11,9 +11,9 @@
     note = null,
   }: $$Props = $props();
 
-  let title = '';
-  let body = '';
-  let tags = '';
+  let title = $state('');
+  let body = $state('');
+  let tags = $state('');
 
   let saveTimeout: number;
 
@@ -103,7 +103,7 @@
         value={body}
         oninput={handleBodyChange}
         placeholder="Start typing..."
-      />
+      ></textarea>
     </div>
 
     <div class="editor-footer">

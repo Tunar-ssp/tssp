@@ -35,8 +35,8 @@
     danger: { bg: 'rgba(255,107,107,.1)', fg: 'var(--danger)', bd: 'rgba(255,107,107,.25)' },
   };
 
-  const style = sizes[size];
-  const theme = kinds[kind];
+  const style = $derived(sizes[size]);
+  const theme = $derived(kinds[kind]);
 </script>
 
 <button

@@ -65,7 +65,7 @@
 
   {#if loading}
     <div class="loading">
-      <div class="spinner" />
+      <div class="spinner"></div>
       <span>Loading files...</span>
     </div>
   {:else if files.length === 0}

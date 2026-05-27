@@ -12,11 +12,18 @@
 
   let { note, onSave, onDelete }: Props = $props();
 
-  let title = $state(note?.title || '');
+  let title = $state('');
   let blocks = $state<Block[]>([createBlock()]);
   let isSaving = $state(false);
   let searchQuery = $state('');
   let selectedBlockId: string | null = null;
+
+  $effect(() => {
+    if (note) {
+      title = note.title;
+      blocks = [createBlock()];
+    }
+  });
 
   const filteredBlocks = $derived(
     searchQuery

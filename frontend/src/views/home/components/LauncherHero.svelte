@@ -18,13 +18,13 @@
 
   let { greeting = 'Good morning', dateLabel = 'TODAY', userName = 'operator', status, onUpload, onNewNote, onOpenWorkspace, onOpenShare }: Props = $props();
 
-  const quickActions = [
+  const quickActions = $derived([
     { id: 'upload', label: 'Upload', icon: Icons.Upload, action: onUpload },
     { id: 'note', label: 'New note', icon: Icons.FileText, action: onNewNote },
     { id: 'workspace', label: 'Open workspace', icon: Icons.Code2, action: onOpenWorkspace },
     { id: 'share', label: 'Public links', icon: Icons.Share2, action: onOpenShare },
     { id: 'command', label: 'Command palette', icon: Icons.Search, action: () => openCommandPalette() },
-  ];
+  ]);
 </script>
 
 <section class="hero">

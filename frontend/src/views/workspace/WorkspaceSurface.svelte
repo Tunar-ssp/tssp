@@ -31,7 +31,7 @@
   import WorkspaceHomepage from './WorkspaceHomepage.svelte';
 
   // Lazy load Monaco Editor to reduce initial bundle size
-  let MonacoEditor: any = null;
+  let MonacoEditor = $state<any>(null);
   let monacoLoading = $state(false);
 
   type InspectorTab = 'preview' | 'outline' | 'terminal';

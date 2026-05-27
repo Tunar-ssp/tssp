@@ -25,7 +25,7 @@
 </script>
 
 {#if isOpen}
-  <div class="sheet-backdrop" on:click={handleBackdropClick}>
+  <div class="sheet-backdrop" onclick={handleBackdropClick}>
     <div
       class="sheet sheet-{side} {className || ''}"
       {...rest}
@@ -34,14 +34,16 @@
         <div class="sheet-header">
           <h2 class="sheet-title">{title}</h2>
           {#if onClose}
-            <button class="sheet-close" on:click={onClose} aria-label="Close">
+            <button class="sheet-close" onclick={onClose} aria-label="Close">
               ×
             </button>
           {/if}
         </div>
       {/if}
       <div class="sheet-body">
-        <slot />
+        {#if children}
+          {@render children()}
+        {/if}
       </div>
     </div>
   </div>

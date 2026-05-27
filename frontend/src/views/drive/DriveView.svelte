@@ -578,15 +578,8 @@
   }
 
   @media (max-width: 760px) {
-    .toolbar {
-      margin-left: 16px;
-      margin-right: 16px;
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .toolbar-right {
-      justify-content: space-between;
+    .drive-shell {
+      grid-template-columns: 1fr;
     }
   }
 </style>

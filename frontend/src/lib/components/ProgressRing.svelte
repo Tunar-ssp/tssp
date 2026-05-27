@@ -24,9 +24,9 @@
     warn: 'var(--warning)',
   };
 
-  const r = size / 2 - 4;
-  const cir = 2 * Math.PI * r;
-  const c = colors[tone];
+  const r = $derived(size / 2 - 4);
+  const cir = $derived(2 * Math.PI * r);
+  const c = $derived(colors[tone]);
 </script>
 
 <div class="ring-container">

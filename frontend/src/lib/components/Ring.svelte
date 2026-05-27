@@ -27,10 +27,10 @@
     info: 'var(--blue)',
   };
 
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (Math.min(value, 100) / 100) * circumference;
-  const bgColor = toneColors[tone];
+  const radius = $derived((size - strokeWidth) / 2);
+  const circumference = $derived(2 * Math.PI * radius);
+  const offset = $derived(circumference - (Math.min(value, 100) / 100) * circumference);
+  const bgColor = $derived(toneColors[tone]);
 </script>
 
 <div class="ring-wrapper {className || ''}" {...rest}>
