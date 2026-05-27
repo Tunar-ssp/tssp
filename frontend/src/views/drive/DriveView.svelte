@@ -99,6 +99,14 @@
         success('Copied', `${selectedFileIds.size} file(s) copied to clipboard`);
       }
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+      e.preventDefault();
+      if (selectedFileIds.size > 0) {
+        const selectedFiles = filteredLibraryFiles.filter(f => selectedFileIds.has(f.id));
+        clipboard.cut(selectedFiles.map(f => ({ id: f.id, name: f.name, type: 'file' })));
+        success('Cut', `${selectedFileIds.size} file(s) cut to clipboard`);
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
       e.preventDefault();
       void handlePasteFiles();
@@ -113,6 +121,7 @@
         { key: 'a', ctrl: true, handler: handleDriveKeydown },
         { key: 'Escape', handler: handleDriveKeydown },
         { key: 'c', ctrl: true, handler: handleDriveKeydown },
+        { key: 'x', ctrl: true, handler: handleDriveKeydown },
         { key: 'v', ctrl: true, handler: handleDriveKeydown },
       ],
       document
