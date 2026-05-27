@@ -31,6 +31,7 @@
   let textPreview = $state('');
   let textLoading = $state(false);
   let textError = $state('');
+  let imageZoom = $state<number | 'fit'>(100);
 
   $effect(() => {
     if (isOpen && file) {
@@ -143,14 +144,23 @@
 
       <div class="preview-body">
         {#if previewLens === 'image' && file.mime_type.startsWith('image/')}
-          <div class="preview-image">
-            <img
-              src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
-              alt={file.name}
-              onerror={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
+          <div class="preview-image-container">
+            <div class="preview-image-toolbar">
+              <button onclick={() => { if (typeof imageZoom === 'number') imageZoom = Math.max(50, imageZoom - 10); }} title="Zoom out">−</button>
+              <span class="zoom-level">{typeof imageZoom === 'number' ? imageZoom + '%' : 'Fit'}</span>
+              <button onclick={() => { if (typeof imageZoom === 'number') imageZoom = Math.min(200, imageZoom + 10); }} title="Zoom in">+</button>
+              <button onclick={() => imageZoom = 100} title="Reset zoom">Reset</button>
+              <button onclick={() => imageZoom = 'fit'} title="Fit to window">Fit</button>
+            </div>
+            <div class="preview-image" style={typeof imageZoom === 'number' ? `zoom: ${imageZoom}%` : 'object-fit: contain'}>
+              <img
+                src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
+                alt={file.name}
+                onerror={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
           </div>
         {:else if previewLens === 'video' && file.mime_type.startsWith('video/')}
           <div class="preview-video">
@@ -374,15 +384,59 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-direction: column;
+  }
+
+  .preview-image-container {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .preview-image-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+
+  .preview-image-toolbar button {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    border-radius: var(--r-2);
+    cursor: pointer;
+    font-size: var(--fs-12);
+    transition: all 0.2s;
+  }
+
+  .preview-image-toolbar button:hover {
+    background: rgba(110, 168, 255, 0.1);
+    border-color: var(--blue);
+    color: var(--text);
+  }
+
+  .zoom-level {
+    min-width: 50px;
+    text-align: center;
+    font-family: var(--ff-mono);
+    font-size: var(--fs-12);
+    color: var(--text-2);
   }
 
   .preview-image {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 100%;
-    padding: var(--s-6);
+    overflow: auto;
+    padding: var(--s-4);
   }
 
   .preview-image img {
