@@ -773,9 +773,7 @@ mod tests {
         let response = super::reorder(
             State(state),
             AuthContext::open_access(),
-            Json(super::ReorderRequest {
-                ids: too_many_ids,
-            }),
+            Json(super::ReorderRequest { ids: too_many_ids }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);

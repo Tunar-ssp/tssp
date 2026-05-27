@@ -10,8 +10,15 @@ pub struct LinuxTerminalProvider;
 
 impl LinuxTerminalProvider {
     /// Create a new linux terminal provider.
+    #[must_use]
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for LinuxTerminalProvider {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

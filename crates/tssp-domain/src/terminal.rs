@@ -63,11 +63,13 @@ pub struct TerminalSessionId(String);
 
 impl TerminalSessionId {
     /// Create a new terminal session ID from a string.
+    #[must_use]
     pub fn new(id: String) -> Self {
         Self(id)
     }
 
     /// Return the string representation of the session ID.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }

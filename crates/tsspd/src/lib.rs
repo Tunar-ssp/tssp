@@ -50,7 +50,6 @@ mod status;
 mod tags;
 pub mod temp_cleanup;
 mod terminal;
-mod terminal_tests;
 mod terminal_ws;
 pub mod trash_cleanup;
 mod upload;

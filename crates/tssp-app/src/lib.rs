@@ -9,6 +9,8 @@ mod delete;
 mod folders;
 /// Git service.
 pub mod git;
+#[cfg(test)]
+mod git_tests;
 /// LSP service.
 pub mod lsp;
 mod notes;
@@ -19,8 +21,6 @@ mod tags;
 pub mod terminal;
 #[cfg(test)]
 mod terminal_tests;
-#[cfg(test)]
-mod git_tests;
 mod upload;
 pub mod workspace_files;
 

@@ -174,7 +174,9 @@ impl UploadSessionManager {
 
         // Check global limit
         if sessions.len() >= MAX_SESSIONS_TOTAL {
-            return Err(format!("server has reached maximum concurrent uploads ({})", MAX_SESSIONS_TOTAL));
+            return Err(format!(
+                "server has reached maximum concurrent uploads ({MAX_SESSIONS_TOTAL})",
+            ));
         }
 
         // Check per-user limit
@@ -185,8 +187,7 @@ impl UploadSessionManager {
 
         if user_session_count >= MAX_SESSIONS_PER_USER {
             return Err(format!(
-                "you have reached the maximum concurrent uploads ({}) per user",
-                MAX_SESSIONS_PER_USER
+                "you have reached the maximum concurrent uploads ({MAX_SESSIONS_PER_USER}) per user",
             ));
         }
 
@@ -842,9 +843,9 @@ mod tests {
 
         // Create MAX_SESSIONS_PER_USER sessions
         for i in 0..MAX_SESSIONS_PER_USER {
-            let uuid = format!("{:0>8}-0000-0000-0000-{:0>12}", i, i);
-            let session_id = UploadSessionId::new(format!("ses_{}", uuid))
-                .expect("valid session id");
+            let uuid = format!("{i:0>8}-0000-0000-0000-{i:0>12}");
+            let session_id =
+                UploadSessionId::new(format!("ses_{uuid}")).expect("valid session id");
             let session = UploadSession::new(
                 session_id,
                 format!("file{i}.txt"),
@@ -855,12 +856,13 @@ mod tests {
                 None,
             );
             let result = manager.create_session(session).await;
-            assert!(result.is_ok(), "session {} should succeed", i);
+            assert!(result.is_ok(), "session {i} should succeed");
         }
 
         // Try to create one more - should fail
-        let session_id = UploadSessionId::new("ses_99999999-0000-0000-0000-999999999999".to_string())
-            .expect("valid session id");
+        let session_id =
+            UploadSessionId::new("ses_99999999-0000-0000-0000-999999999999".to_string())
+                .expect("valid session id");
         let session = UploadSession::new(
             session_id,
             "extra.txt".to_string(),
@@ -880,9 +882,9 @@ mod tests {
 
         // Create MAX_SESSIONS_TOTAL sessions with different owners
         for i in 0..MAX_SESSIONS_TOTAL {
-            let uuid = format!("{:0>8}-0000-0000-0000-{:0>12}", i, i);
-            let session_id = UploadSessionId::new(format!("ses_{}", uuid))
-                .expect("valid session id");
+            let uuid = format!("{i:0>8}-0000-0000-0000-{i:0>12}");
+            let session_id =
+                UploadSessionId::new(format!("ses_{uuid}")).expect("valid session id");
             let session = UploadSession::new(
                 session_id,
                 format!("file{i}.txt"),
@@ -893,12 +895,13 @@ mod tests {
                 None,
             );
             let result = manager.create_session(session).await;
-            assert!(result.is_ok(), "session {} should succeed", i);
+            assert!(result.is_ok(), "session {i} should succeed");
         }
 
         // Try to create one more - should fail
-        let session_id = UploadSessionId::new("ses_ffffffff-0000-0000-0000-ffffffffffff".to_string())
-            .expect("valid session id");
+        let session_id =
+            UploadSessionId::new("ses_ffffffff-0000-0000-0000-ffffffffffff".to_string())
+                .expect("valid session id");
         let session = UploadSession::new(
             session_id,
             "extra.txt".to_string(),
@@ -917,8 +920,9 @@ mod tests {
         let manager = UploadSessionManager::new();
 
         // Create a session
-        let session_id = UploadSessionId::new("ses_deadbeef-0000-0000-0000-deadbeefdeaf".to_string())
-            .expect("valid session id");
+        let session_id =
+            UploadSessionId::new("ses_deadbeef-0000-0000-0000-deadbeefdeaf".to_string())
+                .expect("valid session id");
         let session = UploadSession::new(
             session_id.clone(),
             "file.txt".to_string(),

@@ -8,8 +8,15 @@ pub struct SystemGitProvider;
 
 impl SystemGitProvider {
     /// Create a new system git provider.
+    #[must_use]
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for SystemGitProvider {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -16,6 +16,11 @@ impl GitService {
     }
 
     /// Get the git status with a timeout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace root does not exist,
+    /// if the git detection times out, or if the provider fails.
     pub async fn get_status(&self, workspace_root: &Path) -> Result<GitStatus, String> {
         if !workspace_root.exists() {
             return Err("workspace root not found".to_owned());

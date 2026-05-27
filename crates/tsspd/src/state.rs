@@ -74,7 +74,8 @@ impl HttpState {
         public_urls: PublicUrlBuilder,
         corrupt_file_count: u64,
     ) -> Self {
-        let terminal_provider = Arc::new(tssp_adapter_system::terminal::LinuxTerminalProvider::new());
+        let terminal_provider =
+            Arc::new(tssp_adapter_system::terminal::LinuxTerminalProvider::new());
         let lsp_provider = Arc::new(tssp_adapter_system::lsp::SystemLspProvider::new());
         let git_provider = Arc::new(tssp_adapter_system::git::SystemGitProvider::new());
 

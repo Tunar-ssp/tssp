@@ -17,7 +17,7 @@ use tssp_ports::{BlobStore, Clock, FileRepository, IdGenerator, RepositoryError}
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
-/// Max files in a batch upload (prevents DoS attacks).
+/// Max files in a batch upload (prevents `DoS` attacks).
 const MAX_BATCH_FILES: usize = 100;
 
 /// Handles completed HTTP upload streams through the application layer.
@@ -447,7 +447,9 @@ async fn stage_batch_multipart_upload(
             "file" => {
                 if files.len() >= MAX_BATCH_FILES {
                     return Err(HttpUploadError::InvalidRequest {
-                        message: format!("batch upload exceeds maximum file limit of {MAX_BATCH_FILES}"),
+                        message: format!(
+                            "batch upload exceeds maximum file limit of {MAX_BATCH_FILES}"
+                        ),
                     });
                 }
                 files.push(stage_batch_file(field, upload_temp_dir).await?);

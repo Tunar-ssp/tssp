@@ -9,6 +9,7 @@ pub struct SystemLspProvider {
 
 impl SystemLspProvider {
     /// Create a new system LSP provider with default detection.
+    #[must_use]
     pub fn new() -> Self {
         let mut configs = HashMap::new();
 
@@ -37,6 +38,12 @@ impl SystemLspProvider {
         });
 
         Self { static_configs: configs }
+    }
+}
+
+impl Default for SystemLspProvider {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

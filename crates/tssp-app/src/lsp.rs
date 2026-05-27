@@ -14,6 +14,7 @@ impl LspService {
     }
 
     /// Get the status of a language server.
+    #[must_use]
     pub fn status_for_language(&self, language: &str) -> LspCapability {
         match self.provider.status_for_language(language) {
             LanguageServerAvailability::Available => LspCapability::Available {
@@ -32,6 +33,7 @@ impl LspService {
     }
 
     /// List all available language servers.
+    #[must_use]
     pub fn available_languages(&self) -> Vec<String> {
         self.provider
             .detect_servers()
@@ -41,6 +43,10 @@ impl LspService {
     }
 
     /// Get server config for a language.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LspError::ServerNotFound` if no config exists for the requested language.
     pub fn get_config(&self, language: &str) -> Result<LspServerConfig, LspError> {
         self.provider
             .get_config(language)

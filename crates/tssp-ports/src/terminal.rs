@@ -8,6 +8,14 @@ pub struct PtyProcess {
     pub child: Box<dyn std::any::Any + Send>,
 }
 
+impl PtyProcess {
+    /// Create a new PTY process wrapper.
+    #[must_use]
+    pub fn new(child: Box<dyn std::any::Any + Send>) -> Self {
+        Self { child }
+    }
+}
+
 /// Port for managing low-level terminal PTY processes.
 #[async_trait::async_trait]
 pub trait TerminalProvider: Send + Sync {

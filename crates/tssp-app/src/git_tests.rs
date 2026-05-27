@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::path::Path;
     use crate::git::GitService;
-    use tssp_ports::GitProvider;
-    use tssp_domain::GitStatus;
+    use std::path::Path;
+    use std::sync::Arc;
     use tokio::time::Duration;
+    use tssp_domain::GitStatus;
+    use tssp_ports::GitProvider;
 
     struct SlowGitProvider;
 

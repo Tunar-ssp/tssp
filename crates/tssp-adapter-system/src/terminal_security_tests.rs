@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use crate::terminal::LinuxTerminalProvider;
     use tssp_domain::{SandboxStrategy, TerminalConfig};
     use tssp_ports::terminal::TerminalProvider;
-    use crate::terminal::LinuxTerminalProvider;
 
     #[tokio::test]
     async fn test_path_traversal_prevention() {
@@ -21,6 +21,9 @@ mod tests {
 
         let result = provider.spawn_pty(&workspace_root, &config).await;
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            result.err().unwrap().kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
     }
 }

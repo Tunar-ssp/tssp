@@ -1,13 +1,13 @@
 //! Git repository status detection for workspaces.
 
+use crate::auth::AuthContext;
+use crate::state::HttpState;
 use axum::{
     extract::{Path as AxumPath, State},
     http::StatusCode,
     Json,
 };
 use tssp_domain::GitStatus;
-use crate::state::HttpState;
-use crate::auth::AuthContext;
 
 /// Handler for workspace git status.
 #[allow(dead_code)]

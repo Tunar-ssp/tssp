@@ -34,6 +34,11 @@ impl TerminalService {
     }
 
     /// Create a new terminal session.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TerminalError::Unavailable` if the workspace ID is empty,
+    /// if the session limit is reached, or if the sandbox is unavailable.
     pub async fn create_session(
         &self,
         workspace_id: &str,
@@ -87,6 +92,10 @@ impl TerminalService {
     }
 
     /// Get an existing session.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TerminalError::SessionNotFound` if the session ID does not exist.
     pub async fn get_session(&self, id: &TerminalSessionId) -> Result<TerminalSession, TerminalError> {
         let sessions = self.sessions.lock().await;
         sessions
@@ -96,6 +105,10 @@ impl TerminalService {
     }
 
     /// Close a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TerminalError::SessionNotFound` if the session ID does not exist.
     pub async fn close_session(&self, id: &TerminalSessionId) -> Result<(), TerminalError> {
         let mut sessions = self.sessions.lock().await;
         if sessions.remove(id.as_str()).is_some() {
@@ -106,6 +119,10 @@ impl TerminalService {
     }
 
     /// Update session activity.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TerminalError::SessionNotFound` if the session ID does not exist.
     pub async fn update_activity(&self, id: &TerminalSessionId) -> Result<(), TerminalError> {
         let mut sessions = self.sessions.lock().await;
         if let Some(state) = sessions.get_mut(id.as_str()) {
@@ -117,6 +134,10 @@ impl TerminalService {
     }
 
     /// Mark session as started.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TerminalError::SessionNotFound` if the session ID does not exist.
     pub async fn mark_started(&self, id: &TerminalSessionId) -> Result<(), TerminalError> {
         let mut sessions = self.sessions.lock().await;
         if let Some(state) = sessions.get_mut(id.as_str()) {
@@ -134,6 +155,10 @@ impl TerminalService {
     }
 
     /// Cleanup expired sessions.
+    ///
+    /// # Errors
+    ///
+    /// This method is currently infallible but returns `Result` for future expansion.
     pub async fn cleanup_expired_sessions(&self) -> Result<(), String> {
         let sessions = self.get_all_sessions().await;
         let now = SystemTime::now();
@@ -164,6 +189,7 @@ impl TerminalService {
     }
 
     /// Return the provider.
+    #[must_use]
     pub fn provider(&self) -> &dyn TerminalProvider {
         self.provider.as_ref()
     }

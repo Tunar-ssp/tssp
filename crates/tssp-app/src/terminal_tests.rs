@@ -1,17 +1,23 @@
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::path::Path;
     use crate::terminal::TerminalService;
-    use tssp_ports::terminal::{PtyProcess, TerminalProvider};
+    use std::path::Path;
+    use std::sync::Arc;
     use tssp_domain::{SandboxStrategy, TerminalConfig, TerminalError};
+    use tssp_ports::terminal::{PtyProcess, TerminalProvider};
 
     struct MockTerminalProvider;
 
     #[async_trait::async_trait]
     impl TerminalProvider for MockTerminalProvider {
-        async fn spawn_pty(&self, _root: &Path, _config: &TerminalConfig) -> std::io::Result<PtyProcess> {
-            Ok(PtyProcess { child: Box::new(()) })
+        async fn spawn_pty(
+            &self,
+            _root: &Path,
+            _config: &TerminalConfig,
+        ) -> std::io::Result<PtyProcess> {
+            Ok(PtyProcess {
+                child: Box::new(()),
+            })
         }
         fn detect_sandbox_strategy(&self) -> SandboxStrategy {
             SandboxStrategy::Bubblewrap
@@ -33,12 +39,19 @@ mod tests {
 
         // Create 5 sessions (default limit)
         for _ in 0..5 {
-            let _ = service.create_session("ws1", "user1", config.clone()).await.unwrap();
+            let _ = service
+                .create_session("ws1", "user1", config.clone())
+                .await
+                .unwrap();
         }
 
         // 6th session should fail
-        let result: Result<_, TerminalError> = service.create_session("ws1", "user1", config.clone()).await;
+        let result: Result<_, TerminalError> =
+            service.create_session("ws1", "user1", config.clone()).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("max concurrent terminal sessions reached"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("max concurrent terminal sessions reached"));
     }
 }
