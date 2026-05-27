@@ -1090,7 +1090,7 @@ pub(crate) async fn workspace_capabilities(
     // Terminal is admin-only
     let terminal = if auth.is_admin() {
         // Check if sandbox is available
-        let sandbox = crate::workspace_features::detect_sandbox();
+        let sandbox = state.terminal_service.provider().detect_sandbox_strategy();
         if sandbox.is_available() {
             TerminalCapability::Available
         } else {
@@ -1144,7 +1144,7 @@ pub(crate) async fn terminal_status(
     }
 
     // Check if terminal is available
-    let sandbox = crate::workspace_features::detect_sandbox();
+    let sandbox = state.terminal_service.provider().detect_sandbox_strategy();
     let available = sandbox.is_available();
     let reason = if available {
         None
@@ -1170,8 +1170,6 @@ pub(crate) async fn lsp_status(
     auth: AuthContext,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    use crate::lsp::LspManager;
-
     let Some(store) = store(&state) else {
         return unavailable();
     };
@@ -1187,8 +1185,7 @@ pub(crate) async fn lsp_status(
     }
 
     // Detect available language servers on this system
-    let manager = LspManager::new();
-    let available_languages = manager.available_languages();
+    let available_languages = state.lsp_service.available_languages();
 
     let status = if available_languages.is_empty() {
         "disabled"
@@ -1218,8 +1215,6 @@ pub(crate) async fn git_status(
     auth: AuthContext,
     AxumPath(workspace_id): AxumPath<String>,
 ) -> Response {
-    use crate::git_status;
-
     let Some(store) = store(&state) else {
         return unavailable();
     };
@@ -1253,7 +1248,7 @@ pub(crate) async fn git_status(
             .into_response();
     }
 
-    match git_status::git_status_handler(&workspace_root).await {
+    match state.git_service.get_status(&workspace_root).await {
         Ok(status) => (
             StatusCode::OK,
             Json(serde_json::json!({

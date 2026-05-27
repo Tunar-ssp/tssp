@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use tssp_app::WorkspaceFileService;
+use tssp_app::{GitService, LspService, TerminalService, WorkspaceFileService};
 use tssp_ports::{BlobReader, FileRepository, WorkspaceFileStore};
 
 use crate::auth::AuthService;
@@ -54,8 +54,12 @@ pub struct HttpState {
     pub(crate) note_provider: Arc<dyn NoteProvider>,
     pub(crate) search_provider: Arc<dyn FileSearchProvider>,
     pub(crate) blob_reader: Arc<dyn BlobReader + Send + Sync>,
-    /// Terminal session manager for WebSocket connections.
-    pub terminal_manager: Arc<crate::terminal::TerminalManager>,
+    /// Terminal session service.
+    pub terminal_service: Arc<TerminalService>,
+    /// LSP service.
+    pub lsp_service: Arc<LspService>,
+    /// Git service.
+    pub git_service: Arc<GitService>,
     /// Workspace file operations service.
     pub(crate) workspace_file_service: Arc<WorkspaceFileService>,
 }
@@ -70,6 +74,11 @@ impl HttpState {
         public_urls: PublicUrlBuilder,
         corrupt_file_count: u64,
     ) -> Self {
+        let terminal_provider =
+            Arc::new(tssp_adapter_system::terminal::LinuxTerminalProvider::new());
+        let lsp_provider = Arc::new(tssp_adapter_system::lsp::SystemLspProvider::new());
+        let git_provider = Arc::new(tssp_adapter_system::git::SystemGitProvider::new());
+
         Self {
             started_at,
             upload_temp_dir,
@@ -94,7 +103,9 @@ impl HttpState {
             note_provider: Arc::new(StaticNoteProvider),
             search_provider: Arc::new(StaticFileSearchProvider),
             blob_reader: Arc::new(StaticBlobReader),
-            terminal_manager: Arc::new(crate::terminal::TerminalManager::new()),
+            terminal_service: Arc::new(TerminalService::new(terminal_provider)),
+            lsp_service: Arc::new(LspService::new(lsp_provider)),
+            git_service: Arc::new(GitService::new(git_provider)),
             workspace_file_service: Arc::new(WorkspaceFileService::new(Arc::new(
                 StaticWorkspaceFileStore,
             ))),
@@ -112,6 +123,27 @@ impl HttpState {
     #[must_use]
     pub fn with_workspace_file_service(mut self, service: Arc<WorkspaceFileService>) -> Self {
         self.workspace_file_service = service;
+        self
+    }
+
+    /// Attaches the terminal service.
+    #[must_use]
+    pub fn with_terminal_service(mut self, service: Arc<TerminalService>) -> Self {
+        self.terminal_service = service;
+        self
+    }
+
+    /// Attaches the LSP service.
+    #[must_use]
+    pub fn with_lsp_service(mut self, service: Arc<LspService>) -> Self {
+        self.lsp_service = service;
+        self
+    }
+
+    /// Attaches the Git service.
+    #[must_use]
+    pub fn with_git_service(mut self, service: Arc<GitService>) -> Self {
+        self.git_service = service;
         self
     }
 
@@ -281,7 +313,9 @@ impl Clone for HttpState {
             note_provider: self.note_provider.clone(),
             search_provider: self.search_provider.clone(),
             blob_reader: self.blob_reader.clone(),
-            terminal_manager: self.terminal_manager.clone(),
+            terminal_service: self.terminal_service.clone(),
+            lsp_service: self.lsp_service.clone(),
+            git_service: self.git_service.clone(),
             workspace_file_service: self.workspace_file_service.clone(),
         }
     }

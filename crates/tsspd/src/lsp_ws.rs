@@ -9,7 +9,6 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::Serialize;
 
-use crate::lsp::LspManager;
 use crate::HttpState;
 
 #[derive(Debug, Serialize)]
@@ -23,11 +22,10 @@ pub struct LspStatusResponse {
 ///
 /// Reports available language servers.
 pub fn lsp_status(
-    _state: State<HttpState>,
+    State(state): State<HttpState>,
     _path: Path<String>,
 ) -> (StatusCode, Json<LspStatusResponse>) {
-    let manager = LspManager::default();
-    let available = manager.available_languages();
+    let available = state.lsp_service.available_languages();
 
     let status = if available.is_empty() {
         "unavailable"

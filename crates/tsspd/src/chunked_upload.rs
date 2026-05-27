@@ -175,6 +175,7 @@ impl UploadSessionManager {
         // Check global limit
         if sessions.len() >= MAX_SESSIONS_TOTAL {
             return Err(format!(
+                "server has reached maximum concurrent uploads ({MAX_SESSIONS_TOTAL})",
                 "server has reached maximum concurrent uploads ({MAX_SESSIONS_TOTAL})"
             ));
         }
@@ -187,7 +188,7 @@ impl UploadSessionManager {
 
         if user_session_count >= MAX_SESSIONS_PER_USER {
             return Err(format!(
-                "you have reached the maximum concurrent uploads ({MAX_SESSIONS_PER_USER}) per user"
+                "you have reached the maximum concurrent uploads ({MAX_SESSIONS_PER_USER}) per user",
             ));
         }
 
@@ -844,7 +845,8 @@ mod tests {
         // Create MAX_SESSIONS_PER_USER sessions
         for i in 0..MAX_SESSIONS_PER_USER {
             let uuid = format!("{i:0>8}-0000-0000-0000-{i:0>12}");
-            let session_id = UploadSessionId::new(format!("ses_{uuid}")).expect("valid session id");
+            let session_id =
+                UploadSessionId::new(format!("ses_{uuid}")).expect("valid session id");
             let session = UploadSession::new(
                 session_id,
                 format!("file{i}.txt"),

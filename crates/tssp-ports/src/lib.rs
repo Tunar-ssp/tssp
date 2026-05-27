@@ -21,18 +21,26 @@
 pub mod blob;
 pub mod clock;
 pub mod errors;
+/// Git operations.
+pub mod git;
 pub mod id;
+/// LSP operations.
+pub mod lsp;
 pub mod query;
 pub mod record;
 pub mod repository;
 pub mod session;
+/// Terminal operations.
+pub mod terminal;
 pub mod workspace;
 
 // Flat re-exports for backward compatibility.
 pub use blob::{BlobReader, BlobStore};
 pub use clock::Clock;
 pub use errors::{BlobReadError, BlobStoreError, IdGenerationError, RepositoryError};
+pub use git::GitProvider;
 pub use id::{IdGenerator, SessionTokenGenerator};
+pub use lsp::LspProvider;
 pub use query::{
     AuditEvent, AuditEventQuery, ListQuery, ListSort, NoteListQuery, NoteListSort,
     PagedAuditEvents, PagedFiles, PagedNotes, PinOutcome, RepositoryStats, SearchHit,
@@ -41,6 +49,7 @@ pub use query::{
 pub use record::{BlobWriteOutcome, DeletedFileRecord, NewFileRecord, NewNoteRecord};
 pub use repository::{FileRepository, NoteRepository};
 pub use session::SessionRepository;
+pub use terminal::TerminalProvider;
 pub use workspace::{WorkspaceFileEntry, WorkspaceFileStore, WorkspaceFileStoreError};
 
 #[cfg(test)]

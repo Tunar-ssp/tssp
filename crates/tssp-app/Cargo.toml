@@ -9,10 +9,12 @@ homepage.workspace = true
 description = "Application services for TSSP use cases"
 
 [dependencies]
+async-trait = "0.1"
 thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
 tssp-domain = { path = "../tssp-domain" }
 tssp-ports = { path = "../tssp-ports" }
-uuid.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 tracing.workspace = true
 
 [dev-dependencies]

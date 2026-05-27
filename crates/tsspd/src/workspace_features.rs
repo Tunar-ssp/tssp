@@ -5,36 +5,8 @@
 #![allow(dead_code)]
 
 use serde::Serialize;
-pub use tssp_domain::{SandboxStrategy, TerminalCapability};
-
-/// Detects available sandbox on the system.
-pub fn detect_sandbox() -> SandboxStrategy {
-    // Check for bubblewrap first (preferred, lighter weight)
-    if which::which("bwrap").is_ok() {
-        return SandboxStrategy::Bubblewrap;
-    }
-
-    // Check for systemd-nspawn (heavier but more capable)
-    if which::which("systemd-nspawn").is_ok() {
-        return SandboxStrategy::Systemd;
-    }
-
-    // No sandbox available
-    SandboxStrategy::None
-}
-
-/// Workspace LSP capability status.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub enum LspCapability {
-    /// Language server for this language is available.
-    Available { language: String },
-    /// LSP is disabled in config.
-    Disabled,
-    /// Language server not installed or found.
-    Unavailable { reason: String },
-    /// User lacks required permissions.
-    Forbidden,
-}
+#[allow(unused_imports)]
+pub use tssp_domain::{LspCapability, SandboxStrategy, TerminalCapability};
 
 /// Workspace feature capabilities report.
 #[derive(Debug, Clone, Serialize)]
