@@ -200,6 +200,8 @@
             style="padding-left: {(item.depth || 0) * 16}px"
             class:active={activeFilePath === item.path}
             oncontextmenu={(e) => handleContextMenu(e, item.path)}
+            role="button"
+            tabindex="0"
           >
             {#if item.is_dir}
               <button
@@ -240,6 +242,8 @@
       class="context-menu"
       style="left: {contextMenu.x}px; top: {contextMenu.y}px"
       onmouseleave={() => contextMenu.visible = false}
+      role="menu"
+      tabindex="0"
     >
       <button class="context-item">
         <Icons.Copy size={14} />
