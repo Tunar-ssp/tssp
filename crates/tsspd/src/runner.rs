@@ -68,6 +68,15 @@ pub async fn run(cli: Cli) -> Result<(), String> {
     let session_service = start_session_service(pool.clone(), &paths.upload_temp_dir)?;
     let auth_service = start_auth_service(pool.clone(), &settings)?;
 
+    let heavy_task_pool = create_heavy_task_pool(&paths.metadata_path)?;
+    {
+        let connection = heavy_task_pool
+            .get()
+            .map_err(|error| format!("could not initialize heavy task pool: {error}"))?;
+        initialize_connection(&connection)
+            .map_err(|error| format!("could not initialize heavy task pool: {error}"))?;
+    }
+
     let settings = Arc::new(settings);
     let address = settings.socket_addr();
     let listener = TcpListener::bind(address)
@@ -82,6 +91,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         &settings,
         paths.clone(),
         pool,
+        heavy_task_pool,
         repository.clone(),
         storage.clone(),
         session_service,
@@ -258,8 +268,24 @@ fn prepare_runtime_paths(settings: &DaemonSettings) -> Result<RuntimePaths, Stri
 fn create_connection_pool(
     metadata_path: &Path,
 ) -> Result<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>, String> {
+    create_connection_pool_with_size(metadata_path, 16)
+}
+
+fn create_heavy_task_pool(
+    metadata_path: &Path,
+) -> Result<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>, String> {
+    create_connection_pool_with_size(metadata_path, 1)
+}
+
+fn create_connection_pool_with_size(
+    metadata_path: &Path,
+    max_size: u32,
+) -> Result<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>, String> {
     let manager = r2d2_sqlite::SqliteConnectionManager::file(metadata_path);
-    r2d2::Pool::new(manager).map_err(|error| format!("could not create connection pool: {error}"))
+    r2d2::Pool::builder()
+        .max_size(max_size)
+        .build(manager)
+        .map_err(|error| format!("could not create connection pool: {error}"))
 }
 
 fn initialize_connection(connection: &rusqlite::Connection) -> Result<(), String> {
@@ -347,6 +373,7 @@ fn build_http_state(
     settings: &Arc<DaemonSettings>,
     paths: RuntimePaths,
     pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
+    heavy_task_pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
     repository: Arc<tssp_adapter_sqlite::SqliteFileRepository>,
     storage: tssp_adapter_fs::FilesystemBlobStore,
     session_service: SessionService<tssp_adapter_sqlite::SqliteSessionRepository>,
@@ -392,6 +419,7 @@ fn build_http_state(
         corrupt_file_count,
     )
     .with_upload_session_pool(upload_pool)
+    .with_heavy_task_pool(heavy_task_pool)
     .with_auth(auth_service)
     .with_workspaces(workspace_store)
     .with_repository(repository.clone())

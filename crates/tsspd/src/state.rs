@@ -62,6 +62,8 @@ pub struct HttpState {
     pub git_service: Arc<GitService>,
     /// Workspace file operations service.
     pub(crate) workspace_file_service: Arc<WorkspaceFileService>,
+    /// Separate connection pool for heavy/blocking database operations (backup, FTS).
+    pub(crate) heavy_task_pool: Option<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
 }
 
 impl HttpState {
@@ -109,6 +111,7 @@ impl HttpState {
             workspace_file_service: Arc::new(WorkspaceFileService::new(Arc::new(
                 StaticWorkspaceFileStore,
             ))),
+            heavy_task_pool: None,
         }
     }
 
@@ -123,6 +126,16 @@ impl HttpState {
     #[must_use]
     pub fn with_workspace_file_service(mut self, service: Arc<WorkspaceFileService>) -> Self {
         self.workspace_file_service = service;
+        self
+    }
+
+    /// Attaches the connection pool for heavy/blocking database operations.
+    #[must_use]
+    pub fn with_heavy_task_pool(
+        mut self,
+        pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
+    ) -> Self {
+        self.heavy_task_pool = Some(pool);
         self
     }
 
@@ -327,6 +340,7 @@ impl Clone for HttpState {
             lsp_service: self.lsp_service.clone(),
             git_service: self.git_service.clone(),
             workspace_file_service: self.workspace_file_service.clone(),
+            heavy_task_pool: self.heavy_task_pool.clone(),
         }
     }
 }

@@ -20,7 +20,7 @@ use crate::{ErrorBody, ErrorResponse, HttpState};
 /// `GET /api/v1/admin/backup`
 ///
 /// Streams a `.tar` archive with the `SQLite` database snapshot and blobs directory.
-/// Requires admin role.
+/// Requires admin role. Uses a dedicated heavy-task pool to avoid blocking metadata operations.
 pub(crate) async fn admin_backup(State(state): State<HttpState>, auth: AuthContext) -> Response {
     if !auth.is_admin() {
         return (
@@ -40,12 +40,23 @@ pub(crate) async fn admin_backup(State(state): State<HttpState>, auth: AuthConte
     // Channel: blocking task writes tar chunks; async side streams them to the client.
     let (tx, rx) = mpsc::channel::<Result<Vec<u8>, std::io::Error>>(32);
 
-    tokio::task::spawn_blocking(move || {
-        let result = build_backup_tar(&data_dir, &tx);
-        if let Err(e) = result {
-            let _ = tx.blocking_send(Err(e));
-        }
-    });
+    if let Some(pool) = &state.heavy_task_pool {
+        let pool_conn = pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let _conn = pool_conn.get();
+            let result = build_backup_tar(&data_dir, &tx);
+            if let Err(e) = result {
+                let _ = tx.blocking_send(Err(e));
+            }
+        });
+    } else {
+        tokio::task::spawn_blocking(move || {
+            let result = build_backup_tar(&data_dir, &tx);
+            if let Err(e) = result {
+                let _ = tx.blocking_send(Err(e));
+            }
+        });
+    }
 
     // Convert the mpsc receiver into an async stream.
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
