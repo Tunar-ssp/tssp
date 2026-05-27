@@ -25,7 +25,7 @@
   import { findMatches, replaceMatches } from '$lib/services/workspaceSearchService';
   import type { SearchOptions } from '$lib/services/workspaceSearchService';
   import WorkspaceSidebar from './WorkspaceSidebar.svelte';
-  import WorkspaceEditorHeader from './WorkspaceEditorHeader.svelte';
+  import WorkspaceEditorHeader from './components/editors/WorkspaceEditorHeader.svelte';
   import WorkspaceInspector from './WorkspaceInspector.svelte';
   import WorkspaceStageHead from './WorkspaceStageHead.svelte';
   import WorkspaceHomepage from './WorkspaceHomepage.svelte';

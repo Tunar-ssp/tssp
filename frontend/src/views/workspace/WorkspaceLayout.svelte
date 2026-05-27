@@ -31,7 +31,7 @@
 </script>
 
 <div class="workspace-layout">
-  {/* Left Sidebar - Explorer */}
+  <!-- Left Sidebar - Explorer -->
   <aside class="workspace-sidebar sidebar-left" class:collapsed={!explorerOpen}>
     <div class="sidebar-header">
       <h3 class="sidebar-title">Explorer</h3>
@@ -55,7 +55,7 @@
     {/if}
   </aside>
 
-  {/* Main Editor Area */}
+  <!-- Main Editor Area -->
   <main class="workspace-main">
     <div class="editor-header">
       <div class="editor-tabs">
@@ -112,7 +112,7 @@
     {/if}
   </main>
 
-  {/* Right Sidebar - Panels */}
+  <!-- Right Sidebar - Panels -->
   <aside class="workspace-sidebar sidebar-right" class:collapsed={!rightPanelOpen}>
     <div class="sidebar-header">
       <div class="panel-tabs">

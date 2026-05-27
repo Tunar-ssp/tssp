@@ -13,8 +13,8 @@
   import { isDriveFolder, createWorkspaceFromFolder } from '$lib/services/driveWorkspaceIntegration';
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import SharingModal from '$lib/components/SharingModal.svelte';
-  import MoveFileDialog from './MoveFileDialog.svelte';
-  import DriveDetailsPanel from './DriveDetailsPanel.svelte';
+  import MoveFileDialog from './components/modals/MoveFileDialog.svelte';
+  import DriveDetailsPanel from './components/panels/DriveDetailsPanel.svelte';
   import DriveHeader from './DriveHeader.svelte';
   import DriveSidebar from './DriveSidebar.svelte';
   import DriveContent from './DriveContent.svelte';
