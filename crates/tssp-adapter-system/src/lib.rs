@@ -1,5 +1,14 @@
 //! System adapters for clocks, file identifiers, and session tokens.
 
+/// Git adapter.
+pub mod git;
+/// LSP adapter.
+pub mod lsp;
+/// Terminal adapter.
+pub mod terminal;
+#[cfg(test)]
+mod terminal_security_tests;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;

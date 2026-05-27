@@ -23,12 +23,15 @@ pub use error::DomainError;
 pub use file::{FileId, FileName, FileRecord, FileSize, MimeType, StorageHandle};
 pub use git::GitStatus;
 pub use hash::ContentHash;
-pub use lsp::{LanguageServerAvailability, LspError, LspServerConfig};
+pub use lsp::{LanguageServerAvailability, LspCapability, LspError, LspServerConfig};
 pub use note::{derive_note_title, NoteBody, NoteId, NoteRecord, NoteTitle, MAX_NOTE_BODY_BYTES};
 pub use pagination::{Cursor, PageSize};
 pub use search_query::{build_fts_query, search_terms};
 pub use session::{SessionKind, SessionToken, TransferSession};
 pub use tag::{Tag, TagKey};
-pub use terminal::{SandboxStrategy, TerminalCapability};
+pub use terminal::{
+    SandboxStrategy, TerminalCapability, TerminalConfig, TerminalError, TerminalSession,
+    TerminalSessionId,
+};
 pub use time::UnixTimestamp;
 pub use user::{UserId, UserName, UserRole, Visibility};

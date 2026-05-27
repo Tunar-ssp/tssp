@@ -1,3 +1,4 @@
+use serde::Serialize;
 use thiserror::Error;
 
 /// LSP operation errors.
@@ -42,4 +43,23 @@ pub struct LspServerConfig {
     pub binary: String,
     /// Command-line arguments to start the server.
     pub args: Vec<String>,
+}
+
+/// Workspace LSP capability status.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub enum LspCapability {
+    /// Language server for this language is available.
+    Available {
+        /// The language of the server.
+        language: String,
+    },
+    /// LSP is disabled in config.
+    Disabled,
+    /// Language server not installed or found.
+    Unavailable {
+        /// Reason for unavailability.
+        reason: String,
+    },
+    /// User lacks required permissions.
+    Forbidden,
 }

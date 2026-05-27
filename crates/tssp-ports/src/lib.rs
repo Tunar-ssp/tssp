@@ -24,8 +24,14 @@ pub mod errors;
 pub mod id;
 pub mod query;
 pub mod record;
+/// Git operations.
+pub mod git;
+/// LSP operations.
+pub mod lsp;
 pub mod repository;
 pub mod session;
+/// Terminal operations.
+pub mod terminal;
 pub mod workspace;
 
 // Flat re-exports for backward compatibility.
@@ -39,8 +45,11 @@ pub use query::{
     TagMutationOutcome, TagSummary,
 };
 pub use record::{BlobWriteOutcome, DeletedFileRecord, NewFileRecord, NewNoteRecord};
+pub use git::GitProvider;
+pub use lsp::LspProvider;
 pub use repository::{FileRepository, NoteRepository};
 pub use session::SessionRepository;
+pub use terminal::TerminalProvider;
 pub use workspace::{WorkspaceFileEntry, WorkspaceFileStore, WorkspaceFileStoreError};
 
 #[cfg(test)]

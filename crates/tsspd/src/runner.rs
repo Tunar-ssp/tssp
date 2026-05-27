@@ -24,7 +24,7 @@ use tsspd::{
         UserStore,
     },
     bind_error_message, build_router, collect_garbage, spawn_advertisement,
-    spawn_startup_integrity_scan, spawn_terminal_cleanup,
+    spawn_startup_integrity_scan,
     trash_cleanup::purge_expired_trash,
     ApplicationFileDeleteProvider, ApplicationFilePinProvider, ApplicationFileRestoreProvider,
     ApplicationFileTagProvider, ApplicationFileUploadProvider, ApplicationFolderProvider,
@@ -451,7 +451,16 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         }
     });
 
-    spawn_terminal_cleanup(state.terminal_manager.clone());
+    let terminal_service = state.terminal_service.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if let Err(e) = terminal_service.cleanup_expired_sessions().await {
+                tracing::warn!("terminal cleanup error: {}", e);
+            }
+        }
+    });
 
     let router = build_router(state);
 

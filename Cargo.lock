@@ -3096,18 +3096,24 @@ dependencies = [
 name = "tssp-adapter-system"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "base64",
  "getrandom 0.2.17",
+ "tempfile",
+ "tokio",
  "tssp-domain",
  "tssp-ports",
  "uuid",
+ "which 6.0.3",
 ]
 
 [[package]]
 name = "tssp-app"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "thiserror",
+ "tokio",
  "tracing",
  "tssp-adapter-sqlite",
  "tssp-adapter-system",
@@ -3174,7 +3180,7 @@ dependencies = [
  "tssp-domain",
  "tssp-ports",
  "uuid",
- "which",
+ "which 5.0.0",
 ]
 
 [[package]]
@@ -3477,6 +3483,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "which"
+version = "6.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ee928febd44d98f2f459a4a79bd4d928591333a494a10a868418ac1b39cf1f"
+dependencies = [
+ "either",
+ "home",
+ "rustix 0.38.44",
+ "winsafe",
+]
+
+[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3721,6 +3739,12 @@ checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wit-bindgen"

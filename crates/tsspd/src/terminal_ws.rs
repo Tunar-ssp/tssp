@@ -11,19 +11,20 @@ use axum::{
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::{
-    auth::AuthContext, state::HttpState, terminal::TerminalManager, terminal_pty::PtySession,
-    workspace_features::SandboxStrategy,
+    auth::AuthContext, state::HttpState,
 };
 use tssp_app::audit::{log_audit_event, AuditAction};
+use tssp_domain::{SandboxStrategy, TerminalConfig, TerminalSessionId};
+use tssp_app::terminal::TerminalService;
 
 /// Max size for a single WebSocket input message (64KB).
 const MAX_WS_INPUT_SIZE: usize = 65_536;
 
 /// WebSocket upgrade handler for terminal sessions.
 /// Validates admin access, sandbox availability, creates PTY, streams I/O.
-#[allow(clippy::too_many_lines)]
 pub async fn upgrade_terminal_ws(
     State(state): State<HttpState>,
     Path(workspace_id): Path<String>,
@@ -53,8 +54,8 @@ pub async fn upgrade_terminal_ws(
     }
 
     // Check if terminal is available
-    let sandbox = crate::workspace_features::detect_sandbox();
-    let terminal_manager = state.terminal_manager.clone();
+    let terminal_service = state.terminal_service.clone();
+    let sandbox = terminal_service.provider().detect_sandbox_strategy();
 
     // Validate sandbox is available
     if !sandbox.is_available() {
@@ -98,11 +99,11 @@ pub async fn upgrade_terminal_ws(
     }
 
     // Create terminal session
-    let session = terminal_manager
+    let session = terminal_service
         .create_session(
             &workspace_id,
             auth.user_id.as_str(),
-            crate::terminal::TerminalConfig {
+            TerminalConfig {
                 workspace_dir: workspace_dir.clone(),
                 sandbox,
                 env: std::collections::HashMap::new(),
@@ -145,7 +146,7 @@ pub async fn upgrade_terminal_ws(
         handle_terminal_ws(
             socket,
             session_id,
-            terminal_manager,
+            terminal_service,
             workspace_id,
             workspace_id_clone,
             workspace_dir_clone,
@@ -159,8 +160,8 @@ pub async fn upgrade_terminal_ws(
 #[allow(clippy::too_many_arguments)]
 async fn handle_terminal_ws(
     mut socket: axum::extract::ws::WebSocket,
-    session_id: crate::terminal::TerminalSessionId,
-    terminal_manager: Arc<TerminalManager>,
+    session_id: TerminalSessionId,
+    terminal_service: Arc<TerminalService>,
     _workspace_id: String,
     workspace_id_for_audit: String,
     workspace_dir: PathBuf,
@@ -168,10 +169,18 @@ async fn handle_terminal_ws(
     state: HttpState,
 ) {
     // Spawn PTY process in workspace with configured sandbox
-    let mut pty_session = match PtySession::spawn_in_workspace(&workspace_dir, sandbox) {
+    let config = TerminalConfig {
+        workspace_dir: workspace_dir.clone(),
+        sandbox,
+        env: std::collections::HashMap::new(),
+        idle_timeout: 1800,
+        max_lifetime: 3600,
+    };
+
+    let pty_process = match terminal_service.provider().spawn_pty(&workspace_dir, &config).await {
         Ok(pty) => {
-            // Mark session as started in manager
-            if terminal_manager.mark_started(&session_id).await.is_err() {
+            // Mark session as started in service
+            if terminal_service.mark_started(&session_id).await.is_err() {
                 let msg_text = json!({"error": "Failed to mark session started"}).to_string();
                 let _ = socket
                     .send(axum::extract::ws::Message::Text(msg_text.into()))
@@ -186,10 +195,14 @@ async fn handle_terminal_ws(
             let _ = socket
                 .send(axum::extract::ws::Message::Text(msg_text.into()))
                 .await;
-            let _ = terminal_manager.close_session(&session_id).await;
+            let _ = terminal_service.close_session(&session_id).await;
             return;
         }
     };
+
+    let mut child = *pty_process.child.downcast::<tokio::process::Child>().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
 
     // Send connection established message
     let connect_msg = json!({"type": "connected", "session_id": session_id.as_str()}).to_string();
@@ -198,9 +211,12 @@ async fn handle_terminal_ws(
         .await
         .is_err()
     {
-        let _ = terminal_manager.close_session(&session_id).await;
+        let _ = terminal_service.close_session(&session_id).await;
+        let _ = child.kill().await;
         return;
     }
+
+    let mut buf = [0u8; 4096];
 
     // Main I/O loop
     loop {
@@ -209,27 +225,18 @@ async fn handle_terminal_ws(
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(axum::extract::ws::Message::Text(text))) => {
-                        // Validate message size to prevent DoS
                         if text.len() > MAX_WS_INPUT_SIZE {
-                            let err_msg = json!({"error": "message too large (max 64KB)"}).to_string();
-                            let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
                             break;
                         }
 
-                        let _ = terminal_manager.update_activity(&session_id).await;
+                        let _ = terminal_service.update_activity(&session_id).await;
 
                         if let Ok(input_msg) = serde_json::from_str::<serde_json::Value>(text.as_str()) {
                             if let Some(input_data) = input_msg.get("input").and_then(|v| v.as_str()) {
-                                if input_data.len() > MAX_WS_INPUT_SIZE {
-                                    let err_msg = json!({"error": "input field too large (max 64KB)"}).to_string();
-                                    let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
+                                if let Err(_) = stdin.write_all(input_data.as_bytes()).await {
                                     break;
                                 }
-                                if let Err(e) = pty_session.write_input(input_data.as_bytes()).await {
-                                    let err_msg = json!({"error": format!("Write failed: {e}")}).to_string();
-                                    let _ = socket.send(axum::extract::ws::Message::Text(err_msg.into())).await;
-                                    break;
-                                }
+                                let _ = stdin.flush().await;
                             }
                         }
                     }
@@ -239,22 +246,14 @@ async fn handle_terminal_ws(
             }
 
             // Poll for output from PTY
-            () = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
-                match pty_session.read_output().await {
-                    Ok(data) if data.is_empty() => {
-                        // Process exited
-                        let _ = socket
-                            .send(axum::extract::ws::Message::Text(
-                                json!({"type": "exit", "code": 0}).to_string().into()
-                            ))
-                            .await;
-                        break;
-                    }
-                    Ok(data) => {
-                        let _ = terminal_manager.update_activity(&session_id).await;
+            n = stdout.read(&mut buf) => {
+                match n {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        let _ = terminal_service.update_activity(&session_id).await;
                         let output_msg = json!({
                             "type": "output",
-                            "data": String::from_utf8_lossy(&data)
+                            "data": String::from_utf8_lossy(&buf[..n])
                         }).to_string();
                         if socket
                             .send(axum::extract::ws::Message::Text(output_msg.into()))
@@ -271,8 +270,8 @@ async fn handle_terminal_ws(
     }
 
     // Cleanup
-    let _ = pty_session.kill().await;
-    let _ = terminal_manager.close_session(&session_id).await;
+    let _ = child.kill().await;
+    let _ = terminal_service.close_session(&session_id).await;
 
     log_audit_event(
         state.repository.as_ref(),
