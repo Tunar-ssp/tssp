@@ -83,6 +83,24 @@
     isLoading = false;
   });
 
+  const handleKeydown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      showSidebar = !showSidebar;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      showFindWidget = !showFindWidget;
+    }
+  };
+
+  $effect(() => {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', handleKeydown);
+      return () => document.removeEventListener('keydown', handleKeydown);
+    }
+  });
+
   onDestroy(() => {
     if (saveTimer) clearTimeout(saveTimer);
   });

@@ -49,6 +49,13 @@
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let isCreating = $state(false);
 
+  const handleKeydown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      showSidebar = !showSidebar;
+    }
+  };
+
   onMount(async () => {
     await loadNotes();
     const intent = consumeSelectionIntent();
@@ -58,6 +65,7 @@
 
     if (typeof window !== 'undefined') {
       window.addEventListener('insert', handleInsertSnippet as EventListener);
+      window.addEventListener('keydown', handleKeydown);
     }
 
     isLoading = false;
@@ -66,6 +74,7 @@
   onDestroy(() => {
     if (saveTimer) clearTimeout(saveTimer);
     if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('insert', handleInsertSnippet as EventListener);
     }
   });
