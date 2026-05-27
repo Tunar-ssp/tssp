@@ -32,6 +32,7 @@
   type InspectorTab = 'preview' | 'outline' | 'meta';
   type HomeLayout = 'grid' | 'list';
 
+  let showSidebar = $state(true);
   let contextMenu = $state({ visible: false, x: 0, y: 0, note: null as any });
   let searchQuery = $state('');
   let isLoading = $state(true);
@@ -45,6 +46,7 @@
   let showSlashMenu = $state(false);
   let slashMenuPos = $state({ x: 0, y: 0 });
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let isCreating = false;
 
   onMount(async () => {
     await loadNotes();
@@ -67,15 +69,21 @@
     }
   });
 
+  let lastActiveId = $state<string | null>(null);
+
   $effect(() => {
     if ($activeNote) {
-      titleDraft = $activeNote.title;
-      bodyDraft = $activeNote.body;
-      tagDraft = '';
+      if ($activeNote.id !== lastActiveId) {
+        titleDraft = $activeNote.title;
+        bodyDraft = $activeNote.body;
+        tagDraft = '';
+        lastActiveId = $activeNote.id;
+      }
     } else {
       titleDraft = '';
       bodyDraft = '';
       tagDraft = '';
+      lastActiveId = null;
     }
   });
 
@@ -118,12 +126,16 @@
   }
 
   async function handleCreateNote() {
+    if (isCreating) return;
+    isCreating = true;
     try {
       const note = await createNewNote();
       setActiveNote(note.id);
-      success('Note Created', 'A new note is ready to edit');
+      success('Note Created');
     } catch (err) {
       error('Create Failed', err instanceof Error ? err.message : 'Could not create note');
+    } finally {
+      isCreating = false;
     }
   }
 
@@ -254,16 +266,27 @@
   }
 </script>
 
-<div class:editor-mode={!!$activeNote} class:home-mode={!$activeNote} class="notes-view">
-  <NotesSidebar
-    notes={$sortedNotes}
-    {collectionFilter}
-    {activeTag}
-    {allTags}
-    onCollectionChange={(f) => (collectionFilter = f)}
-    onTagChange={(t) => (activeTag = t)}
-    onCreateNote={handleCreateNote}
-  />
+<div class:editor-mode={!!$activeNote} class:home-mode={!$activeNote} class:sidebar-hidden={!showSidebar} class="notes-view">
+  {#if showSidebar}
+    <NotesSidebar
+      notes={$sortedNotes}
+      {collectionFilter}
+      {activeTag}
+      {allTags}
+      onCollectionChange={(f) => (collectionFilter = f)}
+      onTagChange={(t) => (activeTag = t)}
+      onCreateNote={handleCreateNote}
+    />
+  {/if}
+
+  <button 
+    class="sidebar-toggle" 
+    class:sidebar-hidden={!showSidebar}
+    onclick={() => showSidebar = !showSidebar}
+    title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+  >
+    <Icons.PanelLeft size={18} />
+  </button>
 
   {#if !$activeNote}
     <NotesHome
@@ -278,12 +301,17 @@
     />
   {:else}
     <section class="notes-rail">
-      <NotesSearch
-        {searchQuery}
-        {activeTag}
-        onSearchChange={(query) => (searchQuery = query)}
-        onTagClear={() => (activeTag = null)}
-      />
+      <div class="rail-header">
+        <NotesSearch
+          {searchQuery}
+          {activeTag}
+          onSearchChange={(query) => (searchQuery = query)}
+          onTagClear={() => (activeTag = null)}
+        />
+        <button class="nav-home-btn" onclick={() => setActiveNote(null)} title="Back to Launcher">
+          <Icons.LayoutGrid size={18} />
+        </button>
+      </div>
 
       <div class="rail-list">
         <NotesList
@@ -331,10 +359,6 @@
             onAddTag={addTag}
             onRemoveTag={removeTag}
           />
-
-          <button class="slash-menu-button" onclick={openSlashMenu} title="Insert slash command">
-            <Icons.Sparkles size={16} />
-          </button>
         </article>
 
         <NoteInspector
@@ -369,46 +393,102 @@
 <style>
   .notes-view {
     flex: 1;
-    min-height: 0;
+    height: 100vh;
     display: grid;
-    background: linear-gradient(180deg, rgba(12, 14, 20, 0.98), rgba(9, 10, 14, 1));
+    background: #090a0f;
+    position: relative;
+    overflow: hidden;
   }
 
   .notes-view.home-mode {
     grid-template-columns: 300px minmax(0, 1fr);
   }
 
+  .notes-view.home-mode.sidebar-hidden {
+    grid-template-columns: 0px minmax(0, 1fr);
+  }
+
   .notes-view.editor-mode {
-    grid-template-columns: 300px 360px minmax(0, 1fr);
+    grid-template-columns: 280px 320px minmax(0, 1fr);
+  }
+
+  .notes-view.editor-mode.sidebar-hidden {
+    grid-template-columns: 0px 320px minmax(0, 1fr);
+  }
+
+  .sidebar-toggle {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 150;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(20, 24, 32, 0.96);
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .sidebar-toggle:hover {
+    color: var(--text);
+    background: var(--surface);
+  }
+
+  .sidebar-toggle.sidebar-hidden {
+    left: 20px;
   }
 
   .notes-rail,
   .note-stage {
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
 
   .notes-rail {
     border-right: 1px solid var(--border);
-    background: rgba(13, 15, 21, 0.96);
-    display: flex;
-    flex-direction: column;
+    background: rgba(10, 12, 18, 0.98);
     min-width: 0;
+  }
+
+  .rail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px;
+    padding-left: 60px; /* Space for toggle when sidebar is hidden */
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-home-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
   }
 
   .rail-list {
-    overflow: auto;
-    padding: 8px 10px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
   }
 
   .note-stage {
-    display: flex;
-    flex-direction: column;
     min-width: 0;
-    min-height: 0;
+    background: #0c0d12;
   }
 
 
@@ -416,61 +496,39 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 
   .note-canvas {
     min-width: 0;
-    min-height: 0;
-    padding: 24px;
+    overflow-y: auto;
+    padding: 40px min(60px, 6vw);
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 24px;
     position: relative;
-  }
-
-  .slash-menu-button {
-    position: absolute;
-    bottom: 20px;
-    right: 24px;
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: rgba(18, 22, 31, 0.96);
-    color: var(--text-2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .slash-menu-button:hover {
-    color: var(--text);
-    background: rgba(25, 29, 40, 0.96);
+    scrollbar-width: thin;
   }
 
 
   @media (max-width: 1400px) {
-    .notes-view.editor-mode {
-      grid-template-columns: 280px 320px minmax(0, 1fr);
-    }
-
     .stage-body {
       grid-template-columns: minmax(0, 1fr);
     }
   }
 
-  @media (max-width: 960px) {
-    .notes-view.home-mode,
+  @media (max-width: 1100px) {
+    .notes-view.editor-mode {
+      grid-template-columns: 0px 280px minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 800px) {
     .notes-view.editor-mode {
       grid-template-columns: 1fr;
     }
-
     .notes-rail {
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
-      max-height: 360px;
+      display: none;
     }
   }
 </style>

@@ -10,8 +10,8 @@
 
   let { activities, isLoading = false }: Props = $props();
 
-  function formatTime(timestamp: string): string {
-    const date = new Date(timestamp);
+  function formatTime(timestamp: number): string {
+    const date = new Date(timestamp * 1000);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -25,22 +25,17 @@
     return date.toLocaleDateString();
   }
 
-  function getActivityIcon(action: string) {
-    const iconMap: Record<string, any> = {
-      create: Icons.Plus,
-      update: Icons.Edit,
-      delete: Icons.Trash2,
-      upload: Icons.Upload,
-      download: Icons.Download,
-      share: Icons.Share2,
-    };
-    return iconMap[action] || Icons.Activity;
+  function getActivityIcon(kind: string) {
+    if (kind.includes('note')) return Icons.BookText;
+    if (kind.includes('file')) return Icons.File;
+    if (kind.includes('workspace')) return Icons.Code2;
+    return Icons.Activity;
   }
 
-  function getActivityColor(action: string): string {
-    if (action === 'delete') return 'var(--danger)';
-    if (action === 'create' || action === 'upload') return 'var(--green)';
-    if (action === 'share') return 'var(--blue)';
+  function getActivityColor(kind: string): string {
+    if (kind.includes('delete') || kind.includes('remove')) return 'var(--danger)';
+    if (kind.includes('create') || kind.includes('upload')) return 'var(--green)';
+    if (kind.includes('share')) return 'var(--blue)';
     return 'var(--text-2)';
   }
 </script>
@@ -55,23 +50,19 @@
   {:else}
     <div class="activity-list">
       {#each activities as activity (activity.id)}
+        {@const Icon = getActivityIcon(activity.kind)}
         <Card>
           <div class="activity-item">
-            <div class="activity-icon" style="color: {getActivityColor(activity.action)}">
-              <svelte:component this={getActivityIcon(activity.action)} size={20} />
+            <div class="activity-icon" style="color: {getActivityColor(activity.kind)}">
+              <Icon size={20} />
             </div>
             <div class="activity-content">
-              <h4>{activity.action}</h4>
+              <h4>{activity.title}</h4>
               <p class="activity-details">
-                {#if activity.user_id}
-                  <span>By {activity.user_id}</span>
-                {/if}
-                {#if activity.target}
-                  <span>{activity.target}</span>
-                {/if}
+                <span>{activity.detail}</span>
               </p>
             </div>
-            <time class="activity-time">{formatTime(activity.timestamp)}</time>
+            <time class="activity-time">{formatTime(activity.occurred_at)}</time>
           </div>
         </Card>
       {/each}

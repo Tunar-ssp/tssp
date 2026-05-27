@@ -4,6 +4,8 @@
   import { currentView, navigateTo, commandQuery } from '$lib/stores/ui';
   import { error as notifyError } from '$lib/stores/notifications';
 
+  import { isAdmin, user } from '$lib/stores/auth';
+
   interface Command {
     id: string;
     label: string;
@@ -34,7 +36,7 @@
   let isSearching = $state(false);
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const appCommands: Command[] = [
+  const appCommands = $derived<Command[]>([
     {
       id: 'app-home',
       label: 'Open launcher',
@@ -63,14 +65,14 @@
       icon: Icons.Code2,
       action: () => navigateTo('workspace'),
     },
-    {
+    ...($isAdmin ? [{
       id: 'app-admin',
       label: 'Open Admin',
       description: 'Inspect system health and operations',
       icon: Icons.Shield,
       action: () => navigateTo('admin'),
-    },
-  ];
+    }] : []),
+  ]);
 
   $effect(() => {
     if (isOpen && inputRef) {

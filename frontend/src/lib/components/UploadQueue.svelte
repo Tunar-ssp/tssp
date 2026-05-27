@@ -73,11 +73,11 @@
   );
 
   $effect(() => {
-    const count = queueUploads.length;
-    if (count > previousCount) {
+    const count = activeUploads.length;
+    if (count > 0) {
       isDismissed = false;
+      isMinimized = false;
     }
-    previousCount = count;
   });
 
   function formatBytes(bytes: number) {

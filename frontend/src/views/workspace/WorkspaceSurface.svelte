@@ -17,7 +17,7 @@
   import MarkdownPreview from '$lib/components/MarkdownPreview.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
-  import { consumeSelectionIntent } from '$lib/stores/ui';
+  import { consumeSelectionIntent, navigateTo } from '$lib/stores/ui';
   import { renderMarkdownLite } from '$lib/utils/markdown';
   import { formatRelative, getWordCount } from '$lib/utils';
   import { getWorkspaceCapabilities } from '$lib/services/workspaceService';
@@ -36,6 +36,8 @@
 
   type InspectorTab = 'preview' | 'outline' | 'terminal';
 
+  let showSidebar = $state(true);
+  let showBottomPanel = $state(false);
   let contextMenu = $state({ visible: false, x: 0, y: 0, workspace: null as any });
   let isLoading = $state(true);
   let bodyDraft = $state('');
@@ -43,7 +45,7 @@
   let selectedLanguage = $state('');
   let workspaceFilterQuery = $state('');
   let showFindWidget = $state(false);
-  let inspectorTab = $state<InspectorTab>('preview');
+  let inspectorTab = $state<InspectorTab>('terminal');
   let cursorLine = $state(1);
   let cursorColumn = $state(1);
   let isModified = $state(false);
@@ -85,21 +87,27 @@
     if (saveTimer) clearTimeout(saveTimer);
   });
 
+  let lastActiveId = $state<string | null>(null);
+
   $effect(() => {
     if ($activeWorkspace) {
-      nameDraft = $activeWorkspace.name;
-      bodyDraft = $activeWorkspace.body;
-      selectedLanguage = $activeWorkspace.language || 'text';
-      isModified = false;
-      syncOpenTabs();
-      activeTabId = $activeWorkspace.id;
-      loadCapabilities($activeWorkspace.id);
+      if ($activeWorkspace.id !== lastActiveId) {
+        nameDraft = $activeWorkspace.name;
+        bodyDraft = $activeWorkspace.body;
+        selectedLanguage = $activeWorkspace.language || 'text';
+        isModified = false;
+        syncOpenTabs();
+        activeTabId = $activeWorkspace.id;
+        loadCapabilities($activeWorkspace.id);
+        lastActiveId = $activeWorkspace.id;
+      }
     } else {
       nameDraft = '';
       bodyDraft = '';
       selectedLanguage = 'text';
       isModified = false;
       capabilities = null;
+      lastActiveId = null;
     }
   });
 
@@ -352,32 +360,35 @@
 
 <svelte:window onkeydown={handleEditorKeydown} />
 
-<div class:editor-mode={!!$activeWorkspace} class:home-mode={!$activeWorkspace} class="workspace-view">
+<div class:editor-mode={!!$activeWorkspace} class:home-mode={!$activeWorkspace} class:sidebar-hidden={!showSidebar} class:bottom-panel-open={showBottomPanel} class="workspace-view">
   <aside class="workspace-activity">
-    <button type="button" class="activity-btn active" title="Explorer">
-      <Icons.Files size={18} />
+    <button type="button" class="activity-btn" class:active={showSidebar} title="Explorer" onclick={() => showSidebar = !showSidebar}>
+      <Icons.Files size={20} />
     </button>
-    <button type="button" class="activity-btn" title="Find in document" onclick={() => (showFindWidget = true)}>
-      <Icons.Search size={18} />
+    <button type="button" class="activity-btn" title="Find" onclick={() => (showFindWidget = true)}>
+      <Icons.Search size={20} />
     </button>
-    <button type="button" class="activity-btn" title="Preview panel" onclick={() => (inspectorTab = 'preview')}>
-      <Icons.PanelRightOpen size={18} />
+    <button type="button" class="activity-btn" class:active={showBottomPanel && inspectorTab === 'terminal'} title="Terminal" onclick={() => { showBottomPanel = true; inspectorTab = 'terminal'; }}>
+      <Icons.TerminalSquare size={20} />
     </button>
-    <button type="button" class="activity-btn" title="Terminal panel" onclick={() => (inspectorTab = 'terminal')}>
-      <Icons.TerminalSquare size={18} />
+    <div class="activity-spacer"></div>
+    <button type="button" class="activity-btn" title="Back to Launcher" onclick={() => navigateTo('home')}>
+      <Icons.LayoutGrid size={20} />
     </button>
   </aside>
 
-  <WorkspaceSidebar
-    workspaces={filteredWorkspaces}
-    filterQuery={workspaceFilterQuery}
-    activeWorkspaceId={$activeWorkspace?.id ?? null}
-    {languageCount}
-    onFilterChange={(q) => (workspaceFilterQuery = q)}
-    onSelectWorkspace={handleSelectWorkspace}
-    onShowContextMenu={showContextMenu}
-    onCreateWorkspace={handleCreateWorkspace}
-  />
+  {#if showSidebar}
+    <WorkspaceSidebar
+      workspaces={filteredWorkspaces}
+      filterQuery={workspaceFilterQuery}
+      activeWorkspaceId={$activeWorkspace?.id ?? null}
+      {languageCount}
+      onFilterChange={(q) => (workspaceFilterQuery = q)}
+      onSelectWorkspace={handleSelectWorkspace}
+      onShowContextMenu={showContextMenu}
+      onCreateWorkspace={handleCreateWorkspace}
+    />
+  {/if}
 
   {#if !$activeWorkspace}
     <WorkspaceHomepage
@@ -389,40 +400,15 @@
     />
   {:else}
     <section class="workspace-stage">
-      <WorkspaceStageHead
-        workspaceName={nameDraft || $activeWorkspace.name || 'untitled'}
-        onFind={() => (showFindWidget = !showFindWidget)}
-        onDelete={() => handleDeleteWorkspace($activeWorkspace)}
-        onSave={() => handleSaveWorkspace()}
-      />
-
-      <TabBar
-        tabs={openTabs}
-        activeTabId={activeTabId}
-        onSelectTab={handleTabSelect}
-        onCloseTab={handleTabClose}
-      />
-
-      <FindReplaceWidget
-        isOpen={showFindWidget}
-        onClose={() => (showFindWidget = false)}
-        onFind={handleFind}
-        onReplace={handleReplace}
-        onReplaceAll={handleReplaceAll}
-        {matchCount}
-        currentMatchIndex={currentMatchIndex}
-      />
-
-      <div class="editor-banner">
-        <div class="banner-copy">
-          <Icons.Lock size={14} />
-          <span>Sandbox execution is disabled. This workspace is currently editor-only.</span>
-        </div>
-        <span class="banner-meta">{languageLabel(selectedLanguage)} · autosave enabled</span>
-      </div>
-
-      <div class="editor-layout">
+      <div class="stage-main">
         <div class="editor-column">
+          <TabBar
+            tabs={openTabs}
+            activeTabId={activeTabId}
+            onSelectTab={handleTabSelect}
+            onCloseTab={handleTabClose}
+          />
+
           <WorkspaceEditorHeader
             name={nameDraft}
             selectedLanguage={selectedLanguage}
@@ -437,7 +423,7 @@
             onLanguageChange={handleChangeLanguage}
           />
 
-          <div class="monaco-shell">
+          <div class="editor-shell">
             {#if isMarkdownFile}
               <MarkdownPreview
                 content={bodyDraft}
@@ -459,30 +445,57 @@
                 showToolbar={false}
               />
             {:else if monacoLoading}
-              <div class="editor-loading">
+              <div class="loading-state">
                 <div class="spinner"></div>
-                <span>Loading editor...</span>
+                <span>Loading Monaco Editor...</span>
               </div>
             {:else}
-              <div class="editor-error">
+              <div class="error-state">
                 <Icons.AlertCircle size={32} />
-                <span>Code editor unavailable</span>
+                <span>Editor unavailable</span>
               </div>
             {/if}
           </div>
         </div>
 
-        <WorkspaceInspector
-          tab={inspectorTab}
-          workspaceId={$activeWorkspace?.id ?? ''}
-          {previewHtml}
-          content={bodyDraft}
-          {selectedLanguage}
-          terminalCapability={capabilities?.terminal ?? null}
-          lspCapability={capabilities?.lsp ?? null}
-          onTabChange={(t) => (inspectorTab = t)}
-        />
+        {#if !showBottomPanel}
+          <div class="inspector-side">
+            <WorkspaceInspector
+              tab={inspectorTab}
+              workspaceId={$activeWorkspace?.id ?? ''}
+              {previewHtml}
+              content={bodyDraft}
+              {selectedLanguage}
+              terminalCapability={capabilities?.terminal ?? null}
+              lspCapability={capabilities?.lsp ?? null}
+              onTabChange={(t) => (inspectorTab = t)}
+            />
+          </div>
+        {/if}
       </div>
+
+      {#if showBottomPanel}
+        <div class="stage-bottom">
+          <div class="bottom-tabs">
+            <button class:active={inspectorTab === 'terminal'} onclick={() => inspectorTab = 'terminal'}>Terminal</button>
+            <button class:active={inspectorTab === 'preview'} onclick={() => inspectorTab = 'preview'}>Preview</button>
+            <button class:active={inspectorTab === 'outline'} onclick={() => inspectorTab = 'outline'}>Outline</button>
+            <button class="close-bottom" onclick={() => showBottomPanel = false}><Icons.X size={14} /></button>
+          </div>
+          <div class="bottom-content">
+            <WorkspaceInspector
+              tab={inspectorTab}
+              workspaceId={$activeWorkspace?.id ?? ''}
+              {previewHtml}
+              content={bodyDraft}
+              {selectedLanguage}
+              terminalCapability={capabilities?.terminal ?? null}
+              lspCapability={capabilities?.lsp ?? null}
+              onTabChange={(t) => (inspectorTab = t)}
+            />
+          </div>
+        </div>
+      {/if}
 
       <StatusBar
         language={selectedLanguage}
@@ -495,6 +508,16 @@
       />
     </section>
   {/if}
+
+  <FindReplaceWidget
+    isOpen={showFindWidget}
+    onClose={() => (showFindWidget = false)}
+    onFind={handleFind}
+    onReplace={handleReplace}
+    onReplaceAll={handleReplaceAll}
+    {matchCount}
+    currentMatchIndex={currentMatchIndex}
+  />
 </div>
 
 <ContextMenu
@@ -507,154 +530,160 @@
 <style>
   .workspace-view {
     flex: 1;
-    min-height: 0;
-    display: grid;
-    background: linear-gradient(180deg, rgba(11, 13, 18, 1), rgba(8, 10, 14, 1));
-  }
-
-  .workspace-view.home-mode {
-    grid-template-columns: 56px 300px minmax(0, 1fr);
-  }
-
-  .workspace-view.editor-mode {
-    grid-template-columns: 56px 300px minmax(0, 1fr);
-  }
-
-  .workspace-activity,
-  .workspace-stage {
-    min-height: 0;
+    height: 100vh;
+    display: flex;
+    background: #090a0f;
+    overflow: hidden;
   }
 
   .workspace-activity {
+    width: 50px;
+    background: #0d0f14;
     border-right: 1px solid var(--border);
-    background: rgba(12, 14, 20, 0.98);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
-    padding: 18px 8px;
+    padding: 12px 0;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   .activity-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
     border: 1px solid transparent;
     background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    display: inline-flex;
+    color: var(--text-3);
+    display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
-  .activity-btn.active,
-  .activity-btn:hover {
-    background: rgba(29, 34, 46, 0.98);
-    border-color: var(--border);
+  .activity-btn:hover,
+  .activity-btn.active {
     color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
   }
 
+  .activity-spacer {
+    flex: 1;
+  }
 
   .workspace-stage {
+    flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
-    min-height: 0;
+    background: #0c0d12;
   }
 
-  .editor-banner {
-    padding: 10px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    background: rgba(18, 21, 29, 0.96);
-    color: var(--text-2);
-    font-size: 13px;
-  }
-
-  .banner-copy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .banner-meta {
-    color: var(--muted);
-    font-family: var(--ff-mono);
-    font-size: 12px;
-  }
-
-  .editor-layout {
+  .stage-main {
     flex: 1;
+    display: flex;
     min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
   }
 
   .editor-column {
-    min-width: 0;
-    min-height: 0;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
     border-right: 1px solid var(--border);
   }
 
-
-  .monaco-shell {
+  .editor-shell {
     flex: 1;
     min-height: 0;
-    padding: 16px;
+    background: #1e1e1e;
   }
 
-  .editor-loading,
-  .editor-error {
+  .inspector-side {
+    width: 320px;
+    background: #0d0f14;
+    flex-shrink: 0;
+  }
+
+  .stage-bottom {
+    height: 280px;
+    background: #0d0f14;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .bottom-tabs {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+
+  .bottom-tabs button {
+    height: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-3);
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+
+  .bottom-tabs button.active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
+  }
+
+  .close-bottom {
+    margin-left: auto;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+  }
+
+  .bottom-content {
     flex: 1;
+    overflow: hidden;
+  }
+
+  .loading-state,
+  .error-state {
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    color: var(--muted);
-    font-size: var(--fs-13);
+    color: var(--text-3);
   }
 
   .spinner {
     width: 24px;
     height: 24px;
-    border: 2px solid var(--surface-3);
+    border: 2px solid var(--border);
     border-top-color: var(--blue);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-  @media (max-width: 1400px) {
-    .editor-layout {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .editor-column {
-      border-right: 0;
-    }
-  }
-
-  @media (max-width: 960px) {
-    .workspace-view.home-mode,
-    .workspace-view.editor-mode {
-      grid-template-columns: 1fr;
-    }
-
-    .workspace-activity {
-      flex-direction: row;
-      justify-content: center;
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
+  @media (max-width: 1000px) {
+    .inspector-side {
+      display: none;
     }
   }
 </style>

@@ -31,20 +31,30 @@
     class: className,
   }: $$Props = $props();
 
-  onMount(() => {
+  let unsubscribe: (() => void) | null = null;
+
+  $effect(() => {
     if (note) {
-      // Parse body into blocks
-      const blocks = markdownToBlocks(bodyDraft);
+      // Cleanup previous subscription if any
+      if (unsubscribe) unsubscribe();
+
+      // Parse body into blocks and initialize editor
+      const blocks = markdownToBlocks(note.body);
       initializeEditor(blocks, note.id);
 
       // Set up markdown sync
-      const unsubscribe = editorMarkdown.subscribe((markdown) => {
+      unsubscribe = editorMarkdown.subscribe((markdown) => {
         onBodyChange?.(markdown);
         scheduleAutosave();
       });
-
-      return () => unsubscribe();
     }
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+    };
   });
 
   function formatDate(timestamp: number): string {

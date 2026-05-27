@@ -56,7 +56,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         let connection = pool
             .get()
             .map_err(|error| format!("could not initialize metadata database: {error}"))?;
-        initialize_connection(&connection)
+        tssp_adapter_sqlite::initialize_connection(&connection)
             .map_err(|error| format!("could not initialize metadata database: {error}"))?;
         initialize_auth_database(&connection)
             .map_err(|error| format!("could not initialize auth database: {error}"))?;
@@ -74,7 +74,7 @@ pub async fn run(cli: Cli) -> Result<(), String> {
         let connection = heavy_task_pool
             .get()
             .map_err(|error| format!("could not initialize heavy task pool: {error}"))?;
-        initialize_connection(&connection)
+        tssp_adapter_sqlite::initialize_connection(&connection)
             .map_err(|error| format!("could not initialize heavy task pool: {error}"))?;
     }
 
@@ -195,10 +195,14 @@ fn spawn_background_tasks(
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_secs() as i64;
+                .as_secs()
+                .try_into()
+                .unwrap_or(i64::MAX);
             let cutoff = now - (retention_days * 24 * 60 * 60);
-            let cutoff_ts = tssp_domain::UnixTimestamp::new(cutoff)
-                .unwrap_or_else(|_| tssp_domain::UnixTimestamp::new(0).unwrap());
+            let cutoff_ts = tssp_domain::UnixTimestamp::new(cutoff).unwrap_or_else(|_| {
+                #[allow(clippy::expect_used)]
+                tssp_domain::UnixTimestamp::new(0).expect("zero is valid")
+            });
 
             match repository_audit.prune_old_audit_events(cutoff_ts) {
                 Ok(count) => {
@@ -325,21 +329,8 @@ fn create_connection_pool_with_size(
     metadata_path: &Path,
     max_size: u32,
 ) -> Result<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>, String> {
-    let manager = r2d2_sqlite::SqliteConnectionManager::file(metadata_path);
-    r2d2::Pool::builder()
-        .max_size(max_size)
-        .build(manager)
+    tssp_adapter_sqlite::SqliteFileRepository::create_pool(metadata_path, max_size)
         .map_err(|error| format!("could not create connection pool: {error}"))
-}
-
-fn initialize_connection(connection: &rusqlite::Connection) -> Result<(), String> {
-    connection
-        .execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;
-             PRAGMA foreign_keys = ON;",
-        )
-        .map_err(|error| format!("could not initialize connection: {error}"))
 }
 
 fn open_repository(

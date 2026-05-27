@@ -235,6 +235,7 @@ pub(crate) async fn admin_editor_list_documents(
 }
 
 /// `POST /api/v1/admin/editor/workspaces/{id}/documents`
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn admin_editor_create_document(
     State(state): State<HttpState>,
     auth: AuthContext,
@@ -259,7 +260,9 @@ pub(crate) async fn admin_editor_create_document(
             Some("workspace_document"),
             None,
             "failure",
-            Some(&format!("admin failed to initialize workspace {workspace_id}: {e:?}")),
+            Some(&format!(
+                "admin failed to initialize workspace {workspace_id}: {e:?}"
+            )),
         );
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -366,15 +369,12 @@ pub(crate) async fn admin_editor_get_document(
                 .await
             {
                 Ok(bytes) => {
-                    let body = match String::from_utf8(bytes) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            return error_response(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "invalid_utf8",
-                                "document body is not valid UTF-8".to_owned(),
-                            );
-                        }
+                    let Ok(body) = String::from_utf8(bytes) else {
+                        return error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "invalid_utf8",
+                            "document body is not valid UTF-8".to_owned(),
+                        );
                     };
                     let response = EditorDocument {
                         id: document.id,
@@ -401,6 +401,7 @@ pub(crate) async fn admin_editor_get_document(
 }
 
 /// `PUT /api/v1/admin/editor/workspaces/{id}/documents/{document_id}`
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn admin_editor_update_document(
     State(state): State<HttpState>,
     auth: AuthContext,
@@ -426,7 +427,9 @@ pub(crate) async fn admin_editor_update_document(
             Some("workspace_document"),
             None,
             "failure",
-            Some(&format!("admin failed to initialize workspace {workspace_id}: {e:?}")),
+            Some(&format!(
+                "admin failed to initialize workspace {workspace_id}: {e:?}"
+            )),
         );
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,

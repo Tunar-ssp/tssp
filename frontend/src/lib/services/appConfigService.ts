@@ -66,13 +66,6 @@ export const globalCommands = [
     shortcut: '⌘,',
   },
   {
-    id: 'command-home',
-    label: 'Open launcher',
-    description: 'Return to the product home screen',
-    icon: Icons.Home,
-    shortcut: '⌘1',
-  },
-  {
     id: 'command-drive',
     label: 'Open drive',
     description: 'Access your cloud storage',

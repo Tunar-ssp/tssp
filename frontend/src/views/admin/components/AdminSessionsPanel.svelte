@@ -10,12 +10,12 @@
 
   let { sessions, isLoading = false }: Props = $props();
 
-  function formatTime(timestamp: string): string {
-    return new Date(timestamp).toLocaleString();
+  function formatTime(timestamp: number): string {
+    return new Date(timestamp * 1000).toLocaleString();
   }
 
-  function getStatusColor(status: string): string {
-    return status === 'active' ? 'var(--green)' : 'var(--muted)';
+  function getStatusColor(session: AdminSession): string {
+    return session.current ? 'var(--green)' : 'var(--muted)';
   }
 </script>
 
@@ -28,21 +28,19 @@
     </div>
   {:else}
     <div class="sessions-list">
-      {#each sessions as session (session.id)}
+      {#each sessions as session (session.token)}
         <Card>
           <div class="session-item">
             <div class="session-info">
-              <h4>{session.user_agent || 'Unknown Device'}</h4>
+              <h4>{session.user_name || 'Session'} ({session.token_preview})</h4>
               <p class="session-meta">
-                {#if session.ip_address}
-                  <span>{session.ip_address}</span>
-                {/if}
+                <span>{session.kind}</span>
                 <span>{formatTime(session.created_at)}</span>
               </p>
             </div>
             <div class="session-status">
-              <span class="status-dot" style="background-color: {getStatusColor(session.status)}"></span>
-              {session.status}
+              <span class="status-dot" style="background-color: {getStatusColor(session)}"></span>
+              {session.current ? 'Active' : 'Expired'}
             </div>
           </div>
         </Card>

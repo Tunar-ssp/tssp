@@ -269,6 +269,12 @@ impl AuthStore {
 }
 
 pub(crate) fn initialize_store_schema(connection: &Connection) -> Result<(), AuthStoreError> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) STRICT;",
+    )?;
     let applied: i64 = connection.query_row(
         "SELECT COUNT(*) FROM schema_migrations WHERE version = ?1",
         params![MIGRATION_VERSION],

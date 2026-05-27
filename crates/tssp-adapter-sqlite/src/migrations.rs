@@ -527,8 +527,8 @@ pub(crate) fn migrate_note_links_table(
     Ok(())
 }
 
-/// Removes body column from workspace_documents table (migration 20).
-/// Document content now lives on filesystem via WorkspaceFileService.
+/// Removes body column from `workspace_documents` table (migration 20).
+/// Document content now lives on filesystem via `WorkspaceFileService`.
 pub(crate) fn migrate_workspace_documents_remove_body(
     connection: &Connection,
 ) -> Result<(), SqliteRepositoryError> {

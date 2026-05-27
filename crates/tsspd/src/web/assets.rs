@@ -4,7 +4,7 @@ pub(crate) const INDEX_HTML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/web-v2/index.html"
 ));
-pub(crate) const SERVICE_WORKER: &str = r"const CACHE_VERSION = 'v2026-05-25-tssp';
+pub(crate) const SERVICE_WORKER: &str = r"const CACHE_VERSION = 'v2026-05-27-tssp';
 const CACHE_ASSETS = [
   '/app-v2',
   '/app-v2/index.html',
@@ -14,6 +14,7 @@ const CACHE_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => {
       return cache.addAll(CACHE_ASSETS);
@@ -27,14 +28,27 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests and exclude API/metrics
+  if (event.request.method !== 'GET' || 
+      event.request.url.includes('/api/') || 
+      event.request.url.includes('/metrics')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+      if (response) {
+        return response;
+      }
+      return fetch(event.request).catch(() => {
+        // Fallback for offline if needed, or just let it fail
+        return new Response('Network error occurred', { status: 503 });
+      });
     })
   );
 });

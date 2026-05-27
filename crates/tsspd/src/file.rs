@@ -109,21 +109,21 @@ fn generate_or_load_thumbnail(
     cache_path: &std::path::Path,
     max_px: u32,
 ) -> Result<Vec<u8>, String> {
+    const MAX_DIMENSION: u32 = 8192;
     if let Ok(bytes) = std::fs::read(cache_path) {
         return Ok(bytes);
     }
 
     let source_path = source_path.as_ref();
-    let reader = image::ImageReader::open(source_path)
-        .map_err(|e| format!("image open failed: {e}"))?;
-    let (width, height) = reader.into_dimensions()
+    let reader =
+        image::ImageReader::open(source_path).map_err(|e| format!("image open failed: {e}"))?;
+    let (width, height) = reader
+        .into_dimensions()
         .map_err(|e| format!("image dimension check failed: {e}"))?;
 
-    const MAX_DIMENSION: u32 = 8192;
     if width > MAX_DIMENSION || height > MAX_DIMENSION {
         return Err(format!(
-            "image resolution too large: {}×{} exceeds {}×{} limit (decompression bomb risk)",
-            width, height, MAX_DIMENSION, MAX_DIMENSION
+            "image resolution too large: {width}×{height} exceeds {MAX_DIMENSION}×{MAX_DIMENSION} limit (decompression bomb risk)"
         ));
     }
 

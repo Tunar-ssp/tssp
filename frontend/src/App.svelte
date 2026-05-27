@@ -142,14 +142,6 @@
       action: () => toggleSettingsTray(),
       shortcut: '⌘,',
     },
-    {
-      id: 'command-home',
-      label: 'Open launcher',
-      description: 'Return to the product home screen',
-      icon: Icons.Home,
-      action: () => navigateTo('home'),
-      shortcut: '⌘H',
-    },
   ];
 
   async function handleLogout() {
@@ -184,22 +176,24 @@
 {:else if !$user}
   <SignInView />
 {:else}
-  <div class="app" class:home-active={$currentView === 'home'}>
-    <TopBar
-      currentView={$currentView}
-      title={appMeta[$currentView]?.title || 'TSSP'}
-      crumbs={appMeta[$currentView]?.crumbs || ['TSSP']}
-      userName={$user.name}
-      role={$user.role}
-      dockMode={$dockMode}
-      onHome={() => navigateTo('home')}
-      onCommandPalette={toggleCommandPalette}
-      onUpload={() => uploadInput?.click()}
-      onSettings={toggleSettingsTray}
-      onLogout={handleLogout}
-    />
+    <div class="app" class:home-active={$currentView === 'home'}>
+    {#if !['notes', 'workspace'].includes($currentView)}
+      <TopBar
+        currentView={$currentView}
+        title={appMeta[$currentView]?.title || 'TSSP'}
+        crumbs={appMeta[$currentView]?.crumbs || ['TSSP']}
+        userName={$user.name}
+        role={$user.role}
+        dockMode={$dockMode}
+        onHome={() => navigateTo('home')}
+        onCommandPalette={toggleCommandPalette}
+        onUpload={() => uploadInput?.click()}
+        onSettings={toggleSettingsTray}
+        onLogout={handleLogout}
+      />
+    {/if}
 
-    <div class="shell">
+    <div class="shell" class:no-topbar={['notes', 'workspace'].includes($currentView)}>
       <main class="main">
         {#if $banner}
           <div class="banner {$banner.type}">
@@ -210,7 +204,7 @@
       </main>
     </div>
 
-    <Dock items={dockItems} activeId={$currentView} mode={$dockMode} />
+    <Dock items={dockItems} activeId={$currentView} mode={['notes', 'workspace'].includes($currentView) ? 'autohide' : $dockMode} />
     <UploadQueue />
     <CommandPalette
       {commands}
@@ -260,6 +254,10 @@
     flex: 1;
     display: flex;
     overflow: hidden;
+  }
+
+  .shell.no-topbar {
+    height: 100vh;
   }
 
   .main {

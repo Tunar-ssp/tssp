@@ -19,10 +19,12 @@ use crate::{ErrorBody, ErrorResponse, HttpState};
 
 /// Sniff MIME type from file magic bytes, overriding untrusted client-provided type.
 fn sniff_mime_type(path: &Path) -> Result<String, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("could not read file for MIME sniffing: {e}"))?;
-    let mime = infer::get(&bytes)
-        .map(|info| info.mime_type().to_string())
-        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let bytes =
+        std::fs::read(path).map_err(|e| format!("could not read file for MIME sniffing: {e}"))?;
+    let mime = infer::get(&bytes).map_or_else(
+        || "application/octet-stream".to_string(),
+        |info| info.mime_type().to_string(),
+    );
     Ok(mime)
 }
 
@@ -555,7 +557,7 @@ fn unknown_field(name: &str) -> HttpUploadError {
 #[allow(clippy::too_many_arguments)]
 fn finish_staged_upload(
     filename: Option<String>,
-    _mime_type: Option<String>,
+    mime_type: Option<String>,
     tags: Vec<String>,
     pinned: bool,
     folder_path: String,
@@ -579,7 +581,7 @@ fn finish_staged_upload(
         }
         _ => {
             // Fall back to client hint if sniffing failed or returned generic type
-            _mime_type.unwrap_or_else(|| "application/octet-stream".to_string())
+            mime_type.unwrap_or_else(|| "application/octet-stream".to_string())
         }
     };
 

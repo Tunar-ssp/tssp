@@ -22,18 +22,19 @@
   function getPreviewLens() {
     if (!file) return 'details';
     if (file.mime_type.startsWith('image/')) return 'image';
+    if (file.mime_type.startsWith('video/')) return 'video';
     if (isTextPreviewable(file)) return 'text';
     return 'details';
   }
 
-  let previewLens = $state<'image' | 'text' | 'details'>('details');
+  let previewLens = $state<'image' | 'video' | 'text' | 'details'>('details');
   let textPreview = $state('');
   let textLoading = $state(false);
   let textError = $state('');
 
   $effect(() => {
     if (isOpen && file) {
-      previewLens = getPreviewLens() as 'image' | 'text' | 'details';
+      previewLens = getPreviewLens() as 'image' | 'video' | 'text' | 'details';
     }
   });
 
@@ -44,8 +45,17 @@
   });
 
   function isTextPreviewable(target: any) {
-    return target?.mime_type?.startsWith('text/') || target?.mime_type === 'application/json';
+    return (
+      target?.mime_type?.startsWith('text/') ||
+      target?.mime_type === 'application/json' ||
+      target?.mime_type?.includes('javascript') ||
+      target?.mime_type?.includes('typescript') ||
+      target?.name?.endsWith('.md') ||
+      target?.name?.endsWith('.ts') ||
+      target?.name?.endsWith('.js')
+    );
   }
+
 
   async function loadTextPreview() {
     if (!file) return;
@@ -103,6 +113,16 @@
         <button
           type="button"
           class="lens-tab"
+          class:active={previewLens === 'video'}
+          disabled={!file.mime_type.startsWith('video/')}
+          onclick={() => (previewLens = 'video')}
+        >
+          <Icons.Video size={16} />
+          Video
+        </button>
+        <button
+          type="button"
+          class="lens-tab"
           class:active={previewLens === 'text'}
           disabled={!isTextPreviewable(file)}
           onclick={() => (previewLens = 'text')}
@@ -132,6 +152,17 @@
               }}
             />
           </div>
+        {:else if previewLens === 'video' && file.mime_type.startsWith('video/')}
+          <div class="preview-video">
+            <video
+              src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
+              controls
+              autoplay
+            >
+              <track kind="captions" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
         {:else if previewLens === 'text' && isTextPreviewable(file)}
           <div class="preview-text">
             {#if textLoading}
@@ -143,6 +174,7 @@
             {/if}
           </div>
         {:else}
+
           <div class="preview-details">
             <div class="detail-row">
               <span class="label">Name</span>
@@ -357,6 +389,21 @@
     max-width: 100%;
     max-height: 100%;
     border-radius: var(--r-2);
+  }
+
+  .preview-video {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: var(--s-6);
+    background: #000;
+  }
+
+  .preview-video video {
+    max-width: 100%;
+    max-height: 100%;
   }
 
   .preview-text {

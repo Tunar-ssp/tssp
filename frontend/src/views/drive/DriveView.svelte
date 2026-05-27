@@ -14,6 +14,7 @@
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import SharingModal from '$lib/components/SharingModal.svelte';
   import MoveFileDialog from './components/modals/MoveFileDialog.svelte';
+  import RenameFileDialog from './components/modals/RenameFileDialog.svelte';
   import DriveDetailsPanel from './components/panels/DriveDetailsPanel.svelte';
   import DriveHeader from './DriveHeader.svelte';
   import DriveSidebar from './DriveSidebar.svelte';
@@ -34,8 +35,11 @@
   let previewFile = $state<FileRecord | null>(null);
   let shareFile = $state<FileRecord | null>(null);
   let moveDialogFile = $state<FileRecord | null>(null);
+  let renameDialogFile = $state<FileRecord | null>(null);
   let isMoveDialogOpen = $state(false);
+  let isRenameDialogOpen = $state(false);
   let isMoving = $state(false);
+  let isRenaming = $state(false);
   let isLoading = $state(true);
   let isLoadingMore = $state(false);
   let trashLoading = $state(false);
@@ -84,10 +88,7 @@
         if (
           activeLens === 'documents' &&
           (file.mime_type.startsWith('image/') ||
-            file.mime_type.startsWith('video/') ||
-            file.mime_type.includes('javascript') ||
-            file.mime_type.includes('json') ||
-            file.mime_type.startsWith('text/'))
+            file.mime_type.startsWith('video/'))
         ) {
           return false;
         }
@@ -102,8 +103,8 @@
         );
       })
       .sort((left, right) => {
-        const leftScore = left.pinned_at ? 1_000_000_000_000 + left.pinned_at : left.updated_at || left.uploaded_at;
-        const rightScore = right.pinned_at ? 1_000_000_000_000 + right.pinned_at : right.updated_at || right.uploaded_at;
+        const leftScore = left.pinned_at ? 2_000_000_000 + left.pinned_at : left.updated_at || left.uploaded_at;
+        const rightScore = right.pinned_at ? 2_000_000_000 + right.pinned_at : right.updated_at || right.uploaded_at;
         return rightScore - leftScore;
       })
   );
@@ -228,6 +229,7 @@
     if (shareFile?.id === nextFile.id) shareFile = nextFile;
     if (previewFile?.id === nextFile.id) previewFile = nextFile;
     if (moveDialogFile?.id === nextFile.id) moveDialogFile = nextFile;
+    if (renameDialogFile?.id === nextFile.id) renameDialogFile = nextFile;
   }
 
   function downloadFile(file: FileRecord) {
@@ -242,11 +244,11 @@
     info('Refreshed', 'Drive state reloaded from the server');
   }
 
-  async function handleRename(file: FileRecord) {
-    const nextName = prompt('Rename file', file.name)?.trim();
+  async function handleRename(file: FileRecord, nextName: string) {
     if (!nextName || nextName === file.name) return;
 
     try {
+      isRenaming = true;
       const success_op = await driveStateManager.renameFile(file, nextName);
       if (success_op) {
         updateFileInState({ ...file, name: nextName });
@@ -254,6 +256,8 @@
       }
     } catch (cause) {
       error('Rename Failed', cause instanceof Error ? cause.message : 'Could not rename file');
+    } finally {
+      isRenaming = false;
     }
   }
 
@@ -261,14 +265,16 @@
     try {
       const success_op = await driveStateManager.togglePin(file);
       if (success_op) {
-        const updated = { ...file, pinned_at: file.pinned_at ? undefined : Math.floor(Date.now() / 1000), pinned: !file.pinned_at };
+        const nextPinState = !file.pinned_at;
+        const updated = { ...file, pinned_at: nextPinState ? Math.floor(Date.now() / 1000) : undefined };
         updateFileInState(updated);
-        success(file.pinned_at ? 'Unpinned' : 'Pinned', file.pinned_at ? `${file.name} moved out of pinned` : `${file.name} will stay at the top`);
+        success(nextPinState ? 'Pinned' : 'Unpinned', nextPinState ? `${file.name} will stay at the top` : `${file.name} moved out of pinned`);
       }
     } catch (cause) {
       error('Pin Failed', cause instanceof Error ? cause.message : 'Could not update pin state');
     }
   }
+
 
   async function handleDelete(file: FileRecord) {
     if (!confirm(`Move "${file.name}" to trash?`)) return;
@@ -417,7 +423,7 @@
       { icon: Icons.Download, label: 'Download', action: () => downloadFile(file) },
       { icon: Icons.Share2, label: file.visibility === 'public' ? 'Manage sharing' : 'Share', action: () => { selectedFile = file; shareFile = file; } },
       { icon: Icons.Pin, label: file.pinned_at ? 'Unpin' : 'Pin', action: () => handlePin(file) },
-      { icon: Icons.Pencil, label: 'Rename', action: () => handleRename(file) },
+      { icon: Icons.Pencil, label: 'Rename', action: () => { selectedFile = file; renameDialogFile = file; isRenameDialogOpen = true; } },
       { icon: Icons.FolderOpen, label: 'Move', action: () => { selectedFile = file; moveDialogFile = file; isMoveDialogOpen = true; } },
     ];
 
@@ -539,6 +545,17 @@
   isOpen={shareFile !== null}
   onClose={() => (shareFile = null)}
   onShare={handleShareChange}
+/>
+
+<RenameFileDialog
+  file={renameDialogFile}
+  isOpen={isRenameDialogOpen}
+  isRenaming={isRenaming}
+  onRename={handleRename}
+  onClose={() => {
+    isRenameDialogOpen = false;
+    renameDialogFile = null;
+  }}
 />
 
 <MoveFileDialog

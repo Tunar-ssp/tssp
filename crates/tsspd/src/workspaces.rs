@@ -110,7 +110,7 @@ pub(crate) struct WorkspaceSearchRecord {
 }
 
 /// Stored document within an admin-editable workspace.
-/// Document content is stored on filesystem via WorkspaceFileService, not in this record.
+/// Document content is stored on filesystem via `WorkspaceFileService`, not in this record.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct WorkspaceDocumentRecord {
     pub(crate) id: String,

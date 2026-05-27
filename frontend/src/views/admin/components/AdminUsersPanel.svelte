@@ -14,16 +14,7 @@
   let { users, isLoading = false, onReload }: Props = $props();
 
   async function revokeAccess(userId: string) {
-    if (!confirm('Revoke access for this user?')) return;
-
-    const result = await withLoadingState(
-      () => api.revokeUserAccess(userId),
-      { successMessage: 'Access revoked' }
-    );
-
-    if (result !== null) {
-      onReload?.();
-    }
+    alert('User management not implemented yet');
   }
 </script>
 
@@ -45,14 +36,8 @@
             </div>
             <div class="user-meta">
               <span class="created-date">
-                Created {new Date(user.created_at).toLocaleDateString()}
+                Created {new Date(user.created_at * 1000).toLocaleDateString()}
               </span>
-              {#if user.role !== 'admin'}
-                <button class="revoke-btn" onclick={() => revokeAccess(user.id)}>
-                  <Icons.Trash2 size={16} />
-                  Revoke
-                </button>
-              {/if}
             </div>
           </div>
         </Card>

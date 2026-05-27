@@ -668,14 +668,13 @@ pub async fn upload_chunk(
 /// Assembles chunks into a single temp file with hash computation.
 /// Returns (`temp_file_path`, `content_hash`, `file_size`) to enable `put_staged()` single-write.
 fn check_available_space(path: &StdPath, required_bytes: u64) -> Result<(), String> {
-    let stat = nix::sys::statvfs::statvfs(path)
-        .map_err(|e| format!("could not check disk space: {e}"))?;
-    let available = u64::from(stat.blocks_available()) * u64::from(stat.block_size());
+    let stat =
+        nix::sys::statvfs::statvfs(path).map_err(|e| format!("could not check disk space: {e}"))?;
+    let available = stat.blocks_available() * stat.block_size();
 
     if available < required_bytes {
         return Err(format!(
-            "insufficient storage: required {} bytes, available {} bytes",
-            required_bytes, available
+            "insufficient storage: required {required_bytes} bytes, available {available} bytes"
         ));
     }
     Ok(())
@@ -805,11 +804,7 @@ pub async fn complete_upload(
     // Check available disk space before assembling chunks
     if let Err(e) = check_available_space(&upload_temp_dir, session.total_size) {
         let _ = std::fs::remove_dir_all(&chunk_dir);
-        return error_response(
-            StatusCode::INSUFFICIENT_STORAGE,
-            "insufficient_storage",
-            &e,
-        );
+        return error_response(StatusCode::INSUFFICIENT_STORAGE, "insufficient_storage", &e);
     }
 
     // Assemble chunks into a single temp file with hash computation to avoid double-write

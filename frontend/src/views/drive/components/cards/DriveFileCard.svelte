@@ -37,18 +37,7 @@
 
   $effect(() => {
     if (isImageFile(file.mime_type) && layout === 'grid') {
-      generateImageThumbnail(
-        file.id,
-        `/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`,
-        'medium'
-      )
-        .then((url) => {
-          thumbnailUrl = url;
-        })
-        .catch((error) => {
-          console.warn('[DriveFileCard] Failed to generate thumbnail:', error);
-          thumbnailError = true;
-        });
+      thumbnailUrl = `/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`;
     }
   });
 </script>
@@ -68,9 +57,19 @@
     role="button"
     tabindex="0"
   >
-    <div class="card-thumbnail">
-      {#if thumbnailUrl && !thumbnailError}
-        <img src={thumbnailUrl} alt={file.name} class="thumbnail-image" />
+    <div class="card-thumbnail" class:is-image={isImageFile(file.mime_type)}>
+      {#if isImageFile(file.mime_type) && !thumbnailError}
+        <img 
+          src={thumbnailUrl} 
+          alt={file.name} 
+          class="thumbnail-image" 
+          loading="lazy"
+          onerror={() => thumbnailError = true}
+        />
+      {:else if file.mime_type.startsWith('video/')}
+        <div class="video-placeholder">
+          <Icons.Video size={32} />
+        </div>
       {:else}
         <FileIcon name={file.name} mimeType={file.mime_type} size={48} />
       {/if}
@@ -160,16 +159,31 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 80px;
+    height: 100px;
     background: var(--bg);
     border-radius: 6px;
     overflow: hidden;
+    position: relative;
+  }
+
+  .card-thumbnail.is-image {
+    background: #000;
+  }
+
+  .video-placeholder {
+    color: var(--blue);
+    opacity: 0.8;
   }
 
   .thumbnail-image {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transition: transform 0.3s;
+  }
+
+  .grid-card:hover .thumbnail-image {
+    transform: scale(1.05);
   }
 
   .card-info {

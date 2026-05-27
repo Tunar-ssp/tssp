@@ -9,6 +9,7 @@ export interface Notification {
 }
 
 export const notifications = writable<Notification[]>([]);
+const MAX_NOTIFICATIONS = 5;
 
 export function addNotification(
   type: Notification['type'],
@@ -19,7 +20,13 @@ export function addNotification(
   const id = Math.random().toString(36).substr(2, 9);
   const notification: Notification = { id, type, title, message, duration };
 
-  notifications.update(n => [...n, notification]);
+  notifications.update(n => {
+    const next = [...n, notification];
+    if (next.length > MAX_NOTIFICATIONS) {
+      return next.slice(next.length - MAX_NOTIFICATIONS);
+    }
+    return next;
+  });
 
   if (duration > 0) {
     setTimeout(() => {

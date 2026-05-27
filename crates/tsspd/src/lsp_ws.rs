@@ -132,8 +132,7 @@ async fn handle_lsp_ws(
                     }
                     None
                     | Some(Ok(axum::extract::ws::Message::Close(_)) | Err(_)) => break,
-                    Some(Ok(axum::extract::ws::Message::Pong(_))) => {} // pong response to our ping
-                    Some(Ok(_)) => {} // ignore other frames
+                    Some(Ok(axum::extract::ws::Message::Pong(_) | _)) => {} // ignore pong and other frames
                 }
             }
             // LSP → client: parse Content-Length framing and forward raw JSON.

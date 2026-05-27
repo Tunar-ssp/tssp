@@ -5,6 +5,35 @@ export interface ApiResponse<T> {
 
 export const BASE = '/api/v1';
 
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let err: any = {};
+    try {
+      err = text ? JSON.parse(text) : {};
+    } catch {
+      err = { error: text || `HTTP ${res.status}` };
+    }
+    throw new Error(
+      err?.error?.message || err?.error || `HTTP ${res.status}`
+    );
+  }
+
+  if (res.status === 204) {
+    return {} as T;
+  }
+
+  const text = await res.text();
+  if (!text) return {} as T;
+  
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error('Failed to parse JSON response:', text);
+    return {} as T;
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
     credentials: 'same-origin',
@@ -15,14 +44,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err?.error?.message || err?.error || `HTTP ${res.status}`
-    );
-  }
-
-  return res.json();
+  return handleResponse<T>(res);
 }
 
 export async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -35,14 +57,7 @@ export async function authRequest<T>(path: string, init?: RequestInit): Promise<
     ...init,
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err?.error?.message || err?.error || `HTTP ${res.status}`
-    );
-  }
-
-  return res.json();
+  return handleResponse<T>(res);
 }
 
 export async function devicesRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -55,14 +70,7 @@ export async function devicesRequest<T>(path: string, init?: RequestInit): Promi
     ...init,
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err?.error?.message || err?.error || `HTTP ${res.status}`
-    );
-  }
-
-  return res.json();
+  return handleResponse<T>(res);
 }
 
 export async function shareRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -75,14 +83,7 @@ export async function shareRequest<T>(path: string, init?: RequestInit): Promise
     ...init,
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err?.error?.message || err?.error || `HTTP ${res.status}`
-    );
-  }
-
-  return res.json();
+  return handleResponse<T>(res);
 }
 
 export async function rawRequest(path: string, init?: RequestInit): Promise<Response> {

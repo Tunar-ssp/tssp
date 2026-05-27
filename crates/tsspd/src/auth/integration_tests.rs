@@ -74,6 +74,27 @@ mod tests {
         assert_eq!(devices.cleanup_expired(1_000).expect("cleanup"), 0);
     }
 
+    #[test]
+    fn auth_initialization_succeeds_even_if_metadata_migrations_not_run() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = temp.path().join("repro.sqlite3");
+        let connection = rusqlite::Connection::open(&db).expect("open");
+
+        // This should now succeed because initialize_database ensures schema_migrations exists
+        crate::auth::initialize_database(&connection)
+            .expect("Initialization should succeed even if schema_migrations is missing initially");
+
+        // Verify that the table was created
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("Querying sqlite_master");
+        assert_eq!(count, 1, "schema_migrations table should have been created");
+    }
+
     async fn json_request(
         app: &axum::Router,
         method: &str,

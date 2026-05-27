@@ -10,10 +10,12 @@ use tssp_ports::{FileRepository, ListQuery};
 
 /// Counts indexed files whose content blob is missing on disk.
 ///
+/// Yields to the tokio runtime after each page to avoid blocking other tasks.
+///
 /// # Errors
 ///
 /// Returns an error when metadata cannot be read.
-pub fn count_missing_blobs(
+pub async fn count_missing_blobs(
     repository: &SqliteFileRepository,
     blob_store: &FilesystemBlobStore,
 ) -> Result<u64, String> {
@@ -42,6 +44,7 @@ pub fn count_missing_blobs(
             break;
         }
         cursor = page.next_cursor;
+        tokio::task::yield_now().await;
     }
     Ok(missing)
 }
@@ -60,11 +63,11 @@ fn blob_exists(storage_root: &Path, hash: &ContentHash) -> bool {
 }
 
 /// Runs integrity scan and logs summary.
-pub fn run_startup_integrity_scan(
+pub async fn run_startup_integrity_scan(
     repository: &SqliteFileRepository,
     blob_store: &FilesystemBlobStore,
 ) -> u64 {
-    match count_missing_blobs(repository, blob_store) {
+    match count_missing_blobs(repository, blob_store).await {
         Ok(missing) => {
             if missing > 0 {
                 tracing::warn!(missing, "integrity scan found files with missing blobs");
@@ -88,7 +91,7 @@ pub fn spawn_startup_integrity_scan(
 ) {
     tokio::spawn(async move {
         tracing::info!("integrity: starting background consistency scan");
-        match count_missing_blobs(&repository, &blob_store) {
+        match count_missing_blobs(&repository, &blob_store).await {
             Ok(missing) => {
                 counter.store(missing, std::sync::atomic::Ordering::Relaxed);
                 if missing > 0 {

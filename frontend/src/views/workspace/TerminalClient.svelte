@@ -69,12 +69,16 @@
         resizeObserver.observe(terminalElement);
       }
 
+    // Auto-connect
+    void connect();
+
     return () => {
       resizeObserver.disconnect();
       disconnect();
       terminal.dispose();
     };
   });
+
 
   onDestroy(() => {
     disconnect();
@@ -198,6 +202,7 @@
           {:else}
             <span class="status-dot disconnected"></span>
             Disconnected
+            <button type="button" onclick={connect} class="inline-connect-btn">Connect</button>
           {/if}
         </div>
         <div class="terminal-controls">
@@ -320,6 +325,21 @@
   .status-dot.disconnected {
     background: var(--muted);
     animation: none;
+  }
+
+  .inline-connect-btn {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .inline-connect-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   @keyframes pulse {
