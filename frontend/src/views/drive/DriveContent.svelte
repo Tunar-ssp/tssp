@@ -17,6 +17,7 @@
     clipboardOperation?: 'copy' | 'cut' | null;
     hasMore?: boolean;
     isLoadingMore?: boolean;
+    showThumbnails?: boolean;
     onSelectFile?: (file: FileRecord, event?: MouseEvent) => void;
     onPreviewFile?: (file: FileRecord) => void;
     onContextMenu?: (event: MouseEvent, file: FileRecord) => void;
@@ -42,6 +43,7 @@
     clipboardOperation = null,
     hasMore = false,
     isLoadingMore = false,
+    showThumbnails = true,
     onSelectFile = () => {},
     onPreviewFile = () => {},
     onContextMenu = () => {},
@@ -178,9 +180,9 @@
             }}
           >
             <div class="file-surface">
-              {#if file.name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)}
+              {#if showThumbnails && file.name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)}
                 <img src={`/api/v1/files/${encodeURIComponent(file.id)}/content`} alt={file.name} class="file-thumbnail" loading="lazy" />
-              {:else if file.name.match(/\.(mp4|webm|mov|mkv|avi|flv|wmv)$/i)}
+              {:else if showThumbnails && file.name.match(/\.(mp4|webm|mov|mkv|avi|flv|wmv)$/i)}
                 <div class="video-thumbnail">
                   <Icons.Play size={24} />
                 </div>
