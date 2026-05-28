@@ -39,6 +39,9 @@
     const folder = allFolders.find((f) => f.path === path);
     return folder?.file_count || 0;
   }
+
+  const TOTAL_STORAGE_BYTES = 1024 * 1024 * 1024 * 100; // 100GB
+  let storagePercentage = $derived(Math.min(100, (usedBytes / TOTAL_STORAGE_BYTES) * 100));
 </script>
 
 <aside class="drive-sidebar">
@@ -91,8 +94,14 @@
 
   <div class="sidebar-storage">
     <div class="group-label">Storage</div>
-    <strong>{formatBytes(usedBytes)}</strong>
-    <span>{totalObjects} tracked objects</span>
+    <div class="storage-bar">
+      <div class="storage-progress" style="width: {storagePercentage}%"></div>
+    </div>
+    <div class="storage-info">
+      <strong>{formatBytes(usedBytes)}</strong>
+      <span>{storagePercentage.toFixed(1)}% used</span>
+    </div>
+    <span class="storage-objects">{totalObjects} objects</span>
   </div>
 </aside>
 
@@ -185,6 +194,44 @@
 
   .sidebar-storage span {
     font-size: 12px;
+    color: var(--muted);
+  }
+
+  .storage-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 4px 0;
+  }
+
+  .storage-progress {
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--blue-hover));
+    transition: width 300ms ease-out;
+  }
+
+  .storage-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .storage-info strong {
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .storage-info span {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .storage-objects {
+    font-size: 11px;
     color: var(--muted);
   }
 

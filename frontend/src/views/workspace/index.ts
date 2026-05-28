@@ -10,7 +10,7 @@ export { default as WorkspaceSidebar } from './WorkspaceSidebar.svelte';
 export { default as WorkspaceHomepage } from './WorkspaceHomepage.svelte';
 
 // Panels
-export { default as WorkspaceExplorer } from './WorkspaceExplorer.svelte';
+export { default as WorkspaceFileExplorer } from './WorkspaceFileExplorer.svelte';
 export { default as FileInfoPanel } from './components/panels/FileInfoPanel.svelte';
 export { default as OutlinePanel } from './components/panels/OutlinePanel.svelte';
 export { default as EditorSettings } from './components/editors/EditorSettings.svelte';
@@ -25,7 +25,6 @@ export { default as KeyboardShortcuts } from './components/panels/KeyboardShortc
 export { default as SnippetLibrary } from './components/panels/SnippetLibrary.svelte';
 export { default as AutocompleteSuggestions } from './components/editors/AutocompleteSuggestions.svelte';
 export { default as BreadcrumbNav } from './BreadcrumbNav.svelte';
-export { default as EnhancedWorkspaceSidebar } from './EnhancedWorkspaceSidebar.svelte';
 
 // Services
 export type { SearchOptions } from '$lib/services/workspaceSearchService';

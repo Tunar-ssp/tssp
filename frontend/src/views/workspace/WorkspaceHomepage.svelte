@@ -36,10 +36,10 @@
   <header class="home-hero">
     <div>
       <div class="eyebrow">Workspace</div>
-      <h1>Local editor foundation</h1>
+      <h1>Code in your local cloud</h1>
       <p>
-        TSSP currently stores single-document workspaces. Nested trees, folder actions, and execution are intentionally
-        hidden until backend support exists.
+        Open a workspace to use the file tree explorer, Monaco editor, multi-file tabs, project-wide search,
+        and breadcrumb navigation. Terminals stay sandboxed until safe execution lands.
       </p>
     </div>
 

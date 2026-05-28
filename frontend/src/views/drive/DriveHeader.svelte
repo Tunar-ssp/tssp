@@ -10,9 +10,14 @@
     visibleCount?: number;
     pinnedCount?: number;
     publicCount?: number;
+    selectedCount?: number;
     usedBytes?: number;
+    imageCount?: number;
+    videoCount?: number;
+    documentCount?: number;
     onRefresh?: () => void;
     onUpload?: () => void;
+    onNewFolder?: () => void;
     onPurgeTrash?: () => void;
     trashEmpty?: boolean;
   }
@@ -26,9 +31,14 @@
     visibleCount = 0,
     pinnedCount = 0,
     publicCount = 0,
+    selectedCount = 0,
     usedBytes = 0,
+    imageCount = 0,
+    videoCount = 0,
+    documentCount = 0,
     onRefresh,
     onUpload,
+    onNewFolder,
     onPurgeTrash,
     trashEmpty = false,
   }: Props = $props();
@@ -72,6 +82,12 @@
         Purge expired
       </button>
     {:else}
+      {#if onNewFolder}
+        <button type="button" class="ghost-btn" onclick={onNewFolder} title="New folder">
+          <Icons.FolderPlus size={14} />
+          New folder
+        </button>
+      {/if}
       <button type="button" class="accent-btn" onclick={onUpload}>
         <Icons.Upload size={15} />
         Upload files
@@ -81,6 +97,12 @@
 </header>
 
 <div class="summary-grid">
+  {#if selectedCount > 0}
+    <article class="summary-card selected">
+      <span>Selected</span>
+      <strong>{selectedCount}</strong>
+    </article>
+  {/if}
   <article class="summary-card">
     <span>Objects</span>
     <strong>{fileCount}</strong>
@@ -89,6 +111,31 @@
     <span>Visible here</span>
     <strong>{visibleCount}</strong>
   </article>
+  {#if !isTrashView && (imageCount > 0 || videoCount > 0 || documentCount > 0)}
+    <article class="summary-card">
+      <span>File Types</span>
+      <div class="file-type-icons">
+        {#if imageCount > 0}
+          <span title="{imageCount} images">
+            <Icons.Image size={14} />
+            {imageCount}
+          </span>
+        {/if}
+        {#if videoCount > 0}
+          <span title="{videoCount} videos">
+            <Icons.Video size={14} />
+            {videoCount}
+          </span>
+        {/if}
+        {#if documentCount > 0}
+          <span title="{documentCount} documents">
+            <Icons.FileText size={14} />
+            {documentCount}
+          </span>
+        {/if}
+      </div>
+    </article>
+  {/if}
   <article class="summary-card">
     <span>Pinned</span>
     <strong>{pinnedCount}</strong>
@@ -214,6 +261,28 @@
   .summary-card strong {
     font-size: 20px;
     color: var(--text);
+  }
+
+  .summary-card.selected {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: var(--blue);
+  }
+
+  .file-type-icons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .file-type-icons span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--text);
+    padding: 2px 6px;
+    background: var(--surface);
+    border-radius: 3px;
   }
 
   @media (max-width: 1200px) {

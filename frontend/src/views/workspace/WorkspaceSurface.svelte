@@ -21,10 +21,12 @@
   import { renderMarkdownLite } from '$lib/utils/markdown';
   import { formatRelative, getWordCount, registerKeyboardShortcuts } from '$lib/utils';
   import { getWorkspaceCapabilities } from '$lib/services/workspaceService';
-  import type { WorkspaceCapabilities } from '$lib/api';
+  import { workspaceApi, type WorkspaceCapabilities } from '$lib/api';
   import { findMatches, replaceMatches } from '$lib/services/workspaceSearchService';
   import type { SearchOptions } from '$lib/services/workspaceSearchService';
   import WorkspaceSidebar from './WorkspaceSidebar.svelte';
+  import WorkspaceFileExplorer from './WorkspaceFileExplorer.svelte';
+  import WorkspaceSearch from './WorkspaceSearch.svelte';
   import WorkspaceEditorHeader from './components/editors/WorkspaceEditorHeader.svelte';
   import WorkspaceInspector from './WorkspaceInspector.svelte';
   import WorkspaceStageHead from './WorkspaceStageHead.svelte';
@@ -35,8 +37,10 @@
   let monacoLoading = $state(false);
 
   type InspectorTab = 'preview' | 'outline' | 'terminal';
+  type SidebarView = 'explorer' | 'search';
 
   let showSidebar = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('workspace-sidebar-open') ?? 'true') : true);
+  let sidebarView = $state<SidebarView>('explorer');
   let showBottomPanel = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('workspace-bottom-panel-open') ?? 'false') : false);
   let contextMenu = $state({ visible: false, x: 0, y: 0, workspace: null as any });
   let isLoading = $state(true);
@@ -52,10 +56,24 @@
   let capabilities = $state<WorkspaceCapabilities | null>(null);
   let matchCount = $state(0);
   let currentMatchIndex = $state(0);
+  let activeFilePath = $state<string | null>(null);
 
+  type FileTab = { id: string; path: string; label: string; isDirty?: boolean; language?: string };
   let openTabs: Array<{ id: string; label: string; isDirty?: boolean; language?: string }> = $state([]);
+  let openFileTabs = $state<FileTab[]>([]);
   let activeTabId: string | null = $state(null);
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function inferLanguage(path: string): string {
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    const map: Record<string, string> = {
+      ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+      py: 'python', rs: 'rust', go: 'go', md: 'markdown', html: 'html',
+      css: 'css', scss: 'css', sql: 'sql', json: 'json', yaml: 'yaml', yml: 'yaml',
+      sh: 'bash', toml: 'text', svelte: 'html', vue: 'html', txt: 'text',
+    };
+    return map[ext] ?? 'text';
+  }
 
   const languages = [
     { id: 'javascript', label: 'JavaScript', ext: '.js' },
@@ -84,10 +102,16 @@
   });
 
   const handleWorkspaceKeydown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
       showSidebar = !showSidebar;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      showSidebar = true;
+      sidebarView = 'search';
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
       showFindWidget = !showFindWidget;
     }
   };
@@ -131,6 +155,8 @@
         bodyDraft = $activeWorkspace.body;
         selectedLanguage = $activeWorkspace.language || 'text';
         isModified = false;
+        activeFilePath = null;
+        openFileTabs = [];
         syncOpenTabs();
         activeTabId = $activeWorkspace.id;
         loadCapabilities($activeWorkspace.id);
@@ -141,6 +167,8 @@
       bodyDraft = '';
       selectedLanguage = 'text';
       isModified = false;
+      activeFilePath = null;
+      openFileTabs = [];
       capabilities = null;
       lastActiveId = null;
     }
@@ -247,23 +275,35 @@
   function handleEditorInput(newValue: string) {
     bodyDraft = newValue;
     isModified = true;
-    syncOpenTabs();
+    if (activeFilePath) {
+      const tabId = `file:${activeFilePath}`;
+      openFileTabs = openFileTabs.map((t) => t.id === tabId ? { ...t, isDirty: true } : t);
+    } else {
+      syncOpenTabs();
+    }
     scheduleWorkspaceSave();
   }
 
   async function handleSaveWorkspace(showToast = true) {
     if (!$activeWorkspace) return;
     try {
-      await updateActiveWorkspace({
-        name: nameDraft,
-        body: bodyDraft,
-        language: selectedLanguage,
-      });
+      if (activeFilePath) {
+        await workspaceApi.writeWorkspaceFile($activeWorkspace.id, activeFilePath, bodyDraft);
+        const tabId = `file:${activeFilePath}`;
+        openFileTabs = openFileTabs.map((t) => t.id === tabId ? { ...t, isDirty: false } : t);
+        if (showToast) success('File Saved', activeFilePath);
+      } else {
+        await updateActiveWorkspace({
+          name: nameDraft,
+          body: bodyDraft,
+          language: selectedLanguage,
+        });
+        if (showToast) success('Workspace Saved', 'Changes were written to TSSP');
+        syncOpenTabs();
+      }
       isModified = false;
-      syncOpenTabs();
-      if (showToast) success('Workspace Saved', 'Changes were written to TSSP');
     } catch (err) {
-      error('Save Failed', err instanceof Error ? err.message : 'Failed to save workspace');
+      error('Save Failed', err instanceof Error ? err.message : 'Failed to save');
     }
   }
 
@@ -363,6 +403,53 @@
     }
   }
 
+  async function handleSelectFile(path: string) {
+    if (!$activeWorkspace) return;
+    try {
+      const { content } = await workspaceApi.readWorkspaceFile($activeWorkspace.id, path);
+      bodyDraft = content || '';
+      activeFilePath = path;
+      selectedLanguage = inferLanguage(path);
+      isModified = false;
+      const tabId = `file:${path}`;
+      if (!openFileTabs.find((t) => t.id === tabId)) {
+        openFileTabs = [...openFileTabs, {
+          id: tabId,
+          path,
+          label: path.split('/').pop() ?? path,
+          isDirty: false,
+          language: selectedLanguage,
+        }];
+      }
+      activeTabId = tabId;
+    } catch (err) {
+      error('Load File Failed', err instanceof Error ? err.message : 'Could not load file');
+    }
+  }
+
+  function handleFileTabSelect(id: string) {
+    const tab = openFileTabs.find((t) => t.id === id);
+    if (tab) void handleSelectFile(tab.path);
+  }
+
+  function handleFileTabClose(id: string) {
+    const tab = openFileTabs.find((t) => t.id === id);
+    openFileTabs = openFileTabs.filter((t) => t.id !== id);
+    if (tab && tab.path === activeFilePath) {
+      const next = openFileTabs[openFileTabs.length - 1];
+      if (next) {
+        void handleSelectFile(next.path);
+      } else {
+        activeFilePath = null;
+        activeTabId = $activeWorkspace?.id ?? null;
+        if ($activeWorkspace) {
+          bodyDraft = $activeWorkspace.body;
+          selectedLanguage = $activeWorkspace.language || 'text';
+        }
+      }
+    }
+  }
+
   function showContextMenu(event: MouseEvent, workspace: any) {
     event.preventDefault();
     event.stopPropagation();
@@ -397,11 +484,20 @@
 
 <div class:editor-mode={!!$activeWorkspace} class:home-mode={!$activeWorkspace} class:sidebar-hidden={!showSidebar} class:bottom-panel-open={showBottomPanel} class="workspace-view">
   <aside class="workspace-activity">
-    <button type="button" class="activity-btn" class:active={showSidebar} title="Explorer" onclick={() => showSidebar = !showSidebar}>
+    <button type="button" class="activity-btn" class:active={showSidebar && sidebarView === 'explorer'} title="Explorer (Ctrl+B)" onclick={() => {
+      if (showSidebar && sidebarView === 'explorer') showSidebar = false;
+      else { showSidebar = true; sidebarView = 'explorer'; }
+    }}>
       <Icons.Files size={20} />
     </button>
-    <button type="button" class="activity-btn" title="Find" onclick={() => (showFindWidget = true)}>
+    <button type="button" class="activity-btn" class:active={showSidebar && sidebarView === 'search'} title="Search in files (Ctrl+Shift+F)" onclick={() => {
+      if (showSidebar && sidebarView === 'search') showSidebar = false;
+      else { showSidebar = true; sidebarView = 'search'; }
+    }}>
       <Icons.Search size={20} />
+    </button>
+    <button type="button" class="activity-btn" title="Find/Replace in file (Ctrl+F)" onclick={() => (showFindWidget = true)}>
+      <Icons.Replace size={20} />
     </button>
     <button type="button" class="activity-btn" class:active={showBottomPanel && inspectorTab === 'terminal'} title="Terminal" onclick={() => { showBottomPanel = true; inspectorTab = 'terminal'; }}>
       <Icons.TerminalSquare size={20} />
@@ -413,16 +509,33 @@
   </aside>
 
   {#if showSidebar}
-    <WorkspaceSidebar
-      workspaces={filteredWorkspaces}
-      filterQuery={workspaceFilterQuery}
-      activeWorkspaceId={$activeWorkspace?.id ?? null}
-      {languageCount}
-      onFilterChange={(q) => (workspaceFilterQuery = q)}
-      onSelectWorkspace={handleSelectWorkspace}
-      onShowContextMenu={showContextMenu}
-      onCreateWorkspace={handleCreateWorkspace}
-    />
+    {#if $activeWorkspace}
+      {#if sidebarView === 'search'}
+        <WorkspaceSearch
+          workspaceId={$activeWorkspace.id}
+          onOpenMatch={(path) => void handleSelectFile(path)}
+        />
+      {:else}
+        <WorkspaceFileExplorer
+          workspaceId={$activeWorkspace.id}
+          {activeFilePath}
+          onSelectFile={(path) => {
+            void handleSelectFile(path);
+          }}
+        />
+      {/if}
+    {:else}
+      <WorkspaceSidebar
+        workspaces={filteredWorkspaces}
+        filterQuery={workspaceFilterQuery}
+        activeWorkspaceId={null}
+        {languageCount}
+        onFilterChange={(q) => (workspaceFilterQuery = q)}
+        onSelectWorkspace={handleSelectWorkspace}
+        onShowContextMenu={showContextMenu}
+        onCreateWorkspace={handleCreateWorkspace}
+      />
+    {/if}
   {/if}
 
   {#if !$activeWorkspace}
@@ -438,25 +551,36 @@
       <div class="stage-main">
         <div class="editor-column">
           <TabBar
-            tabs={openTabs}
+            tabs={openFileTabs.length > 0 ? openFileTabs : openTabs}
             activeTabId={activeTabId}
-            onSelectTab={handleTabSelect}
-            onCloseTab={handleTabClose}
+            onSelectTab={(id) => id.startsWith('file:') ? handleFileTabSelect(id) : handleTabSelect(id)}
+            onCloseTab={(id) => id.startsWith('file:') ? handleFileTabClose(id) : handleTabClose(id)}
           />
 
-          <WorkspaceEditorHeader
-            name={nameDraft}
-            selectedLanguage={selectedLanguage}
-            isSaving={$isSaving}
-            {languages}
-            onNameChange={(value) => {
-              nameDraft = value;
-              isModified = true;
-              syncOpenTabs();
-              scheduleWorkspaceSave();
-            }}
-            onLanguageChange={handleChangeLanguage}
-          />
+          {#if activeFilePath}
+            <div class="file-breadcrumb">
+              <Icons.FolderOpen size={13} />
+              {#each activeFilePath.split('/') as segment, i}
+                {#if i > 0}<Icons.ChevronRight size={12} />{/if}
+                <span class:last={i === activeFilePath.split('/').length - 1}>{segment}</span>
+              {/each}
+              {#if isModified}<span class="dirty-dot" title="Unsaved">●</span>{/if}
+            </div>
+          {:else}
+            <WorkspaceEditorHeader
+              name={nameDraft}
+              selectedLanguage={selectedLanguage}
+              isSaving={$isSaving}
+              {languages}
+              onNameChange={(value) => {
+                nameDraft = value;
+                isModified = true;
+                syncOpenTabs();
+                scheduleWorkspaceSave();
+              }}
+              onLanguageChange={handleChangeLanguage}
+            />
+          {/if}
 
           <div class="editor-shell">
             {#if isMarkdownFile}
@@ -634,6 +758,25 @@
     flex: 1;
     min-height: 0;
     background: #1e1e1e;
+  }
+
+  .file-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    background: rgba(14, 16, 22, 0.6);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-2);
+    flex-shrink: 0;
+  }
+  .file-breadcrumb span { color: var(--text-2); }
+  .file-breadcrumb span.last { color: var(--text); font-weight: 500; }
+  .file-breadcrumb .dirty-dot {
+    margin-left: 6px;
+    color: var(--orange);
+    font-size: 10px;
   }
 
   .inspector-side {

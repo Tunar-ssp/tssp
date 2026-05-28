@@ -60,6 +60,12 @@
         {/if}
       </p>
     </div>
+    {#if notes.length > 0}
+      <button type="button" class="new-note-btn" onclick={onCreateNote} title="New note (Ctrl+N)">
+        <Icons.Plus size={16} />
+        <span>New note</span>
+      </button>
+    {/if}
   </header>
 
   {#if isLoading}
@@ -205,6 +211,24 @@
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
+
+  .new-note-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--blue);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.18s;
+    flex-shrink: 0;
+  }
+  .new-note-btn:hover { filter: brightness(1.1); }
 
   .inline-action {
     margin-top: 12px;

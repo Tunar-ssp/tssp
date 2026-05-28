@@ -108,6 +108,7 @@ export async function duplicateNote(id: string) {
 }
 
 export async function toggleNotePin(id: string, currentlyPinned: boolean) {
+  const prevActive = get(activeNoteId);
   try {
     if (currentlyPinned) {
       await api.unpinNote(id);
@@ -115,7 +116,7 @@ export async function toggleNotePin(id: string, currentlyPinned: boolean) {
       await api.pinNote(id);
     }
     await loadNotes();
-    activeNoteId.set(id);
+    if (prevActive) activeNoteId.set(prevActive);
   } catch (err) {
     console.error('Failed to update note pin:', err);
     throw err;

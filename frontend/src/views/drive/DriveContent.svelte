@@ -147,12 +147,12 @@
       </div>
     {:else if displayFiles.length === 0}
       <div class="empty-panel">
-        <Icons.Cloud size={28} />
-        <strong>No files in this view</strong>
-        <p>Upload files or change the folder and lens filters.</p>
+        <Icons.UploadCloud size={36} />
+        <strong>Drop files here to upload</strong>
+        <p>Or use the button to browse — drag-and-drop works anywhere in Drive.</p>
         <button type="button" class="accent-btn" onclick={onUpload}>
           <Icons.Upload size={15} />
-          Upload into Drive
+          Choose files
         </button>
       </div>
     {:else if viewMode === 'grid'}

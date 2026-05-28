@@ -68,12 +68,24 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
       showSidebar = !showSidebar;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
+      e.preventDefault();
+      void handleCreateNote();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+      e.preventDefault();
+      showInspector = !showInspector;
+    }
   };
 
   $effect(() => {
     if (typeof window === 'undefined') return;
     const cleanup = registerKeyboardShortcuts(
-      [{ key: 'b', ctrl: true, handler: handleNotesKeydown }],
+      [
+        { key: 'b', ctrl: true, handler: handleNotesKeydown },
+        { key: 'n', ctrl: true, handler: handleNotesKeydown },
+        { key: 'i', ctrl: true, handler: handleNotesKeydown },
+      ],
       window
     );
     return cleanup;

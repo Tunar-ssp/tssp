@@ -9,6 +9,7 @@
     type VisibilityResponse,
   } from '$lib/api';
   import { driveStateManager } from '$lib/services/driveStateService';
+  import { uploadFiles, createFolder } from '$lib/services/driveService';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { isDriveFolder, createWorkspaceFromFolder } from '$lib/services/driveWorkspaceIntegration';
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
@@ -89,6 +90,59 @@
 
   let clipboardFileIds = $derived(clipboard.getItemIds());
   let clipboardOperation: 'copy' | 'cut' | null = $state(null);
+  let uploadInputEl = $state<HTMLInputElement | null>(null);
+  let isDraggingExternal = $state(false);
+  let dragDepth = 0;
+
+  async function handleUploadInputChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    try {
+      await uploadFiles(input.files, currentFolder);
+      success('Upload Started', `${input.files.length} file(s) queued`);
+    } catch (err) {
+      error('Upload Failed', err instanceof Error ? err.message : 'Could not upload');
+    } finally {
+      input.value = '';
+    }
+  }
+
+  function isFileDrag(e: DragEvent): boolean {
+    return !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  }
+
+  function onWindowDragEnter(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    dragDepth += 1;
+    isDraggingExternal = true;
+  }
+
+  function onWindowDragOver(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onWindowDragLeave(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) isDraggingExternal = false;
+  }
+
+  async function onWindowDrop(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    isDraggingExternal = false;
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    try {
+      await uploadFiles(files, currentFolder);
+      success('Upload Started', `${files.length} file(s) queued from drop`);
+    } catch (err) {
+      error('Upload Failed', err instanceof Error ? err.message : 'Could not upload');
+    }
+  }
 
   onMount(() => {
     const handleExternalRefresh = () => {
@@ -98,8 +152,17 @@
       }
     };
 
+    const handleUploadRequest = () => uploadInputEl?.click();
+
     if (typeof document !== 'undefined') {
       document.addEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
+      document.addEventListener('tssp:request-upload', handleUploadRequest as EventListener);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('dragenter', onWindowDragEnter);
+      window.addEventListener('dragover', onWindowDragOver);
+      window.addEventListener('dragleave', onWindowDragLeave);
+      window.addEventListener('drop', onWindowDrop);
     }
 
     void loadLibrary(true).then(() => consumeIntent());
@@ -107,6 +170,13 @@
     return () => {
       if (typeof document !== 'undefined') {
         document.removeEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
+        document.removeEventListener('tssp:request-upload', handleUploadRequest as EventListener);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('dragenter', onWindowDragEnter);
+        window.removeEventListener('dragover', onWindowDragOver);
+        window.removeEventListener('dragleave', onWindowDragLeave);
+        window.removeEventListener('drop', onWindowDrop);
       }
     };
   });
@@ -362,6 +432,18 @@
   function requestUpload() {
     if (typeof document !== 'undefined') {
       document.dispatchEvent(new CustomEvent('tssp:request-upload'));
+    }
+  }
+
+  async function handleNewFolder() {
+    const name = window.prompt('New folder name:', '');
+    if (!name?.trim()) return;
+    try {
+      await createFolder(name.trim(), currentFolder);
+      success('Folder Created', name.trim());
+      await loadLibrary(true);
+    } catch (err) {
+      error('Create Failed', err instanceof Error ? err.message : 'Could not create folder');
     }
   }
 
@@ -728,6 +810,24 @@
   ];
 </script>
 
+<input
+  bind:this={uploadInputEl}
+  type="file"
+  multiple
+  hidden
+  onchange={handleUploadInputChange}
+/>
+
+{#if isDraggingExternal}
+  <div class="drop-overlay" role="presentation">
+    <div class="drop-card">
+      <Icons.UploadCloud size={56} />
+      <strong>Drop files to upload</strong>
+      <span>{currentFolder ? `Target: ${currentFolder}` : 'Target: root'}</span>
+    </div>
+  </div>
+{/if}
+
 <div class="drive-shell">
   {#if sidebarOpen}
     <DriveSidebar
@@ -765,6 +865,7 @@
       {documentCount}
       onRefresh={handleRefresh}
       onUpload={requestUpload}
+      onNewFolder={handleNewFolder}
       onPurgeTrash={handlePurgeExpiredTrash}
       trashEmpty={trash.length === 0}
     />
@@ -968,6 +1069,34 @@
 />
 
 <style>
+  .drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: rgba(8, 12, 22, 0.78);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: fade-in 0.15s ease-out;
+  }
+  .drop-card {
+    border: 2px dashed var(--blue);
+    background: rgba(20, 28, 48, 0.88);
+    color: var(--text);
+    padding: 40px 56px;
+    border-radius: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .drop-card strong { font-size: 20px; }
+  .drop-card span { color: var(--muted); font-size: 13px; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
   .drive-shell {
     flex: 1;
     display: grid;

@@ -118,14 +118,17 @@
   }
 
   .editor-title {
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
     color: var(--text);
     background: transparent;
     border: none;
     outline: none;
     padding: 0;
-    margin: 0;
+    margin: 0 0 4px;
+    font-family: inherit;
   }
 
   .editor-title::placeholder {

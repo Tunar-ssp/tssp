@@ -221,6 +221,26 @@ class DriveStateManager {
     }
   }
 
+  async deleteFiles(fileIds: string[]): Promise<boolean> {
+    try {
+      const deleteResults = await Promise.allSettled(
+        fileIds.map(fileId => api.deleteFile(fileId))
+      );
+
+      const hasErrors = deleteResults.some(r => r.status === 'rejected');
+      if (hasErrors) {
+        this.errorStore.set('Some files could not be deleted');
+      }
+
+      this.filesStore.update(files => files.filter(f => !fileIds.includes(f.id)));
+      await this.loadLibrary(false);
+      return !hasErrors;
+    } catch (err) {
+      this.errorStore.set(err instanceof Error ? err.message : 'Failed to delete files');
+      return false;
+    }
+  }
+
   private updateFileInStore(updated: FileRecord): void {
     this.filesStore.update((files) =>
       files.map((f) => (f.id === updated.id ? updated : f))
