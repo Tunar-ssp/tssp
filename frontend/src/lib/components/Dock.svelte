@@ -2,6 +2,7 @@
   interface DockItem {
     id: string;
     label: string;
+    shortcut?: string;
     icon: any;
     action: () => void;
     badge?: number;
@@ -32,7 +33,10 @@
     {#each items as item (item.id)}
       {@const Icon = item.icon}
       <div class="dock-item-wrap">
-        <span class="dock-label">{item.label}</span>
+        <span class="dock-label">
+          {item.label}
+          {#if item.shortcut}<kbd class="dock-shortcut">{item.shortcut}</kbd>{/if}
+        </span>
         <button
           class="dock-item"
           class:active={activeId === item.id}
@@ -41,7 +45,7 @@
           onmouseenter={() => (hoveredId = item.id)}
           onmouseleave={() => (hoveredId = null)}
           onclick={item.action}
-          title={item.label}
+          title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
           aria-label={`Open ${item.label}`}
           aria-current={activeId === item.id ? 'page' : undefined}
         >
@@ -116,6 +120,20 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     transition: opacity var(--duration-normal) var(--ease-smooth), transform var(--duration-normal) var(--ease-smooth);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dock-shortcut {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.08);
+    color: var(--text-2);
+    border: 1px solid rgba(255,255,255,0.06);
+    text-transform: none;
+    letter-spacing: 0;
   }
 
   .dock-item {

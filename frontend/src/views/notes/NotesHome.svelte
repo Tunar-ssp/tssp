@@ -60,12 +60,6 @@
         {/if}
       </p>
     </div>
-    {#if notes.length > 0}
-      <button type="button" class="new-note-btn" onclick={onCreateNote} title="New note (Ctrl+N)">
-        <Icons.Plus size={16} />
-        <span>New note</span>
-      </button>
-    {/if}
   </header>
 
   {#if isLoading}

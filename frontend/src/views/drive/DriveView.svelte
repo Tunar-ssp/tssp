@@ -52,13 +52,9 @@
       .map(([tag]) => tag);
   });
 
-  let imageCount = $derived(files.filter(f => (f.mime_type || '').startsWith('image/')).length);
-  let videoCount = $derived(files.filter(f => (f.mime_type || '').startsWith('video/')).length);
-  let documentCount = $derived(files.filter(f => {
-    const mime = f.mime_type || '';
-    if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) return false;
-    return mime.startsWith('text/') || mime.startsWith('application/') || mime.includes('pdf') || mime.includes('word') || mime.includes('sheet') || mime.includes('presentation');
-  }).length);
+  let imageCount = $derived(files.filter(isImage).length);
+  let videoCount = $derived(files.filter(isVideo).length);
+  let documentCount = $derived(files.filter(isDocument).length);
   let previewFile = $state<FileRecord | null>(null);
   let shareFile = $state<FileRecord | null>(null);
   let moveDialogFile = $state<FileRecord | null>(null);
@@ -91,6 +87,7 @@
   let clipboardFileIds = $derived(clipboard.getItemIds());
   let clipboardOperation: 'copy' | 'cut' | null = $state(null);
   let uploadInputEl = $state<HTMLInputElement | null>(null);
+  let uploadFolderInputEl = $state<HTMLInputElement | null>(null);
   let isDraggingExternal = $state(false);
   let dragDepth = 0;
 
@@ -129,16 +126,72 @@
     if (dragDepth === 0) isDraggingExternal = false;
   }
 
+  async function traverseEntry(entry: any, basePath: string, out: File[]): Promise<void> {
+    if (entry.isFile) {
+      await new Promise<void>((resolve) => {
+        entry.file((file: File) => {
+          const rel = basePath ? `${basePath}/${file.name}` : file.name;
+          try {
+            Object.defineProperty(file, 'webkitRelativePath', { value: rel, configurable: true });
+          } catch { /* read-only in some browsers */ }
+          out.push(file);
+          resolve();
+        }, () => resolve());
+      });
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      await new Promise<void>((resolve) => {
+        const readBatch = () => {
+          reader.readEntries(async (entries: any[]) => {
+            if (entries.length === 0) { resolve(); return; }
+            const sub = basePath ? `${basePath}/${entry.name}` : entry.name;
+            for (const sub2 of entries) {
+              await traverseEntry(sub2, sub, out);
+            }
+            readBatch();
+          }, () => resolve());
+        };
+        readBatch();
+      });
+    }
+  }
+
   async function onWindowDrop(e: DragEvent) {
     if (!isFileDrag(e)) return;
     e.preventDefault();
     dragDepth = 0;
     isDraggingExternal = false;
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
+
+    const items = e.dataTransfer?.items;
+    let collected: File[] = [];
+    let usedDirs = false;
+
+    if (items && items.length > 0) {
+      const entries: any[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = (items[i] as any).webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
+      }
+      if (entries.some((en) => en.isDirectory)) {
+        usedDirs = true;
+        for (const en of entries) {
+          await traverseEntry(en, '', collected);
+        }
+      }
+    }
+
+    if (!usedDirs) {
+      const files = e.dataTransfer?.files;
+      if (files) collected = Array.from(files);
+    }
+
+    if (collected.length === 0) return;
+
     try {
-      await uploadFiles(files, currentFolder);
-      success('Upload Started', `${files.length} file(s) queued from drop`);
+      const dt = new DataTransfer();
+      collected.forEach((f) => dt.items.add(f));
+      await uploadFiles(dt.files, currentFolder);
+      success('Upload Started', `${collected.length} file(s) queued${usedDirs ? ' (folder structure preserved)' : ''}`);
     } catch (err) {
       error('Upload Failed', err instanceof Error ? err.message : 'Could not upload');
     }
@@ -280,29 +333,39 @@
 
   let isTrashView = $derived(activeLens === 'trash');
 
+  const IMG_EXT = new Set(['jpg','jpeg','png','gif','webp','svg','avif','bmp','ico','heic']);
+  const VID_EXT = new Set(['mp4','webm','mov','mkv','avi','m4v','ogv','flv','wmv']);
+  const AUD_EXT = new Set(['mp3','wav','ogg','flac','aac','m4a','opus']);
+  const DOC_EXT = new Set(['md','txt','pdf','doc','docx','xls','xlsx','ppt','pptx','csv','rtf','odt','ods','odp','json','xml','yml','yaml','log']);
+  function getExt(name: string): string {
+    return (name.split('.').pop() || '').toLowerCase();
+  }
+  function isImage(file: any) {
+    return (file.mime_type || '').startsWith('image/') || IMG_EXT.has(getExt(file.name));
+  }
+  function isVideo(file: any) {
+    return (file.mime_type || '').startsWith('video/') || VID_EXT.has(getExt(file.name));
+  }
+  function isAudio(file: any) {
+    return (file.mime_type || '').startsWith('audio/') || AUD_EXT.has(getExt(file.name));
+  }
+  function isDocument(file: any) {
+    if (isImage(file) || isVideo(file) || isAudio(file)) return false;
+    const ext = getExt(file.name);
+    if (DOC_EXT.has(ext)) return true;
+    const mime = file.mime_type || '';
+    return mime.startsWith('text/') || mime.includes('pdf') || mime.includes('word')
+      || mime.includes('sheet') || mime.includes('presentation') || mime === 'application/json';
+  }
+
   let filteredLibraryFiles = $derived.by(() =>
     files
       .filter((file) => {
         if (currentFolder && (file.folder_path || '') !== currentFolder) return false;
 
-        const mime = file.mime_type || '';
-        if (activeLens === 'images' && !mime.startsWith('image/')) return false;
-        if (activeLens === 'videos' && !mime.startsWith('video/')) return false;
-        if (activeLens === 'documents') {
-          if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) return false;
-          const isDocument =
-            mime.startsWith('text/') ||
-            mime.startsWith('application/') ||
-            mime.includes('pdf') ||
-            mime.includes('word') ||
-            mime.includes('sheet') ||
-            mime.includes('presentation') ||
-            mime.includes('json') ||
-            mime.includes('xml') ||
-            mime.includes('code') ||
-            ['.md', '.doc', '.docx', '.txt', '.pdf', '.xls', '.xlsx', '.ppt', '.pptx', '.csv'].some(ext => file.name.toLowerCase().endsWith(ext));
-          if (!isDocument) return false;
-        }
+        if (activeLens === 'images' && !isImage(file)) return false;
+        if (activeLens === 'videos' && !isVideo(file)) return false;
+        if (activeLens === 'documents' && !isDocument(file)) return false;
         if (activeLens === 'public' && file.visibility !== 'public') return false;
 
         if (activeTagFilter && !(file.tags || []).includes(activeTagFilter)) return false;
@@ -433,6 +496,10 @@
     if (typeof document !== 'undefined') {
       document.dispatchEvent(new CustomEvent('tssp:request-upload'));
     }
+  }
+
+  function requestFolderUpload() {
+    uploadFolderInputEl?.click();
   }
 
   async function handleNewFolder() {
@@ -817,6 +884,14 @@
   hidden
   onchange={handleUploadInputChange}
 />
+<input
+  bind:this={uploadFolderInputEl}
+  type="file"
+  multiple
+  hidden
+  onchange={handleUploadInputChange}
+  webkitdirectory
+/>
 
 {#if isDraggingExternal}
   <div class="drop-overlay" role="presentation">
@@ -844,13 +919,16 @@
         currentFolder = path;
         if (activeLens === 'trash') activeLens = 'all';
       }}
+      onClose={() => sidebarOpen = false}
     />
   {/if}
 
   <section class="drive-main" class:sidebar-closed={!sidebarOpen}>
-    <button class="sidebar-toggle" onclick={() => sidebarOpen = !sidebarOpen} title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}>
-      <Icons.Menu size={18} />
-    </button>
+    {#if !sidebarOpen}
+      <button class="sidebar-toggle" onclick={() => sidebarOpen = true} title="Show sidebar">
+        <Icons.PanelLeft size={16} />
+      </button>
+    {/if}
     <DriveHeader
       title={isTrashView ? 'Trash' : 'Cloud Drive'}
       {currentFolder}
@@ -865,6 +943,7 @@
       {documentCount}
       onRefresh={handleRefresh}
       onUpload={requestUpload}
+      onUploadFolder={requestFolderUpload}
       onNewFolder={handleNewFolder}
       onPurgeTrash={handlePurgeExpiredTrash}
       trashEmpty={trash.length === 0}
@@ -972,46 +1051,48 @@
       </div>
     {/if}
 
-    <DriveContent
-      files={filteredLibraryFiles}
-      trash={filteredTrash}
-      {isLoading}
-      {isTrashView}
-      {viewMode}
-      selectedFileId={selectedFile?.id}
-      {selectedFileIds}
-      clipboardFileIds={new Set(clipboardFileIds)}
-      {clipboardOperation}
-      {hasMore}
-      {isLoadingMore}
-      onSelectFile={selectFile}
-      onPreviewFile={openPreview}
-      onContextMenu={showContextMenu}
-      onLoadMore={() => loadLibrary(false)}
-      onRestore={handleRestore}
-      onDelete={handlePermanentDelete}
-      onPurgeTrash={handlePurgeExpiredTrash}
-      onUpload={requestUpload}
-      onDownload={downloadFile}
-      onCopy={handleQuickCopy}
-      onDropFiles={handleDropFiles}
-    />
-
-    {#if selectedFile && detailsPanelOpen}
-      <DriveDetailsPanel
-        file={selectedFile}
-        onToggleVisibility={handleToggleVisibility}
-        onShare={() => {
-          if (selectedFile) shareFile = selectedFile;
-        }}
-        onMove={() => {
-          if (selectedFile) {
-            moveDialogFile = selectedFile;
-            isMoveDialogOpen = true;
-          }
-        }}
+    <div class="drive-body">
+      <DriveContent
+        files={filteredLibraryFiles}
+        trash={filteredTrash}
+        {isLoading}
+        {isTrashView}
+        {viewMode}
+        selectedFileId={selectedFile?.id}
+        {selectedFileIds}
+        clipboardFileIds={new Set(clipboardFileIds)}
+        {clipboardOperation}
+        {hasMore}
+        {isLoadingMore}
+        onSelectFile={selectFile}
+        onPreviewFile={openPreview}
+        onContextMenu={showContextMenu}
+        onLoadMore={() => loadLibrary(false)}
+        onRestore={handleRestore}
+        onDelete={handlePermanentDelete}
+        onPurgeTrash={handlePurgeExpiredTrash}
+        onUpload={requestUpload}
+        onDownload={downloadFile}
+        onCopy={handleQuickCopy}
+        onDropFiles={handleDropFiles}
       />
-    {/if}
+
+      {#if selectedFile && detailsPanelOpen}
+        <DriveDetailsPanel
+          file={selectedFile}
+          onToggleVisibility={handleToggleVisibility}
+          onShare={() => {
+            if (selectedFile) shareFile = selectedFile;
+          }}
+          onMove={() => {
+            if (selectedFile) {
+              moveDialogFile = selectedFile;
+              isMoveDialogOpen = true;
+            }
+          }}
+        />
+      {/if}
+    </div>
   </section>
 </div>
 
@@ -1112,12 +1193,32 @@
     position: relative;
   }
 
+  .drive-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .drive-body :global(.drive-content) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .drive-body :global(.details-panel) {
+    width: 320px;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
   .sidebar-toggle {
     position: absolute;
-    top: 12px;
-    left: 12px;
-    width: 36px;
-    height: 36px;
+    top: 14px;
+    left: 14px;
+    z-index: 10;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 1px solid var(--border);
     background: var(--surface);
@@ -1234,26 +1335,26 @@
   }
 
   .bulk-actions-bar {
-    margin: 0 24px 12px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--blue-soft, rgba(59, 130, 246, 0.3));
-    background: rgba(59, 130, 246, 0.05);
+    margin: 0 24px 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(110, 168, 255, 0.25);
+    background: rgba(110, 168, 255, 0.06);
     display: flex;
-    gap: 16px;
+    gap: 12px;
     align-items: center;
     justify-content: space-between;
   }
 
   .bulk-info {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
   }
 
   .bulk-info strong {
     color: var(--text);
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .clear-selection {

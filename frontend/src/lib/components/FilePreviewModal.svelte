@@ -19,15 +19,41 @@
     class: className,
   }: $$Props = $props();
 
+  function fileExt(target: any): string {
+    return (target?.name?.split('.').pop() || '').toLowerCase();
+  }
+
+  const IMG = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico']);
+  const VID = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv']);
+  const AUD = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'opus']);
+  const PDF = new Set(['pdf']);
+  const TXT = new Set([
+    'txt', 'md', 'mdx', 'json', 'yaml', 'yml', 'toml', 'ini', 'env',
+    'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'java',
+    'kt', 'swift', 'rb', 'php', 'c', 'h', 'cpp', 'hpp', 'cs',
+    'html', 'htm', 'svelte', 'vue', 'css', 'scss', 'less',
+    'sh', 'bash', 'zsh', 'fish', 'sql', 'graphql', 'proto', 'log',
+  ]);
+
   function getPreviewLens() {
     if (!file) return 'details';
-    if (file.mime_type.startsWith('image/')) return 'image';
-    if (file.mime_type.startsWith('video/')) return 'video';
-    if (isTextPreviewable(file)) return 'text';
+    const ext = fileExt(file);
+    const mime = file.mime_type || '';
+    if (mime.startsWith('image/') || IMG.has(ext)) return 'image';
+    if (mime.startsWith('video/') || VID.has(ext)) return 'video';
+    if (mime.startsWith('audio/') || AUD.has(ext)) return 'audio';
+    if (mime === 'application/pdf' || PDF.has(ext)) return 'pdf';
+    if (TXT.has(ext) || mime.startsWith('text/') || mime === 'application/json') return 'text';
     return 'details';
   }
 
-  let previewLens = $state<'image' | 'video' | 'text' | 'details'>('details');
+  let previewLens = $state<'image' | 'video' | 'audio' | 'pdf' | 'text' | 'details'>('details');
+  let ext = $derived(fileExt(file));
+  let mime = $derived(file?.mime_type || '');
+  let isImg = $derived(mime.startsWith('image/') || IMG.has(ext));
+  let isVid = $derived(mime.startsWith('video/') || VID.has(ext));
+  let isAud = $derived(mime.startsWith('audio/') || AUD.has(ext));
+  let isPdf = $derived(mime === 'application/pdf' || PDF.has(ext));
   let textPreview = $state('');
   let textLoading = $state(false);
   let textError = $state('');
@@ -35,7 +61,7 @@
 
   $effect(() => {
     if (isOpen && file) {
-      previewLens = getPreviewLens() as 'image' | 'video' | 'text' | 'details';
+      previewLens = getPreviewLens() as 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'details';
     }
   });
 
@@ -46,14 +72,15 @@
   });
 
   function isTextPreviewable(target: any) {
+    if (!target) return false;
+    const ext = fileExt(target);
+    if (TXT.has(ext)) return true;
+    const mime = target.mime_type || '';
     return (
-      target?.mime_type?.startsWith('text/') ||
-      target?.mime_type === 'application/json' ||
-      target?.mime_type?.includes('javascript') ||
-      target?.mime_type?.includes('typescript') ||
-      target?.name?.endsWith('.md') ||
-      target?.name?.endsWith('.ts') ||
-      target?.name?.endsWith('.js')
+      mime.startsWith('text/') ||
+      mime === 'application/json' ||
+      mime.includes('javascript') ||
+      mime.includes('typescript')
     );
   }
 
@@ -101,49 +128,38 @@
       </div>
 
       <div class="preview-lenses">
-        <button
-          type="button"
-          class="lens-tab"
-          class:active={previewLens === 'image'}
-          disabled={!file.mime_type.startsWith('image/')}
-          onclick={() => (previewLens = 'image')}
-        >
-          <Icons.Image size={16} />
-          Image
-        </button>
-        <button
-          type="button"
-          class="lens-tab"
-          class:active={previewLens === 'video'}
-          disabled={!file.mime_type.startsWith('video/')}
-          onclick={() => (previewLens = 'video')}
-        >
-          <Icons.Video size={16} />
-          Video
-        </button>
-        <button
-          type="button"
-          class="lens-tab"
-          class:active={previewLens === 'text'}
-          disabled={!isTextPreviewable(file)}
-          onclick={() => (previewLens = 'text')}
-        >
-          <Icons.FileText size={16} />
-          Text
-        </button>
-        <button
-          type="button"
-          class="lens-tab"
-          class:active={previewLens === 'details'}
-          onclick={() => (previewLens = 'details')}
-        >
-          <Icons.Info size={16} />
-          Details
+        {#if isImg}
+          <button type="button" class="lens-tab" class:active={previewLens === 'image'} onclick={() => (previewLens = 'image')}>
+            <Icons.Image size={16} /> Image
+          </button>
+        {/if}
+        {#if isVid}
+          <button type="button" class="lens-tab" class:active={previewLens === 'video'} onclick={() => (previewLens = 'video')}>
+            <Icons.Video size={16} /> Video
+          </button>
+        {/if}
+        {#if isAud}
+          <button type="button" class="lens-tab" class:active={previewLens === 'audio'} onclick={() => (previewLens = 'audio')}>
+            <Icons.Music size={16} /> Audio
+          </button>
+        {/if}
+        {#if isPdf}
+          <button type="button" class="lens-tab" class:active={previewLens === 'pdf'} onclick={() => (previewLens = 'pdf')}>
+            <Icons.FileText size={16} /> PDF
+          </button>
+        {/if}
+        {#if isTextPreviewable(file)}
+          <button type="button" class="lens-tab" class:active={previewLens === 'text'} onclick={() => (previewLens = 'text')}>
+            <Icons.FileText size={16} /> Text
+          </button>
+        {/if}
+        <button type="button" class="lens-tab" class:active={previewLens === 'details'} onclick={() => (previewLens = 'details')}>
+          <Icons.Info size={16} /> Details
         </button>
       </div>
 
       <div class="preview-body">
-        {#if previewLens === 'image' && file.mime_type.startsWith('image/')}
+        {#if previewLens === 'image' && isImg}
           <div class="preview-image-container">
             <div class="preview-image-toolbar">
               <button onclick={() => { if (typeof imageZoom === 'number') imageZoom = Math.max(50, imageZoom - 10); }} title="Zoom out">−</button>
@@ -162,7 +178,7 @@
               />
             </div>
           </div>
-        {:else if previewLens === 'video' && file.mime_type.startsWith('video/')}
+        {:else if previewLens === 'video' && isVid}
           <div class="preview-video">
             <video
               src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
@@ -172,6 +188,23 @@
               <track kind="captions" />
               Your browser does not support the video tag.
             </video>
+          </div>
+        {:else if previewLens === 'audio' && isAud}
+          <div class="preview-audio">
+            <audio
+              src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
+              controls
+              autoplay
+            >
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        {:else if previewLens === 'pdf' && isPdf}
+          <div class="preview-pdf">
+            <iframe
+              src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
+              title={file.name}
+            ></iframe>
           </div>
         {:else if previewLens === 'text' && isTextPreviewable(file)}
           <div class="preview-text">
@@ -458,6 +491,27 @@
   .preview-video video {
     max-width: 100%;
     max-height: 100%;
+  }
+
+  .preview-audio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 40px;
+  }
+  .preview-audio audio { width: min(640px, 90%); }
+
+  .preview-pdf {
+    width: 100%;
+    height: 100%;
+  }
+  .preview-pdf iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
   }
 
   .preview-text {

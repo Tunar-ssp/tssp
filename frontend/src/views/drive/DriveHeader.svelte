@@ -17,6 +17,7 @@
     documentCount?: number;
     onRefresh?: () => void;
     onUpload?: () => void;
+    onUploadFolder?: () => void;
     onNewFolder?: () => void;
     onPurgeTrash?: () => void;
     trashEmpty?: boolean;
@@ -38,6 +39,7 @@
     documentCount = 0,
     onRefresh,
     onUpload,
+    onUploadFolder,
     onNewFolder,
     onPurgeTrash,
     trashEmpty = false,
@@ -86,6 +88,12 @@
         <button type="button" class="ghost-btn" onclick={onNewFolder} title="New folder">
           <Icons.FolderPlus size={14} />
           New folder
+        </button>
+      {/if}
+      {#if onUploadFolder}
+        <button type="button" class="ghost-btn" onclick={onUploadFolder} title="Upload an entire folder">
+          <Icons.FolderUp size={14} />
+          Upload folder
         </button>
       {/if}
       <button type="button" class="accent-btn" onclick={onUpload}>

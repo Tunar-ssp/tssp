@@ -9,13 +9,13 @@ export interface Notification {
 }
 
 export const notifications = writable<Notification[]>([]);
-const MAX_NOTIFICATIONS = 5;
+const MAX_NOTIFICATIONS = 3;
 
 export function addNotification(
   type: Notification['type'],
   title: string,
   message: string,
-  duration: number = 4000
+  duration: number = 3000
 ) {
   const id = Math.random().toString(36).substr(2, 9);
   const notification: Notification = { id, type, title, message, duration };
@@ -44,7 +44,7 @@ export function removeNotification(id: string) {
 export function success(titleOrMessage: string, message?: string) {
   const title = message ? titleOrMessage : 'Success';
   const msg = message || titleOrMessage;
-  return addNotification('success', title, msg);
+  return addNotification('success', title, msg, 2000);
 }
 
 export function error(titleOrMessage: string, message?: string) {

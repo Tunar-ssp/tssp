@@ -8,11 +8,10 @@
     onPin: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
-    onSlashMenu: (event: MouseEvent) => void;
     onToggleInspector?: () => void;
   }
 
-  let { note, isSaving, showInspector = false, onPin, onDuplicate, onDelete, onSlashMenu, onToggleInspector }: $$Props = $props();
+  let { note, isSaving, showInspector = false, onPin, onDuplicate, onDelete, onToggleInspector }: $$Props = $props();
 </script>
 
 <header class="stage-header">
@@ -34,10 +33,6 @@
     <button type="button" class="action-btn" onclick={onPin}>
       <Icons.Pin size={14} />
       {note.pinned_at ? 'Pinned' : 'Pin'}
-    </button>
-    <button type="button" class="action-btn" onclick={onSlashMenu}>
-      <Icons.Sparkles size={14} />
-      Slash blocks
     </button>
     {#if onToggleInspector}
       <button type="button" class="action-btn" class:active={showInspector} onclick={onToggleInspector} title="Toggle details panel">

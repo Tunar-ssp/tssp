@@ -9,6 +9,7 @@
     onCollectionChange: (filter: 'all' | 'pinned' | 'recent') => void;
     onTagChange: (tag: string | null) => void;
     onCreateNote: () => void;
+    onClose?: () => void;
   }
 
   let {
@@ -19,6 +20,7 @@
     onCollectionChange,
     onTagChange,
     onCreateNote,
+    onClose,
   }: $$Props = $props();
 
   const pinnedCount = $derived(notes.filter((n) => n.pinned_at).length);
@@ -26,8 +28,19 @@
 </script>
 
 <aside class="notes-sidebar">
-  <button type="button" class="new-note-btn" onclick={onCreateNote}>
-    <Icons.Plus size={20} />
+  <div class="sb-head">
+    <div class="sb-title">
+      <Icons.BookText size={16} />
+      <span>Notes</span>
+    </div>
+    {#if onClose}
+      <button type="button" class="sb-close" onclick={onClose} title="Hide sidebar (Ctrl+B)">
+        <Icons.PanelLeftClose size={16} />
+      </button>
+    {/if}
+  </div>
+  <button type="button" class="new-note-btn" onclick={onCreateNote} title="New note (Ctrl+N)">
+    <Icons.Plus size={16} />
     <span>New note</span>
   </button>
 
@@ -108,29 +121,64 @@
 
 <style>
   .notes-sidebar {
-    padding: 22px 20px;
+    padding: 14px 14px 18px;
     border-right: 1px solid var(--border);
     background: rgba(17, 19, 25, 0.9);
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 14px;
+    overflow-y: auto;
   }
 
-  .new-note-btn {
-    min-height: 84px;
-    border-radius: 24px;
-    border: 1px solid rgba(110, 168, 255, 0.28);
-    background: linear-gradient(180deg, rgba(110, 168, 255, 0.96), rgba(95, 149, 233, 0.96));
-    color: #06101f;
-    font-size: 18px;
-    font-weight: 700;
+  .sb-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .sb-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .sb-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-2);
+    border-radius: 6px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 14px;
-    cursor: pointer;
-    box-shadow: 0 18px 40px rgba(22, 41, 73, 0.35);
   }
+  .sb-close:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .new-note-btn {
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(110, 168, 255, 0.28);
+    background: linear-gradient(180deg, rgba(110, 168, 255, 0.96), rgba(95, 149, 233, 0.96));
+    color: #06101f;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: filter 0.18s;
+  }
+  .new-note-btn:hover { filter: brightness(1.07); }
 
   .sidebar-section {
     display: flex;
@@ -150,17 +198,18 @@
   }
 
   .sidebar-item {
-    min-height: 52px;
-    padding: 0 16px;
+    min-height: 36px;
+    padding: 0 12px;
     border: 1px solid transparent;
-    border-radius: 18px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-2);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     text-align: left;
     cursor: pointer;
+    font-size: 13px;
   }
 
   .sidebar-item small {
@@ -207,15 +256,15 @@
   }
 
   .stats-grid div {
-    padding: 14px;
-    border-radius: 18px;
+    padding: 8px 10px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     background: rgba(20, 23, 31, 0.92);
   }
 
   .stats-grid strong {
     display: block;
-    font-size: 20px;
+    font-size: 15px;
     color: var(--text);
   }
 

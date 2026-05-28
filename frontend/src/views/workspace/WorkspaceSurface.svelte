@@ -27,9 +27,9 @@
   import WorkspaceSidebar from './WorkspaceSidebar.svelte';
   import WorkspaceFileExplorer from './WorkspaceFileExplorer.svelte';
   import WorkspaceSearch from './WorkspaceSearch.svelte';
+  import WorkspaceQuickOpen from './WorkspaceQuickOpen.svelte';
   import WorkspaceEditorHeader from './components/editors/WorkspaceEditorHeader.svelte';
   import WorkspaceInspector from './WorkspaceInspector.svelte';
-  import WorkspaceStageHead from './WorkspaceStageHead.svelte';
   import WorkspaceHomepage from './WorkspaceHomepage.svelte';
 
   // Lazy load Monaco Editor to reduce initial bundle size
@@ -57,6 +57,7 @@
   let matchCount = $state(0);
   let currentMatchIndex = $state(0);
   let activeFilePath = $state<string | null>(null);
+  let showQuickOpen = $state(false);
 
   type FileTab = { id: string; path: string; label: string; isDirty?: boolean; language?: string };
   let openTabs: Array<{ id: string; label: string; isDirty?: boolean; language?: string }> = $state([]);
@@ -114,6 +115,10 @@
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
       showFindWidget = !showFindWidget;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' && $activeWorkspace) {
+      e.preventDefault();
+      showQuickOpen = true;
+    }
   };
 
   $effect(() => {
@@ -122,6 +127,7 @@
       [
         { key: 'b', ctrl: true, handler: handleWorkspaceKeydown },
         { key: 'f', ctrl: true, handler: handleWorkspaceKeydown },
+        { key: 'p', ctrl: true, handler: handleWorkspaceKeydown },
       ],
       document
     );
@@ -393,11 +399,14 @@
   }
 
   async function handleCreateWorkspace() {
+    const name = window.prompt('Workspace name:', '')?.trim();
+    if (!name) return;
     try {
       const workspace = await createNewWorkspace();
+      await updateActiveWorkspace({ name });
       setActiveWorkspace(workspace.id);
       activeTabId = workspace.id;
-      success('Workspace Created', 'A new workspace is ready');
+      success('Workspace Created', name);
     } catch (err) {
       error('Create Failed', err instanceof Error ? err.message : 'Failed to create workspace');
     }
@@ -677,6 +686,15 @@
     {matchCount}
     currentMatchIndex={currentMatchIndex}
   />
+
+  {#if $activeWorkspace}
+    <WorkspaceQuickOpen
+      workspaceId={$activeWorkspace.id}
+      isOpen={showQuickOpen}
+      onClose={() => showQuickOpen = false}
+      onOpen={(path) => void handleSelectFile(path)}
+    />
+  {/if}
 </div>
 
 <ContextMenu

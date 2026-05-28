@@ -24,8 +24,8 @@
         <div class="notification-message">{notif.message}</div>
       </div>
 
-      <button class="notification-close" on:click={() => removeNotification(notif.id)}>
-        <Icons.X size={16} />
+      <button class="notification-close" onclick={() => removeNotification(notif.id)} aria-label="Dismiss">
+        <Icons.X size={14} />
       </button>
     </div>
   {/each}

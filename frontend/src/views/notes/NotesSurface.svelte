@@ -15,7 +15,6 @@
     isSaving,
   } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
-  import SlashMenu from '$lib/components/SlashMenu.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { estimateBlockCount, renderMarkdownLite } from '$lib/utils/markdown';
@@ -45,8 +44,6 @@
   let inspectorTab = $state<InspectorTab>('preview');
   let homeLayout = $state<HomeLayout>('grid');
   let activeTag = $state<string | null>(null);
-  let showSlashMenu = $state(false);
-  let slashMenuPos = $state({ x: 0, y: 0 });
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let isCreating = $state(false);
 
@@ -55,10 +52,6 @@
     const intent = consumeSelectionIntent();
     if (intent?.kind === 'note') {
       setActiveNote(intent.id);
-    }
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('insert', handleInsertSnippet as EventListener);
     }
 
     isLoading = false;
@@ -93,9 +86,6 @@
 
   onDestroy(() => {
     if (saveTimer) clearTimeout(saveTimer);
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('insert', handleInsertSnippet as EventListener);
-    }
   });
 
   // Persist sidebar state
@@ -175,15 +165,6 @@
   let previewHtml = $derived(renderMarkdownLite(bodyDraft));
   let blockCount = $derived(estimateBlockCount(bodyDraft));
   let totalWords = $derived(getWordCount(bodyDraft));
-
-  function handleInsertSnippet(event: Event) {
-    const snippet = (event as CustomEvent<{ text?: string }>).detail?.text;
-    if (!$activeNote || !snippet) return;
-    bodyDraft = bodyDraft.trim().length ? `${bodyDraft.trimEnd()}\n\n${snippet}` : snippet;
-    showSlashMenu = false;
-    scheduleSave();
-    inspectorTab = 'preview';
-  }
 
   async function handleCreateNote() {
     if (isCreating) return;
@@ -299,12 +280,6 @@
     };
   }
 
-  function openSlashMenu(event: MouseEvent) {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    slashMenuPos = { x: rect.left, y: rect.bottom + 10 };
-    showSlashMenu = true;
-  }
-
   function getContextItems(note: any) {
     return [
       { label: note.pinned_at ? 'Unpin' : 'Pin', action: () => handlePinNote(note) },
@@ -333,17 +308,19 @@
       onCollectionChange={(f) => (collectionFilter = f)}
       onTagChange={(t) => (activeTag = t)}
       onCreateNote={handleCreateNote}
+      onClose={() => showSidebar = false}
     />
   {/if}
 
-  <button 
-    class="sidebar-toggle" 
-    class:sidebar-hidden={!showSidebar}
-    onclick={() => showSidebar = !showSidebar}
-    title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
-  >
-    <Icons.PanelLeft size={18} />
-  </button>
+  {#if !showSidebar}
+    <button
+      class="sidebar-toggle"
+      onclick={() => showSidebar = true}
+      title="Show sidebar (Ctrl+B)"
+    >
+      <Icons.PanelLeft size={16} />
+    </button>
+  {/if}
 
   {#if !$activeNote}
     <NotesHome
@@ -390,7 +367,6 @@
         onPin={() => handlePinNote($activeNote)}
         onDuplicate={() => handleDuplicateNote($activeNote.id)}
         onDelete={() => handleDeleteNote($activeNote.id)}
-        onSlashMenu={openSlashMenu}
         onToggleInspector={() => showInspector = !showInspector}
       />
 
@@ -435,13 +411,6 @@
       </div>
     </section>
   {/if}
-
-  <SlashMenu
-    isOpen={showSlashMenu}
-    x={slashMenuPos.x}
-    y={slashMenuPos.y}
-    onClose={() => (showSlashMenu = false)}
-  />
 </div>
 
 <ContextMenu
@@ -460,10 +429,11 @@
     background: #090a0f;
     position: relative;
     overflow: hidden;
+    min-width: 0;
   }
 
   .notes-view.home-mode {
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
   }
 
   .notes-view.home-mode.sidebar-hidden {
@@ -471,11 +441,23 @@
   }
 
   .notes-view.editor-mode {
-    grid-template-columns: 280px 320px minmax(0, 1fr);
+    grid-template-columns: 260px 280px minmax(0, 1fr);
   }
 
   .notes-view.editor-mode.sidebar-hidden {
-    grid-template-columns: 0px 320px minmax(0, 1fr);
+    grid-template-columns: 0px 280px minmax(0, 1fr);
+  }
+
+  @media (max-width: 1280px) {
+    .notes-view.editor-mode {
+      grid-template-columns: 240px minmax(0, 1fr);
+    }
+    .notes-view.editor-mode.sidebar-hidden {
+      grid-template-columns: 0px minmax(0, 1fr);
+    }
+    .notes-view.editor-mode :global(.notes-rail) {
+      display: none;
+    }
   }
 
   .sidebar-toggle {
@@ -589,8 +571,11 @@
     }
   }
 
-  @media (max-width: 800px) {
-    .notes-view.editor-mode {
+  @media (max-width: 900px) {
+    .notes-view.home-mode,
+    .notes-view.home-mode.sidebar-hidden,
+    .notes-view.editor-mode,
+    .notes-view.editor-mode.sidebar-hidden {
       grid-template-columns: 1fr;
     }
     .notes-rail {

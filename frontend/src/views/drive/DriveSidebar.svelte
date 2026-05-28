@@ -20,6 +20,7 @@
     totalObjects?: number;
     onLensChange?: (lens: any) => void;
     onFolderChange?: (path: string) => void;
+    onClose?: () => void;
   }
 
   let {
@@ -33,6 +34,7 @@
     totalObjects = 0,
     onLensChange,
     onFolderChange,
+    onClose,
   }: Props = $props();
 
   function folderCount(path: string, allFolders: FolderEntry[]): number {
@@ -45,6 +47,13 @@
 </script>
 
 <aside class="drive-sidebar">
+  {#if onClose}
+    <div class="sidebar-top">
+      <button type="button" class="sb-close" onclick={onClose} title="Hide sidebar (Ctrl+B)">
+        <Icons.PanelLeftClose size={16} />
+      </button>
+    </div>
+  {/if}
   <div class="sidebar-group filters">
     <div class="group-label">Filters</div>
     {#each filters as filter (filter.id)}
@@ -107,14 +116,38 @@
 
 <style>
   .drive-sidebar {
-    width: 200px;
+    width: 240px;
     background: var(--surface);
     border-right: 1px solid var(--border);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 16px 0;
+    padding: 0 0 16px;
     flex-shrink: 0;
+  }
+
+  .sidebar-top {
+    padding: 8px 12px;
+    display: flex;
+    justify-content: flex-end;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+  .sb-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-2);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sb-close:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    border-color: var(--border);
   }
 
   .sidebar-group {

@@ -308,7 +308,15 @@ export const uploadQueue = {
     const newItems: UploadQueueItem[] = [];
 
     for (const file of Array.from(files)) {
-      const item = createUploadQueueItem(file, folder);
+      const rel = (file as any).webkitRelativePath as string | undefined;
+      let targetFolder = folder;
+      if (rel && rel.includes('/')) {
+        const parts = rel.split('/');
+        parts.pop();
+        const sub = parts.join('/');
+        targetFolder = folder ? `${folder}/${sub}` : sub;
+      }
+      const item = createUploadQueueItem(file, targetFolder);
       fileMap.set(item.id, file);
       newItems.push(item);
       await saveItemToDb(item).catch((err) => {
