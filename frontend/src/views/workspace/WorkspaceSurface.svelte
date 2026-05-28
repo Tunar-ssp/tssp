@@ -175,7 +175,7 @@
   }
 
   $effect(() => {
-    if (!isMarkdownFile && !$activeWorkspace?.id) {
+    if (!isMarkdownFile && $activeWorkspace?.id) {
       void loadMonacoEditor();
     }
   });

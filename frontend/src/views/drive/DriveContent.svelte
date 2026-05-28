@@ -25,6 +25,9 @@
     onDelete?: (file: FileRecord) => void;
     onPurgeTrash?: () => void;
     onUpload?: () => void;
+    onDownload?: (file: FileRecord) => void;
+    onCopy?: (file: FileRecord) => void;
+    onDropFiles?: (fileIds: string[], targetFileId: string) => Promise<void>;
   }
 
   let {
@@ -47,9 +50,80 @@
     onDelete = () => {},
     onPurgeTrash = () => {},
     onUpload = () => {},
+    onDownload = () => {},
+    onCopy = () => {},
+    onDropFiles = async (fileIds: string[], targetFileId: string) => {},
   }: Props = $props();
 
   let displayFiles = $derived(isTrashView ? trash : files);
+  let draggedOverFile = $state<string | null>(null);
+  let renamingFileId = $state<string | null>(null);
+  let renameValue = $state<string>('');
+
+  interface OnDragEvent extends DragEvent {
+    dataTransfer: DataTransfer | null;
+  }
+
+  function startRename(file: FileRecord) {
+    renamingFileId = file.id;
+    renameValue = file.name;
+  }
+
+  function finishRename(file: FileRecord) {
+    if (renameValue && renameValue !== file.name) {
+      // This would trigger the rename callback
+      // For now we'll just close the rename mode
+    }
+    renamingFileId = null;
+    renameValue = '';
+  }
+
+  function handleRenameKeydown(e: KeyboardEvent, file: FileRecord) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finishRename(file);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      renamingFileId = null;
+      renameValue = '';
+    }
+  }
+
+  function handleDragStart(e: DragEvent, file: FileRecord) {
+    if (!e.dataTransfer) return;
+    const filesToDrag = selectedFileIds.has(file.id) ? Array.from(selectedFileIds) : [file.id];
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/json', JSON.stringify({ fileIds: filesToDrag }));
+  }
+
+  function handleDragOver(e: DragEvent, file: FileRecord) {
+    if (!e.dataTransfer) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    draggedOverFile = file.id;
+  }
+
+  function handleDragLeave(e: DragEvent, file: FileRecord) {
+    if (draggedOverFile === file.id) {
+      draggedOverFile = null;
+    }
+  }
+
+  async function handleDrop(e: DragEvent, targetFile: FileRecord) {
+    if (!e.dataTransfer) return;
+    e.preventDefault();
+    draggedOverFile = null;
+
+    try {
+      const data = e.dataTransfer.getData('application/json');
+      const { fileIds } = JSON.parse(data) as { fileIds: string[] };
+      if (fileIds.length > 0) {
+        await onDropFiles?.(fileIds, targetFile.id);
+      }
+    } catch {
+      // Ignore invalid drop data
+    }
+  }
 </script>
 
 <div class="drive-content">
@@ -82,31 +156,101 @@
     {:else if viewMode === 'grid'}
       <div class="file-grid">
         {#each displayFiles as file (file.id)}
-          <button
-            type="button"
+          <div
             class="file-card"
             class:selected={selectedFileId === file.id}
             class:multi-selected={selectedFileIds.has(file.id)}
             class:clipboard-copy={clipboardFileIds.has(file.id) && clipboardOperation === 'copy'}
             class:clipboard-cut={clipboardFileIds.has(file.id) && clipboardOperation === 'cut'}
+            class:drag-over={draggedOverFile === file.id}
             onclick={(e) => onSelectFile?.(file, e)}
             ondblclick={() => onPreviewFile?.(file)}
             oncontextmenu={(event) => onContextMenu?.(event, file)}
+            ondragstart={(e) => handleDragStart(e, file)}
+            ondragover={(e) => handleDragOver(e, file)}
+            ondragleave={(e) => handleDragLeave(e, file)}
+            ondrop={(e) => void handleDrop(e, file)}
+            draggable="true"
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => {
+              if (e.key === 'Enter') onSelectFile?.(file);
+            }}
           >
             <div class="file-surface">
-              <FileIcon mimeType={file.mime_type} name={file.name} size={34} />
+              {#if file.name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)}
+                <img src={`/api/v1/files/${encodeURIComponent(file.id)}/content`} alt={file.name} class="file-thumbnail" loading="lazy" />
+              {:else if file.name.match(/\.(mp4|webm|mov|mkv|avi|flv|wmv)$/i)}
+                <div class="video-thumbnail">
+                  <Icons.Play size={24} />
+                </div>
+              {:else}
+                <FileIcon mimeType={file.mime_type} name={file.name} size={34} />
+              {/if}
               {#if file.visibility === 'public'}
                 <span class="inline-badge public">Public</span>
               {/if}
               {#if file.pinned_at}
                 <span class="inline-badge pinned"><Icons.Pin size={10} /></span>
               {/if}
+              <div class="quick-actions">
+                <button
+                  type="button"
+                  class="quick-action"
+                  title="Preview"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    onPreviewFile?.(file);
+                  }}
+                >
+                  <Icons.Eye size={14} />
+                </button>
+                <button
+                  type="button"
+                  class="quick-action"
+                  title="Download"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    onDownload?.(file);
+                  }}
+                >
+                  <Icons.Download size={14} />
+                </button>
+                <button
+                  type="button"
+                  class="quick-action"
+                  title="Copy"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    onCopy?.(file);
+                  }}
+                >
+                  <Icons.Copy size={14} />
+                </button>
+              </div>
             </div>
             <div class="file-copy">
-              <strong>{file.name}</strong>
+              {#if renamingFileId === file.id}
+                <input
+                  type="text"
+                  class="rename-input"
+                  value={renameValue}
+                  onchange={(e) => renameValue = e.currentTarget.value}
+                  onblur={() => finishRename(file)}
+                  onkeydown={(e) => handleRenameKeydown(e, file)}
+                  autofocus
+                />
+              {:else}
+                <strong
+                  ondblclick={() => startRename(file)}
+                  class="filename-text"
+                >
+                  {file.name}
+                </strong>
+              {/if}
               <span>{formatBytes(file.size_bytes)} · {formatRelative(file.updated_at || file.uploaded_at)}</span>
             </div>
-          </button>
+          </div>
         {/each}
       </div>
     {:else}
@@ -127,27 +271,101 @@
             class:multi-selected={selectedFileIds.has(file.id)}
             class:clipboard-copy={clipboardFileIds.has(file.id) && clipboardOperation === 'copy'}
             class:clipboard-cut={clipboardFileIds.has(file.id) && clipboardOperation === 'cut'}
+            class:drag-over={draggedOverFile === file.id}
             onclick={(e) => onSelectFile?.(file, e)}
             ondblclick={() => onPreviewFile?.(file)}
             oncontextmenu={(event) => onContextMenu?.(event, file)}
+            ondragstart={(e) => handleDragStart(e, file)}
+            ondragover={(e) => handleDragOver(e, file)}
+            ondragleave={(e) => handleDragLeave(e, file)}
+            ondrop={(e) => void handleDrop(e, file)}
+            draggable="true"
           >
-            <div class="name-cell">
-              <FileIcon mimeType={file.mime_type} name={file.name} size={20} />
-              <span>{file.name}</span>
+            <div
+              class="list-row-content"
+            >
+              <div class="name-cell">
+                <FileIcon mimeType={file.mime_type} name={file.name} size={20} />
+                {#if renamingFileId === file.id}
+                  <input
+                    type="text"
+                    class="rename-input"
+                    value={renameValue}
+                    onchange={(e) => renameValue = e.currentTarget.value}
+                    onblur={() => finishRename(file)}
+                    onkeydown={(e) => handleRenameKeydown(e, file)}
+                    autofocus
+                  />
+                {:else}
+                  <span
+                    ondblclick={() => startRename(file)}
+                    class="filename-text"
+                  >
+                    {file.name}
+                  </span>
+                {/if}
+              </div>
+              <span>{formatBytes(file.size_bytes)}</span>
+              <span>{formatRelative(file.updated_at || file.uploaded_at)}</span>
+              <span>{file.folder_path || 'Bucket root'}</span>
+              <div class="state-cell">
+                {#if file.visibility === 'public'}
+                  <span class="inline-badge public">Public</span>
+                {/if}
+                {#if file.pinned_at}
+                  <span class="inline-badge pinned">Pinned</span>
+                {/if}
+                {#if file.visibility !== 'public' && !file.pinned_at}
+                  <span class="muted-state">Private</span>
+                {/if}
+              </div>
             </div>
-            <span>{formatBytes(file.size_bytes)}</span>
-            <span>{formatRelative(file.updated_at || file.uploaded_at)}</span>
-            <span>{file.folder_path || 'Bucket root'}</span>
-            <div class="state-cell">
-              {#if file.visibility === 'public'}
-                <span class="inline-badge public">Public</span>
-              {/if}
-              {#if file.pinned_at}
-                <span class="inline-badge pinned">Pinned</span>
-              {/if}
-              {#if file.visibility !== 'public' && !file.pinned_at}
-                <span class="muted-state">Private</span>
-              {/if}
+            <div class="list-row-actions">
+              <div
+                class="row-action"
+                role="button"
+                tabindex="0"
+                title="Preview"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  onPreviewFile?.(file);
+                }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') onPreviewFile?.(file);
+                }}
+              >
+                <Icons.Eye size={14} />
+              </div>
+              <div
+                class="row-action"
+                role="button"
+                tabindex="0"
+                title="Download"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  onDownload?.(file);
+                }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') onDownload?.(file);
+                }}
+              >
+                <Icons.Download size={14} />
+              </div>
+              <div
+                class="row-action"
+                role="button"
+                tabindex="0"
+                title="Copy"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  onCopy?.(file);
+                }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') onCopy?.(file);
+                }}
+              >
+                <Icons.Copy size={14} />
+              </div>
             </div>
           </button>
         {/each}
@@ -242,6 +460,7 @@
     transition: all 0.2s;
     text-align: left;
     position: relative;
+    user-select: none;
   }
 
   .file-card:hover {
@@ -272,6 +491,12 @@
     opacity: 0.7;
   }
 
+  .file-card.drag-over {
+    border-color: var(--blue);
+    background: rgba(59, 130, 246, 0.15);
+    box-shadow: inset 0 0 0 2px var(--blue);
+  }
+
   .file-surface {
     display: flex;
     align-items: center;
@@ -280,6 +505,37 @@
     background: var(--bg);
     border-radius: 6px;
     position: relative;
+  }
+
+  .quick-actions {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 150ms;
+  }
+
+  .file-card:hover .quick-actions {
+    opacity: 1;
+  }
+
+  .quick-action {
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 150ms;
+  }
+
+  .quick-action:hover {
+    background: rgba(0, 0, 0, 0.8);
   }
 
   .inline-badge {
@@ -322,6 +578,32 @@
     white-space: nowrap;
   }
 
+  .filename-text {
+    cursor: text;
+    transition: color 150ms;
+  }
+
+  .filename-text:hover {
+    color: var(--blue);
+  }
+
+  .rename-input {
+    width: 100%;
+    padding: 2px 4px;
+    font-size: 13px;
+    border: 1px solid var(--blue);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .rename-input:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+
   .file-copy span {
     font-size: 11px;
     color: var(--muted);
@@ -353,13 +635,11 @@
   }
 
   .list-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr;
+    display: flex;
     gap: 12px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--hairline);
     background: transparent;
-    border: none;
     cursor: pointer;
     transition: background 0.15s;
     text-align: left;
@@ -377,22 +657,73 @@
   .list-row.multi-selected {
     background: rgba(59, 130, 246, 0.15);
     border-left: 3px solid var(--blue);
+    padding-left: 13px;
   }
 
   .list-row.clipboard-copy {
     background: rgba(91, 227, 154, 0.08);
     border-left: 3px solid #5be39a;
+    padding-left: 13px;
     opacity: 0.85;
   }
 
   .list-row.clipboard-cut {
     background: rgba(255, 138, 61, 0.08);
     border-left: 3px solid #ff8a3d;
+    padding-left: 13px;
     opacity: 0.7;
+  }
+
+  .list-row.drag-over {
+    background: rgba(59, 130, 246, 0.15);
+    border-left: 3px solid var(--blue);
+    padding-left: 13px;
   }
 
   .list-row:last-child {
     border-bottom: none;
+  }
+
+  .list-row-content {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    text-align: left;
+    align-items: center;
+  }
+
+  .list-row-actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 150ms;
+    flex-shrink: 0;
+  }
+
+  .list-row:hover .list-row-actions {
+    opacity: 1;
+  }
+
+  .row-action {
+    padding: 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms;
+  }
+
+  .row-action:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: rgba(59, 130, 246, 0.05);
   }
 
   .name-cell,
@@ -460,6 +791,24 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .file-thumbnail {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+
+  .video-thumbnail {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(30, 30, 30, 0.8), rgba(50, 50, 50, 0.8));
+    color: var(--text-2);
+    border-radius: 4px;
   }
 
   .muted-state {
