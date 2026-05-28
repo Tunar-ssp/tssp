@@ -33,8 +33,8 @@
   type InspectorTab = 'preview' | 'outline' | 'meta';
   type HomeLayout = 'grid' | 'list';
 
-  let showSidebar = $state(true);
-  let showInspector = $state(false);
+  let showSidebar = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('notes-sidebar-open') ?? 'true') : true);
+  let showInspector = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('notes-inspector-open') ?? 'false') : false);
   let contextMenu = $state({ visible: false, x: 0, y: 0, note: null as any });
   let searchQuery = $state('');
   let isLoading = $state(true);
@@ -83,6 +83,20 @@
     if (saveTimer) clearTimeout(saveTimer);
     if (typeof window !== 'undefined') {
       window.removeEventListener('insert', handleInsertSnippet as EventListener);
+    }
+  });
+
+  // Persist sidebar state
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('notes-sidebar-open', String(showSidebar));
+    }
+  });
+
+  // Persist inspector state
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('notes-inspector-open', String(showInspector));
     }
   });
 
