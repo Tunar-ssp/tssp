@@ -422,6 +422,7 @@
   x={contextMenu.x}
   y={contextMenu.y}
   items={contextMenu.note ? getContextItems(contextMenu.note) : []}
+  onClose={() => contextMenu.visible = false}
 />
 
 <style>

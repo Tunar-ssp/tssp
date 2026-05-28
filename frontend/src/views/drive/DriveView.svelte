@@ -20,6 +20,7 @@
   import DriveSidebar from './DriveSidebar.svelte';
   import DriveContent from './DriveContent.svelte';
   import DriveToolbarRow from './components/toolbar/DriveToolbarRow.svelte';
+  import KeyboardHelpModal from '$lib/components/KeyboardHelpModal.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
   import { clipboard } from '$lib/stores/clipboard';
@@ -35,12 +36,33 @@
   let selectedFile = $state<FileRecord | null>(null);
   let selectedFileIds = $state<Set<string>>(new Set());
   let lastSelectedIndex = $state<number>(-1);
+  let activeTagFilter = $state<string | null>(null);
+  let availableTags = $derived.by(() => {
+    const tagFreq = new Map<string, number>();
+    filteredLibraryFiles.forEach(file => {
+      (file.tags || []).forEach(tag => {
+        tagFreq.set(tag, (tagFreq.get(tag) || 0) + 1);
+      });
+    });
+    return Array.from(tagFreq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([tag]) => tag);
+  });
+
+  let imageCount = $derived(files.filter(f => (f.mime_type || '').startsWith('image/')).length);
+  let videoCount = $derived(files.filter(f => (f.mime_type || '').startsWith('video/')).length);
+  let documentCount = $derived(files.filter(f => {
+    const mime = f.mime_type || '';
+    if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) return false;
+    return mime.startsWith('text/') || mime.startsWith('application/') || mime.includes('pdf') || mime.includes('word') || mime.includes('sheet') || mime.includes('presentation');
+  }).length);
   let previewFile = $state<FileRecord | null>(null);
   let shareFile = $state<FileRecord | null>(null);
   let moveDialogFile = $state<FileRecord | null>(null);
   let renameDialogFile = $state<FileRecord | null>(null);
   let isMoveDialogOpen = $state(false);
   let isRenameDialogOpen = $state(false);
+  let bulkMoveTarget = $state<string | null>(null);
   let isMoving = $state(false);
   let isRenaming = $state(false);
   let isLoading = $state(true);
@@ -60,6 +82,10 @@
     y: 0,
     file: null as FileRecord | null,
   });
+  let showBulkMoveMenu = $state(false);
+  let showKeyboardHelp = $state(false);
+  let sidebarOpen = $state(true);
+  let detailsPanelOpen = $state(true);
 
   let clipboardFileIds = $derived(clipboard.getItemIds());
   let clipboardOperation: 'copy' | 'cut' | null = $state(null);
@@ -118,6 +144,32 @@
       e.preventDefault();
       void handlePasteFiles();
     }
+    if ((e.shiftKey || e.metaKey) && e.key === 'Delete') {
+      e.preventDefault();
+      if (selectedFileIds.size > 0) {
+        void handleBulkDelete();
+      }
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (filteredLibraryFiles.length === 0) return;
+      const currentIndex = selectedFile?.id ? filteredLibraryFiles.findIndex(f => f.id === selectedFile?.id) : -1;
+      let nextIndex = currentIndex;
+      if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex < filteredLibraryFiles.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : filteredLibraryFiles.length - 1;
+      }
+      selectFile(filteredLibraryFiles[nextIndex]);
+    }
+    if (e.key === 'Enter' && selectedFile?.id) {
+      e.preventDefault();
+      openPreview(selectedFile);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === '?') {
+      e.preventDefault();
+      showKeyboardHelp = true;
+    }
   };
 
   $effect(() => {
@@ -130,6 +182,11 @@
         { key: 'c', ctrl: true, handler: handleDriveKeydown },
         { key: 'x', ctrl: true, handler: handleDriveKeydown },
         { key: 'v', ctrl: true, handler: handleDriveKeydown },
+        { key: 'Delete', shift: true, handler: handleDriveKeydown },
+        { key: 'ArrowDown', handler: handleDriveKeydown },
+        { key: 'ArrowUp', handler: handleDriveKeydown },
+        { key: 'Enter', handler: handleDriveKeydown },
+        { key: '?', ctrl: true, handler: handleDriveKeydown },
       ],
       document
     );
@@ -163,6 +220,8 @@
           if (!isDocument) return false;
         }
         if (activeLens === 'public' && file.visibility !== 'public') return false;
+
+        if (activeTagFilter && !(file.tags || []).includes(activeTagFilter)) return false;
 
         const query = filterQuery.trim().toLowerCase();
         if (!query) return true;
@@ -349,6 +408,30 @@
     window.location.assign(`/api/v1/files/${encodeURIComponent(file.id)}/content`);
   }
 
+  function handleQuickCopy(file: FileRecord) {
+    clipboard.copy([{ id: file.id, name: file.name, type: 'file' }]);
+    clipboardOperation = 'copy';
+    success('Copied', `${file.name} copied to clipboard`);
+  }
+
+  async function handleDropFiles(fileIds: string[], targetFileId: string) {
+    const targetFile = files.find(f => f.id === targetFileId);
+    if (!targetFile || !targetFile.folder_path) {
+      error('Drop Failed', 'Target is not a folder');
+      return;
+    }
+
+    try {
+      const success_op = await driveStateManager.moveFiles(fileIds, currentFolder, targetFile.folder_path);
+      if (success_op) {
+        await refreshMetadata();
+        success('Moved', `${fileIds.length} file(s) moved to ${targetFile.name}`);
+      }
+    } catch (cause) {
+      error('Drop Failed', cause instanceof Error ? cause.message : 'Could not move files');
+    }
+  }
+
   async function handleRefresh() {
     await loadLibrary(true);
     if (isTrashView) {
@@ -462,6 +545,46 @@
       }
     } catch (cause) {
       error('Purge Failed', cause instanceof Error ? cause.message : 'Could not purge file');
+    }
+  }
+
+  async function handleBulkDelete() {
+    const fileCount = selectedFileIds.size;
+    if (fileCount === 0) return;
+    if (!confirm(`Move ${fileCount} file(s) to trash?`)) return;
+
+    try {
+      const success_op = await driveStateManager.deleteFiles(Array.from(selectedFileIds));
+      if (success_op) {
+        selectedFileIds.clear();
+        selectedFileIds = new Set();
+        selectedFile = null;
+        await Promise.all([loadTrash(), refreshMetadata()]);
+        success('Moved to Trash', `${fileCount} file(s) moved to trash`);
+      }
+    } catch (cause) {
+      error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete files');
+    }
+  }
+
+  async function handleBulkMove(targetFolder: string) {
+    const fileCount = selectedFileIds.size;
+    if (fileCount === 0) return;
+
+    try {
+      isMoving = true;
+      const success_op = await driveStateManager.moveFiles(Array.from(selectedFileIds), currentFolder, targetFolder);
+      if (success_op) {
+        selectedFileIds.clear();
+        selectedFileIds = new Set();
+        selectedFile = null;
+        await refreshMetadata();
+        success('Moved', `${fileCount} file(s) moved to ${targetFolder || 'Bucket root'}`);
+      }
+    } catch (cause) {
+      error('Move Failed', cause instanceof Error ? cause.message : 'Could not move files');
+    } finally {
+      isMoving = false;
     }
   }
 
@@ -592,23 +715,28 @@
 </script>
 
 <div class="drive-shell">
-  <DriveSidebar
-    filters={libraryFilters}
-    {activeLens}
-    folders={folderEntries}
-    {currentFolder}
-    publicCount={files.filter((f) => f.visibility === 'public').length}
-    trashCount={trash.length}
-    usedBytes={status?.storage_bytes_used || 0}
-    totalObjects={status?.file_count || files.length}
-    onLensChange={setLens}
-    onFolderChange={(path) => {
-      currentFolder = path;
-      if (activeLens === 'trash') activeLens = 'all';
-    }}
-  />
+  {#if sidebarOpen}
+    <DriveSidebar
+      filters={libraryFilters}
+      {activeLens}
+      folders={folderEntries}
+      {currentFolder}
+      publicCount={files.filter((f) => f.visibility === 'public').length}
+      trashCount={trash.length}
+      usedBytes={status?.storage_bytes_used || 0}
+      totalObjects={status?.file_count || files.length}
+      onLensChange={setLens}
+      onFolderChange={(path) => {
+        currentFolder = path;
+        if (activeLens === 'trash') activeLens = 'all';
+      }}
+    />
+  {/if}
 
-  <section class="drive-main">
+  <section class="drive-main" class:sidebar-closed={!sidebarOpen}>
+    <button class="sidebar-toggle" onclick={() => sidebarOpen = !sidebarOpen} title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}>
+      <Icons.Menu size={18} />
+    </button>
     <DriveHeader
       title={isTrashView ? 'Trash' : 'Cloud Drive'}
       {currentFolder}
@@ -617,19 +745,117 @@
       visibleCount={isTrashView ? filteredTrash.length : filteredLibraryFiles.length}
       pinnedCount={status?.pinned_count || files.filter((f) => f.pinned_at).length}
       publicCount={files.filter((f) => f.visibility === 'public').length}
+      selectedCount={selectedFileIds.size}
+      {imageCount}
+      {videoCount}
+      {documentCount}
       onRefresh={handleRefresh}
       onUpload={requestUpload}
       onPurgeTrash={handlePurgeExpiredTrash}
       trashEmpty={trash.length === 0}
     />
 
-    <DriveToolbarRow
-      filterQuery={filterQuery}
-      isTrashView={isTrashView}
-      viewMode={viewMode}
-      onFilterChange={(query) => filterQuery = query}
-      onViewModeChange={setViewMode}
-    />
+    <div class="toolbar-with-panel-toggle">
+      <DriveToolbarRow
+        filterQuery={filterQuery}
+        isTrashView={isTrashView}
+        viewMode={viewMode}
+        {sortBy}
+        {sortOrder}
+        onFilterChange={(query) => filterQuery = query}
+        onViewModeChange={setViewMode}
+        onSortChange={(newSortBy) => sortBy = newSortBy}
+        onSortOrderChange={(newOrder) => sortOrder = newOrder}
+      />
+      <button class="panel-toggle-btn" title={detailsPanelOpen ? 'Hide details' : 'Show details'} onclick={() => detailsPanelOpen = !detailsPanelOpen}>
+        <Icons.ChevronRight size={16} />
+      </button>
+    </div>
+
+    {#if !isTrashView && availableTags.length > 0}
+      <div class="tag-filter-bar">
+        <span class="tag-label">Filter by tag:</span>
+        <div class="tag-list">
+          {#each availableTags as tag}
+            <button
+              type="button"
+              class="tag-btn"
+              class:active={activeTagFilter === tag}
+              onclick={() => activeTagFilter = activeTagFilter === tag ? null : tag}
+            >
+              {tag}
+            </button>
+          {/each}
+          {#if activeTagFilter}
+            <button
+              type="button"
+              class="tag-clear"
+              onclick={() => activeTagFilter = null}
+              title="Clear tag filter"
+            >
+              <Icons.X size={12} />
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    {#if selectedFileIds.size > 0}
+      <div class="bulk-actions-bar">
+        <div class="bulk-info">
+          <strong>{selectedFileIds.size} file(s) selected</strong>
+          <button type="button" class="clear-selection" onclick={() => {
+            selectedFileIds.clear();
+            selectedFileIds = new Set();
+            selectedFile = null;
+          }}>
+            <Icons.X size={16} />
+            Clear
+          </button>
+        </div>
+        <div class="bulk-actions">
+          <div class="move-dropdown">
+            <button type="button" class="action-btn" onclick={() => showBulkMoveMenu = !showBulkMoveMenu}>
+              <Icons.FolderOpen size={14} />
+              Move to
+              <Icons.ChevronDown size={12} />
+            </button>
+            {#if showBulkMoveMenu}
+              <div class="move-menu">
+                <button
+                  type="button"
+                  onclick={() => {
+                    void handleBulkMove('');
+                    showBulkMoveMenu = false;
+                  }}
+                  disabled={isMoving || currentFolder === ''}
+                >
+                  <Icons.HardDrive size={12} />
+                  Bucket root
+                </button>
+                {#each folderEntries as folder}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      void handleBulkMove(folder.path);
+                      showBulkMoveMenu = false;
+                    }}
+                    disabled={isMoving || currentFolder === folder.path}
+                  >
+                    <Icons.Folder size={12} />
+                    {folder.path}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <button type="button" class="action-btn danger" onclick={handleBulkDelete}>
+            <Icons.Trash2 size={14} />
+            Delete selected
+          </button>
+        </div>
+      </div>
+    {/if}
 
     <DriveContent
       files={filteredLibraryFiles}
@@ -651,9 +877,12 @@
       onDelete={handlePermanentDelete}
       onPurgeTrash={handlePurgeExpiredTrash}
       onUpload={requestUpload}
+      onDownload={downloadFile}
+      onCopy={handleQuickCopy}
+      onDropFiles={handleDropFiles}
     />
 
-    {#if selectedFile}
+    {#if selectedFile && detailsPanelOpen}
       <DriveDetailsPanel
         file={selectedFile}
         onToggleVisibility={handleToggleVisibility}
@@ -676,6 +905,7 @@
   x={contextMenu.x}
   y={contextMenu.y}
   items={contextMenu.file ? getContextItems(contextMenu.file) : []}
+  onClose={() => contextMenu.visible = false}
 />
 
 <FilePreviewModal
@@ -718,6 +948,11 @@
   }}
 />
 
+<KeyboardHelpModal
+  isOpen={showKeyboardHelp}
+  onClose={() => (showKeyboardHelp = false)}
+/>
+
 <style>
   .drive-shell {
     flex: 1;
@@ -731,10 +966,265 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
   }
 
+  .sidebar-toggle {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms;
+    z-index: 50;
+  }
 
+  .sidebar-toggle:hover {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border-2);
+  }
 
+  .drive-main.sidebar-closed .sidebar-toggle {
+    display: none;
+  }
+
+  .toolbar-with-panel-toggle {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding-right: 12px;
+  }
+
+  .panel-toggle-btn {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms;
+  }
+
+  .panel-toggle-btn:hover {
+    border-color: var(--border-2);
+    color: var(--text);
+  }
+
+  .tag-filter-bar {
+    margin: 0 24px 12px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .tag-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .tag-list {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .tag-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 150ms;
+    white-space: nowrap;
+  }
+
+  .tag-btn:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .tag-btn.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .tag-clear {
+    padding: 2px 6px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    transition: color 150ms;
+  }
+
+  .tag-clear:hover {
+    color: var(--text);
+  }
+
+  .bulk-actions-bar {
+    margin: 0 24px 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--blue-soft, rgba(59, 130, 246, 0.3));
+    background: rgba(59, 130, 246, 0.05);
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .bulk-info {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .bulk-info strong {
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  .clear-selection {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    transition: all 150ms;
+  }
+
+  .clear-selection:hover {
+    border-color: var(--text-2);
+    color: var(--text);
+  }
+
+  .bulk-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .action-btn {
+    padding: 6px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 150ms;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    border-color: var(--border-2);
+    color: var(--text);
+  }
+
+  .action-btn.danger {
+    background: var(--danger-soft);
+    border: 1px solid var(--danger-soft);
+    color: var(--danger);
+  }
+
+  .action-btn.danger:hover:not(:disabled) {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .move-dropdown {
+    position: relative;
+  }
+
+  .move-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    z-index: 100;
+    min-width: 180px;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+
+  .move-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 150ms;
+    text-align: left;
+  }
+
+  .move-menu button:first-child {
+    border-radius: 7px 7px 0 0;
+  }
+
+  .move-menu button:last-child {
+    border-radius: 0 0 7px 7px;
+  }
+
+  .move-menu button:hover:not(:disabled) {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .move-menu button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   @media (max-width: 1200px) {
     .drive-shell {
