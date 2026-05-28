@@ -37,6 +37,8 @@
   let selectedFileIds = $state<Set<string>>(new Set());
   let lastSelectedIndex = $state<number>(-1);
   let activeTagFilter = $state<string | null>(null);
+  let sidebarOpen = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('drive-sidebar-open') ?? 'true') : true);
+  let detailsPanelOpen = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('drive-details-panel-open') ?? 'true') : true);
   let availableTags = $derived.by(() => {
     const tagFreq = new Map<string, number>();
     filteredLibraryFiles.forEach(file => {
@@ -84,8 +86,6 @@
   });
   let showBulkMoveMenu = $state(false);
   let showKeyboardHelp = $state(false);
-  let sidebarOpen = $state(true);
-  let detailsPanelOpen = $state(true);
 
   let clipboardFileIds = $derived(clipboard.getItemIds());
   let clipboardOperation: 'copy' | 'cut' | null = $state(null);
@@ -109,6 +109,20 @@
         document.removeEventListener('tssp:drive-refresh', handleExternalRefresh as EventListener);
       }
     };
+  });
+
+  // Persist sidebar state
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('drive-sidebar-open', String(sidebarOpen));
+    }
+  });
+
+  // Persist details panel state
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('drive-details-panel-open', String(detailsPanelOpen));
+    }
   });
 
   const handleDriveKeydown = (e: KeyboardEvent) => {
