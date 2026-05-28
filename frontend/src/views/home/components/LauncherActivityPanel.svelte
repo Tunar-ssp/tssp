@@ -29,7 +29,7 @@
 
   {#if isAdmin && activityItems.length > 0}
     <div class="activity-list">
-      {#each activityItems as item (item.id)}
+      {#each activityItems as item, i (`${item.id}-${item.occurred_at}-${i}`)}
         <div class="activity-row">
           <div class="activity-glyph">
             <Icons.Activity size={13} />
@@ -111,6 +111,9 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
   }
 
   .activity-row {

@@ -11,6 +11,10 @@
 
   let { workspaceId, onOpenMatch = () => {} }: Props = $props();
 
+  function autofocusNode(node: HTMLInputElement) {
+    queueMicrotask(() => node.focus());
+  }
+
   interface FileMatch {
     path: string;
     matches: Array<{ line: number; preview: string }>;
@@ -127,7 +131,7 @@
         placeholder="Search across workspace..."
         bind:value={query}
         onkeydown={onKeydown}
-        autofocus
+        use:autofocusNode
       />
       {#if isSearching}
         <button type="button" class="ibtn danger" title="Cancel" onclick={cancelSearch}>

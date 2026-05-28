@@ -146,7 +146,7 @@
         <h2>Recent activity</h2>
       </div>
       <div class="activity-list">
-        {#each activityItems.slice(0, 6) as item (item.id)}
+        {#each activityItems.slice(0, 6) as item, i (`${item.id}-${item.occurred_at}-${i}`)}
           <div class="activity-row">
             <div class="activity-dot"></div>
             <div>

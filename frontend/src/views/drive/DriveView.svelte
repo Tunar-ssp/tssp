@@ -359,7 +359,7 @@
   }
 
   let filteredLibraryFiles = $derived.by(() =>
-    files
+    dedupeFiles(files)
       .filter((file) => {
         if (currentFolder && (file.folder_path || '') !== currentFolder) return false;
 
@@ -398,7 +398,7 @@
   );
 
   let filteredTrash = $derived.by(() =>
-    trash
+    dedupeFiles(trash)
       .filter((file) => {
         const query = filterQuery.trim().toLowerCase();
         if (!query) return true;
@@ -430,7 +430,7 @@
           api.getStatus(),
         ]);
 
-        files = fileData.files || [];
+        files = dedupeFiles(fileData.files || []);
         nextCursor = fileData.nextCursor;
         hasMore = !!fileData.nextCursor;
         folderEntries = folderData.folders || [];
@@ -453,7 +453,7 @@
     trashLoading = true;
     try {
       const data = await api.listTrash();
-      trash = data.files || [];
+      trash = dedupeFiles(data.files || []);
     } catch (cause) {
       error('Trash Failed', cause instanceof Error ? cause.message : 'Could not load trash');
     } finally {
@@ -502,15 +502,33 @@
     uploadFolderInputEl?.click();
   }
 
-  async function handleNewFolder() {
-    const name = window.prompt('New folder name:', '');
-    if (!name?.trim()) return;
+  let newFolderOpen = $state(false);
+  let newFolderName = $state('');
+  let creatingFolder = $state(false);
+
+  function focusOnMount(node: HTMLInputElement) {
+    queueMicrotask(() => node.focus());
+  }
+
+  function handleNewFolder() {
+    newFolderName = '';
+    newFolderOpen = true;
+  }
+
+  async function confirmNewFolder() {
+    const name = newFolderName.trim();
+    if (!name) return;
     try {
-      await createFolder(name.trim(), currentFolder);
-      success('Folder Created', name.trim());
+      creatingFolder = true;
+      await createFolder(name, currentFolder);
+      success('Folder Created', name);
+      newFolderOpen = false;
+      newFolderName = '';
       await loadLibrary(true);
     } catch (err) {
       error('Create Failed', err instanceof Error ? err.message : 'Could not create folder');
+    } finally {
+      creatingFolder = false;
     }
   }
 
@@ -730,6 +748,24 @@
     }
   }
 
+  async function handleMoveToFolder(fileIds: string[], targetFolder: string) {
+    if (fileIds.length === 0) return;
+    try {
+      isMoving = true;
+      const success_op = await driveStateManager.moveFiles(fileIds, currentFolder, targetFolder);
+      if (success_op) {
+        selectedFileIds.clear();
+        selectedFileIds = new Set();
+        await refreshMetadata();
+        success('Moved', `${fileIds.length} file(s) moved to ${targetFolder || 'All files'}`);
+      }
+    } catch (cause) {
+      error('Move Failed', cause instanceof Error ? cause.message : 'Could not move files');
+    } finally {
+      isMoving = false;
+    }
+  }
+
   async function handleBulkMove(targetFolder: string) {
     const fileCount = selectedFileIds.size;
     if (fileCount === 0) return;
@@ -919,6 +955,8 @@
         currentFolder = path;
         if (activeLens === 'trash') activeLens = 'all';
       }}
+      onNewFolder={handleNewFolder}
+      onMoveToFolder={handleMoveToFolder}
       onClose={() => sidebarOpen = false}
     />
   {/if}
@@ -946,6 +984,10 @@
       onUploadFolder={requestFolderUpload}
       onNewFolder={handleNewFolder}
       onPurgeTrash={handlePurgeExpiredTrash}
+      onNavigateFolder={(path) => {
+        currentFolder = path;
+        if (activeLens === 'trash') activeLens = 'all';
+      }}
       trashEmpty={trash.length === 0}
     />
 
@@ -1074,6 +1116,7 @@
         onUpload={requestUpload}
         onDownload={downloadFile}
         onCopy={handleQuickCopy}
+        onRename={handleRename}
         onDropFiles={handleDropFiles}
       />
 
@@ -1149,7 +1192,142 @@
   onClose={() => (showKeyboardHelp = false)}
 />
 
+{#if newFolderOpen}
+  <div
+    class="nf-overlay"
+    role="presentation"
+    onclick={(e) => e.target === e.currentTarget && (newFolderOpen = false)}
+  >
+    <div class="nf-dialog" role="dialog" aria-modal="true" aria-label="New folder">
+      <div class="nf-head">
+        <Icons.FolderPlus size={18} />
+        <h3>New folder</h3>
+      </div>
+      <p class="nf-sub">{currentFolder ? `Inside ${currentFolder}` : 'In All files'}</p>
+      <input
+        class="nf-input"
+        type="text"
+        placeholder="Folder name"
+        bind:value={newFolderName}
+        use:focusOnMount
+        onkeydown={(e) => {
+          if (e.key === 'Enter') void confirmNewFolder();
+          else if (e.key === 'Escape') newFolderOpen = false;
+        }}
+      />
+      <div class="nf-actions">
+        <button type="button" class="nf-btn ghost" onclick={() => (newFolderOpen = false)} disabled={creatingFolder}>
+          Cancel
+        </button>
+        <button type="button" class="nf-btn primary" onclick={confirmNewFolder} disabled={!newFolderName.trim() || creatingFolder}>
+          {creatingFolder ? 'Creating…' : 'Create folder'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  .nf-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    animation: fade-in 0.12s ease-out;
+  }
+
+  .nf-dialog {
+    width: min(420px, calc(100vw - 32px));
+    padding: 22px;
+    border-radius: var(--r-6);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-modal);
+  }
+
+  .nf-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent);
+  }
+
+  .nf-head h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text);
+  }
+
+  .nf-sub {
+    margin: 6px 0 16px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .nf-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: var(--r-3);
+    border: 1px solid var(--border-2);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+  }
+
+  .nf-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .nf-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  .nf-btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: var(--r-3);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+
+  .nf-btn.ghost {
+    background: transparent;
+    color: var(--text-2);
+  }
+
+  .nf-btn.ghost:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--border-2);
+  }
+
+  .nf-btn.primary {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+  }
+
+  .nf-btn.primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .nf-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .drop-overlay {
     position: fixed;
     inset: 0;

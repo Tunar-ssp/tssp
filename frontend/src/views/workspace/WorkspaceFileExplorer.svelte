@@ -12,6 +12,10 @@
 
   let { workspaceId, activeFilePath = null, onSelectFile = () => {} }: Props = $props();
 
+  function autofocusNode(node: HTMLInputElement) {
+    queueMicrotask(() => node.focus());
+  }
+
   type TreeNode = WorkspaceFileEntry & {
     name: string;
     children?: TreeNode[];
@@ -320,7 +324,7 @@
           if (e.key === 'Enter') commitNew();
           else if (e.key === 'Escape') newDialog = { ...newDialog, open: false };
         }}
-        autofocus
+        use:autofocusNode
       />
       <div class="dialog-actions">
         <button type="button" class="btn" onclick={() => newDialog = { ...newDialog, open: false }}>Cancel</button>

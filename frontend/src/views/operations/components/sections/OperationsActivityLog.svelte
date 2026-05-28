@@ -16,7 +16,7 @@
       <span class="panel-meta">{items.length} recent items</span>
     </div>
     <div class="activity-log">
-      {#each items as item (item.id)}
+      {#each items as item, i (`${item.id}-${item.occurred_at}-${i}`)}
         <div class="activity-card">
           <div>
             <strong>{item.title}</strong>

@@ -19,6 +19,20 @@
     }
   });
 
+  // Focus and pre-select the basename (everything before the last extension)
+  // so the user types over the name but keeps the extension by default.
+  function focusName(node: HTMLInputElement) {
+    queueMicrotask(() => {
+      node.focus();
+      const dot = node.value.lastIndexOf('.');
+      if (dot > 0) {
+        node.setSelectionRange(0, dot);
+      } else {
+        node.select();
+      }
+    });
+  }
+
   async function handleRename() {
     if (!file || !nextName.trim() || nextName === file.name) return;
     try {
@@ -57,7 +71,7 @@
             bind:value={nextName}
             onkeydown={handleKeydown}
             class="name-input"
-            autofocus
+            use:focusName
           />
         </div>
       </div>

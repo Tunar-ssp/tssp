@@ -66,11 +66,11 @@
   let CurrentView = $derived(viewMap[$currentView as keyof typeof viewMap] || HomeView);
 
   const appMeta: Record<AppView, { title: string; icon: any; accent: string; crumbs: string[] }> = {
-    home: { title: 'Launcher', icon: Icons.Home, accent: '#7c8190', crumbs: ['Launcher'] },
-    drive: { title: 'Cloud Drive', icon: Icons.Cloud, accent: '#6ea8ff', crumbs: ['Drive'] },
-    notes: { title: 'Notes', icon: Icons.BookText, accent: '#5be39a', crumbs: ['Notes'] },
-    workspace: { title: 'Workspace', icon: Icons.Code2, accent: '#ff8a3d', crumbs: ['Workspace'] },
-    admin: { title: 'Admin', icon: Icons.Shield, accent: '#a394ff', crumbs: ['Admin'] },
+    home: { title: 'Launcher', icon: Icons.LayoutGrid, accent: '#7c8190', crumbs: ['Launcher'] },
+    drive: { title: 'Cloud Drive', icon: Icons.Cloud, accent: '#5b8cff', crumbs: ['Drive'] },
+    notes: { title: 'Notes', icon: Icons.NotebookPen, accent: '#5be39a', crumbs: ['Notes'] },
+    workspace: { title: 'Workspace', icon: Icons.SquareCode, accent: '#ff8a3d', crumbs: ['Workspace'] },
+    admin: { title: 'Operations', icon: Icons.Gauge, accent: '#a394ff', crumbs: ['Operations'] },
   };
 
   $effect(() => {
@@ -88,8 +88,8 @@
       {
         id: 'home',
         label: 'Home',
-        icon: Icons.Power,
-        accent: '#5be39a',
+        icon: Icons.LayoutGrid,
+        accent: '#9aa0ad',
         action: () => navigateTo('home'),
       },
       ...availableAppIds.map((view) => ({
@@ -204,19 +204,15 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    background:
-      radial-gradient(circle at 14% 0%, rgba(91, 227, 154, 0.08), transparent 28%),
-      radial-gradient(circle at 86% 0%, rgba(255, 95, 162, 0.06), transparent 24%),
-      linear-gradient(180deg, #090b10 0%, #06070a 100%);
+    background: var(--bg);
     color: var(--text);
     font-family: var(--ff-sans);
   }
 
   .app.home-active {
     background:
-      radial-gradient(circle at 14% 0%, rgba(91, 227, 154, 0.12), transparent 36%),
-      radial-gradient(circle at 86% 0%, rgba(255, 95, 162, 0.08), transparent 28%),
-      linear-gradient(180deg, #090b10 0%, #06070a 100%);
+      radial-gradient(900px 480px at 50% -10%, rgba(91, 140, 255, 0.07), transparent 70%),
+      var(--bg);
   }
 
   .shell {
@@ -269,9 +265,8 @@
     display: grid;
     place-items: center;
     background:
-      radial-gradient(circle at 14% 0%, rgba(91, 227, 154, 0.12), transparent 32%),
-      radial-gradient(circle at 86% 0%, rgba(255, 95, 162, 0.08), transparent 28%),
-      linear-gradient(180deg, #090b10 0%, #06070a 100%);
+      radial-gradient(900px 480px at 50% -10%, rgba(91, 140, 255, 0.07), transparent 70%),
+      var(--bg);
   }
 
   .loading-card {

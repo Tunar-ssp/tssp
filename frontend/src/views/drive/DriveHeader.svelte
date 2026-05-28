@@ -3,7 +3,6 @@
 
   interface Props {
     title?: string;
-    subtitle?: string;
     currentFolder?: string;
     isTrashView?: boolean;
     fileCount?: number;
@@ -11,7 +10,6 @@
     pinnedCount?: number;
     publicCount?: number;
     selectedCount?: number;
-    usedBytes?: number;
     imageCount?: number;
     videoCount?: number;
     documentCount?: number;
@@ -20,63 +18,78 @@
     onUploadFolder?: () => void;
     onNewFolder?: () => void;
     onPurgeTrash?: () => void;
+    onNavigateFolder?: (path: string) => void;
     trashEmpty?: boolean;
   }
 
   let {
     title = 'Cloud Drive',
-    subtitle,
-    currentFolder,
+    currentFolder = '',
     isTrashView = false,
     fileCount = 0,
     visibleCount = 0,
     pinnedCount = 0,
     publicCount = 0,
     selectedCount = 0,
-    usedBytes = 0,
-    imageCount = 0,
-    videoCount = 0,
-    documentCount = 0,
     onRefresh,
     onUpload,
     onUploadFolder,
     onNewFolder,
     onPurgeTrash,
+    onNavigateFolder,
     trashEmpty = false,
   }: Props = $props();
 
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  }
+  // Build clickable breadcrumb segments from the current folder path.
+  let segments = $derived(
+    currentFolder
+      ? currentFolder.split('/').filter(Boolean).map((name, i, arr) => ({
+          name,
+          path: arr.slice(0, i + 1).join('/'),
+        }))
+      : []
+  );
 </script>
 
 <header class="drive-header">
-  <div>
-    <div class="breadcrumbs">
-      <span>Cloud Drive</span>
-      {#if currentFolder}
-        <Icons.ChevronRight size={12} />
-        <span>{currentFolder}</span>
-      {/if}
-    </div>
-    <h1>{title}</h1>
-    <p>
-      {#if isTrashView}
-        Restore or permanently purge deleted objects.
+  <nav class="crumbs" aria-label="Folder path">
+    <button
+      type="button"
+      class="crumb"
+      class:active={!isTrashView && segments.length === 0}
+      onclick={() => onNavigateFolder?.('')}
+    >
+      <Icons.HardDrive size={14} />
+      <span>{isTrashView ? 'Trash' : 'Drive'}</span>
+    </button>
+    {#if !isTrashView}
+      {#each segments as seg (seg.path)}
+        <Icons.ChevronRight size={13} class="crumb-sep" />
+        <button
+          type="button"
+          class="crumb"
+          class:active={currentFolder === seg.path}
+          onclick={() => onNavigateFolder?.(seg.path)}
+        >
+          {seg.name}
+        </button>
+      {/each}
+    {/if}
+
+    <span class="crumb-stats">
+      {#if selectedCount > 0}
+        <span class="stat selected">{selectedCount} selected</span>
       {:else}
-        {subtitle || 'Browse, upload, preview, share, and manage your local cloud objects.'}
+        <span class="stat">{visibleCount} of {fileCount}</span>
+        {#if pinnedCount > 0}<span class="stat"><Icons.Pin size={11} /> {pinnedCount}</span>{/if}
+        {#if publicCount > 0}<span class="stat"><Icons.Globe size={11} /> {publicCount}</span>{/if}
       {/if}
-    </p>
-  </div>
+    </span>
+  </nav>
 
   <div class="header-actions">
-    <button type="button" class="ghost-btn" onclick={onRefresh}>
-      <Icons.RefreshCcw size={14} />
-      Refresh
+    <button type="button" class="ghost-btn icon-only" onclick={onRefresh} title="Refresh">
+      <Icons.RefreshCcw size={15} />
     </button>
     {#if isTrashView}
       <button type="button" class="danger-btn" onclick={onPurgeTrash} disabled={trashEmpty}>
@@ -87,123 +100,123 @@
       {#if onNewFolder}
         <button type="button" class="ghost-btn" onclick={onNewFolder} title="New folder">
           <Icons.FolderPlus size={14} />
-          New folder
+          <span>New folder</span>
         </button>
       {/if}
       {#if onUploadFolder}
-        <button type="button" class="ghost-btn" onclick={onUploadFolder} title="Upload an entire folder">
+        <button type="button" class="ghost-btn icon-only" onclick={onUploadFolder} title="Upload an entire folder">
           <Icons.FolderUp size={14} />
-          Upload folder
         </button>
       {/if}
       <button type="button" class="accent-btn" onclick={onUpload}>
         <Icons.Upload size={15} />
-        Upload files
+        <span>Upload</span>
       </button>
     {/if}
   </div>
 </header>
 
-<div class="summary-grid">
-  {#if selectedCount > 0}
-    <article class="summary-card selected">
-      <span>Selected</span>
-      <strong>{selectedCount}</strong>
-    </article>
-  {/if}
-  <article class="summary-card">
-    <span>Objects</span>
-    <strong>{fileCount}</strong>
-  </article>
-  <article class="summary-card">
-    <span>Visible here</span>
-    <strong>{visibleCount}</strong>
-  </article>
-  {#if !isTrashView && (imageCount > 0 || videoCount > 0 || documentCount > 0)}
-    <article class="summary-card">
-      <span>File Types</span>
-      <div class="file-type-icons">
-        {#if imageCount > 0}
-          <span title="{imageCount} images">
-            <Icons.Image size={14} />
-            {imageCount}
-          </span>
-        {/if}
-        {#if videoCount > 0}
-          <span title="{videoCount} videos">
-            <Icons.Video size={14} />
-            {videoCount}
-          </span>
-        {/if}
-        {#if documentCount > 0}
-          <span title="{documentCount} documents">
-            <Icons.FileText size={14} />
-            {documentCount}
-          </span>
-        {/if}
-      </div>
-    </article>
-  {/if}
-  <article class="summary-card">
-    <span>Pinned</span>
-    <strong>{pinnedCount}</strong>
-  </article>
-  <article class="summary-card">
-    <span>Public</span>
-    <strong>{publicCount}</strong>
-  </article>
-</div>
-
 <style>
   .drive-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 24px;
-    padding: 0 0 24px;
+    gap: 16px;
+    padding: 14px 0 12px;
   }
 
-  .breadcrumbs {
+  .crumbs {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 8px;
+    gap: 4px;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
-  h1 {
-    margin: 0 0 4px;
-    font-size: 28px;
-    font-weight: 600;
+  .crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .crumb:hover {
+    background: var(--surface-2);
     color: var(--text);
   }
 
-  p {
-    margin: 0;
-    font-size: 14px;
-    color: var(--text-2);
+  .crumb.active {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .crumbs :global(.crumb-sep) {
+    color: var(--dim);
+    flex-shrink: 0;
+  }
+
+  .crumb-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 10px;
+    padding-left: 12px;
+    border-left: 1px solid var(--hairline);
+  }
+
+  .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat.selected {
+    color: var(--blue);
+    font-weight: 600;
   }
 
   .header-actions {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     flex-shrink: 0;
   }
 
   .ghost-btn,
   .accent-btn,
   .danger-btn {
-    padding: 8px 12px;
+    height: 34px;
+    padding: 0 12px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transition: all 0.2s;
+    transition: all 0.15s;
+  }
+
+  .ghost-btn.icon-only,
+  .accent-btn.icon-only {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
   }
 
   .ghost-btn {
@@ -241,87 +254,21 @@
     cursor: not-allowed;
   }
 
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    padding: 0 0 24px;
-  }
-
-  .summary-card {
-    padding: 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .summary-card span {
-    font-size: 11px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
-  }
-
-  .summary-card strong {
-    font-size: 20px;
-    color: var(--text);
-  }
-
-  .summary-card.selected {
-    background: rgba(59, 130, 246, 0.1);
-    border-color: var(--blue);
-  }
-
-  .file-type-icons {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .file-type-icons span {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 12px;
-    color: var(--text);
-    padding: 2px 6px;
-    background: var(--surface);
-    border-radius: 3px;
-  }
-
-  @media (max-width: 1200px) {
-    .summary-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
   @media (max-width: 760px) {
-    .drive-header {
-      flex-direction: column;
-      gap: 12px;
+    .ghost-btn span,
+    .accent-btn span {
+      display: none;
+    }
+
+    .ghost-btn,
+    .accent-btn {
+      width: 34px;
       padding: 0;
-    }
-
-    .header-actions {
-      width: 100%;
-      flex-direction: column;
-    }
-
-    .header-actions button {
-      width: 100%;
       justify-content: center;
     }
 
-    .summary-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    h1 {
-      font-size: 20px;
+    .crumb-stats {
+      display: none;
     }
   }
 </style>

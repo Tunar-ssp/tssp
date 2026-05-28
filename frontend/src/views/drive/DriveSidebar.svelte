@@ -1,7 +1,9 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { untrack } from 'svelte';
   import type { FolderEntry } from '$lib/api';
   import { formatBytes } from '$lib/utils';
+  import DriveFolderTree, { type FolderNode } from './components/panels/DriveFolderTree.svelte';
 
   interface Filter {
     id: string;
@@ -20,6 +22,8 @@
     totalObjects?: number;
     onLensChange?: (lens: any) => void;
     onFolderChange?: (path: string) => void;
+    onNewFolder?: () => void;
+    onMoveToFolder?: (fileIds: string[], path: string) => void;
     onClose?: () => void;
   }
 
@@ -34,12 +38,69 @@
     totalObjects = 0,
     onLensChange,
     onFolderChange,
+    onNewFolder,
+    onMoveToFolder,
     onClose,
   }: Props = $props();
 
-  function folderCount(path: string, allFolders: FolderEntry[]): number {
-    const folder = allFolders.find((f) => f.path === path);
-    return folder?.file_count || 0;
+  // Build a nested tree out of the flat folder paths the backend returns.
+  let folderTree = $derived.by(() => {
+    const roots: FolderNode[] = [];
+    const index = new Map<string, FolderNode>();
+
+    const ensure = (path: string): FolderNode => {
+      const existing = index.get(path);
+      if (existing) return existing;
+      const parts = path.split('/');
+      const name = parts[parts.length - 1];
+      const node: FolderNode = { name, path, fileCount: 0, children: [] };
+      index.set(path, node);
+      if (parts.length === 1) {
+        roots.push(node);
+      } else {
+        ensure(parts.slice(0, -1).join('/')).children.push(node);
+      }
+      return node;
+    };
+
+    for (const entry of folders) {
+      if (!entry.path) continue;
+      ensure(entry.path).fileCount = entry.file_count || 0;
+    }
+
+    const sortTree = (list: FolderNode[]) => {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      list.forEach((n) => sortTree(n.children));
+    };
+    sortTree(roots);
+    return roots;
+  });
+
+  // Auto-expand ancestors of the active folder so it is always visible.
+  // Only depend on currentFolder — untrack the expanded read/write so the
+  // effect doesn't retrigger itself (effect_update_depth_exceeded).
+  let expanded = $state<Set<string>>(new Set());
+  $effect(() => {
+    const folder = currentFolder;
+    if (!folder) return;
+    untrack(() => {
+      const parts = folder.split('/');
+      let changed = false;
+      for (let i = 1; i < parts.length; i++) {
+        const ancestor = parts.slice(0, i).join('/');
+        if (!expanded.has(ancestor)) {
+          expanded.add(ancestor);
+          changed = true;
+        }
+      }
+      if (changed) expanded = new Set(expanded);
+    });
+  });
+
+  function toggle(path: string) {
+    if (expanded.has(path)) expanded.delete(path);
+    else expanded.add(path);
+    expanded = new Set(expanded);
   }
 
   const TOTAL_STORAGE_BYTES = 1024 * 1024 * 1024 * 100; // 100GB
@@ -76,29 +137,36 @@
   </div>
 
   <div class="sidebar-group folders">
-    <div class="group-label">Folders</div>
+    <div class="group-label">
+      <span>Folders</span>
+      {#if onNewFolder}
+        <button type="button" class="group-action" onclick={onNewFolder} title="New folder">
+          <Icons.FolderPlus size={14} />
+        </button>
+      {/if}
+    </div>
     <button
       type="button"
-      class="sidebar-item"
+      class="sidebar-item root-folder"
       class:active={currentFolder === ''}
       onclick={() => onFolderChange?.('')}
     >
-      <Icons.FolderOpen size={14} />
-      <span>Bucket root</span>
+      <Icons.HardDrive size={14} />
+      <span>All files</span>
     </button>
 
-    {#each folders as folder (folder.path)}
-      <button
-        type="button"
-        class="sidebar-item"
-        class:active={currentFolder === folder.path}
-        onclick={() => onFolderChange?.(folder.path)}
-      >
-        <Icons.Folder size={14} />
-        <span>{folder.path}</span>
-        <small>{folderCount(folder.path, folders)}</small>
-      </button>
-    {/each}
+    {#if folderTree.length > 0}
+      <DriveFolderTree
+        nodes={folderTree}
+        {currentFolder}
+        {expanded}
+        onSelect={(path) => onFolderChange?.(path)}
+        onToggle={toggle}
+        {onMoveToFolder}
+      />
+    {:else}
+      <p class="folders-empty">No folders yet</p>
+    {/if}
   </div>
 
   <div class="sidebar-storage">
@@ -159,6 +227,9 @@
   }
 
   .group-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 0 16px;
     font-size: 11px;
     font-weight: 700;
@@ -166,6 +237,32 @@
     letter-spacing: 0.5px;
     color: var(--muted);
     margin-bottom: 8px;
+  }
+
+  .group-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .group-action:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  .folders-empty {
+    margin: 4px 16px;
+    font-size: 12px;
+    color: var(--dim);
   }
 
   .sidebar-item {

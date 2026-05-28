@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import FileIcon from '$lib/components/FileIcon.svelte';
+  import FileThumb from '$lib/components/FileThumb.svelte';
   import { formatBytes, formatRelative } from '$lib/utils/formatters';
   import type { FileRecord } from '$lib/api';
 
@@ -40,7 +40,7 @@
       {#each files.slice(0, 8) as file (file.id)}
         <button type="button" class="file-card" onclick={() => onOpenFile?.(file)}>
           <div class="file-preview" style={`--accent:${fileAccent(file)}`}>
-            <FileIcon mimeType={file.mime_type} name={file.name} size={30} />
+            <FileThumb id={file.id} name={file.name} mimeType={file.mime_type} iconSize={30} />
             {#if file.visibility === 'public'}
               <span class="chip">Public</span>
             {/if}
@@ -120,11 +120,12 @@
     aspect-ratio: 4 / 3;
     border-radius: 10px;
     margin-bottom: 10px;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     background:
-      linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, transparent), rgba(30, 32, 40, 0.95)),
+      linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, transparent), rgba(30, 32, 40, 0.95)),
       var(--surface-2);
     color: var(--text);
   }

@@ -141,7 +141,7 @@ export async function listFiles(
 export async function createFolder(
   name: string,
   parent: string = ''
-): Promise<FileRecord> {
+): Promise<FolderEntry> {
   log('createFolder', 'Starting', { name, parent });
 
   try {
@@ -150,14 +150,14 @@ export async function createFolder(
 
     const response = await api.createFolder(name, parent);
 
-    if (!response?.id) {
+    if (!response?.path) {
       throw new DriveServiceError(
         'INVALID_RESPONSE',
         'Server returned invalid folder data'
       );
     }
 
-    log('createFolder', 'Success', { id: response.id, name });
+    log('createFolder', 'Success', { path: response.path, name });
     return response;
   } catch (err) {
     const message = err instanceof DriveServiceError

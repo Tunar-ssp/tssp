@@ -28,6 +28,7 @@
     onUpload?: () => void;
     onDownload?: (file: FileRecord) => void;
     onCopy?: (file: FileRecord) => void;
+    onRename?: (file: FileRecord, nextName: string) => void;
     onDropFiles?: (fileIds: string[], targetFileId: string) => Promise<void>;
   }
 
@@ -54,6 +55,7 @@
     onUpload = () => {},
     onDownload = () => {},
     onCopy = () => {},
+    onRename = () => {},
     onDropFiles = async (fileIds: string[], targetFileId: string) => {},
   }: Props = $props();
 
@@ -61,6 +63,39 @@
   let draggedOverFile = $state<string | null>(null);
   let renamingFileId = $state<string | null>(null);
   let renameValue = $state<string>('');
+  // Thumbnail loading is staged per file: the lightweight /thumbnail endpoint
+  // first (cheap for the Orange Pi), then full /content if that 404s because
+  // the stored mime_type isn't image/* (backend mime detection is unreliable),
+  // then the type icon if even that fails.
+  let thumbStage = $state<Map<string, 'thumb' | 'content' | 'failed'>>(new Map());
+
+  const IMG_THUMB = /\.(jpg|jpeg|png|gif|webp|avif|bmp|ico|svg)$/i;
+  const VID_THUMB = /\.(mp4|webm|mov|mkv|avi|flv|wmv|m4v)$/i;
+
+  function stageOf(id: string): 'thumb' | 'content' | 'failed' {
+    return thumbStage.get(id) ?? 'thumb';
+  }
+
+  function thumbSrc(id: string): string {
+    const base = `/api/v1/files/${encodeURIComponent(id)}`;
+    return stageOf(id) === 'content' ? `${base}/content?disposition=inline` : `${base}/thumbnail`;
+  }
+
+  function onThumbError(id: string) {
+    const current = stageOf(id);
+    const next = current === 'thumb' ? 'content' : 'failed';
+    thumbStage.set(id, next);
+    thumbStage = new Map(thumbStage);
+  }
+
+  // Focus + select an input on mount without triggering the browser's
+  // "Autofocus processing was blocked" warning that bare `autofocus` causes.
+  function autofocusSelect(node: HTMLInputElement) {
+    queueMicrotask(() => {
+      node.focus();
+      node.select();
+    });
+  }
 
   interface OnDragEvent extends DragEvent {
     dataTransfer: DataTransfer | null;
@@ -72,9 +107,9 @@
   }
 
   function finishRename(file: FileRecord) {
-    if (renameValue && renameValue !== file.name) {
-      // This would trigger the rename callback
-      // For now we'll just close the rename mode
+    const next = renameValue.trim();
+    if (next && next !== file.name) {
+      onRename?.(file, next);
     }
     renamingFileId = null;
     renameValue = '';
@@ -180,14 +215,20 @@
             }}
           >
             <div class="file-surface">
-              {#if showThumbnails && file.name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)}
-                <img src={`/api/v1/files/${encodeURIComponent(file.id)}/content`} alt={file.name} class="file-thumbnail" loading="lazy" />
-              {:else if showThumbnails && file.name.match(/\.(mp4|webm|mov|mkv|avi|flv|wmv)$/i)}
+              {#if showThumbnails && IMG_THUMB.test(file.name) && stageOf(file.id) !== 'failed'}
+                <img
+                  src={thumbSrc(file.id)}
+                  alt={file.name}
+                  class="file-thumbnail"
+                  loading="lazy"
+                  onerror={() => onThumbError(file.id)}
+                />
+              {:else if showThumbnails && VID_THUMB.test(file.name)}
                 <div class="video-thumbnail">
                   <Icons.Play size={24} />
                 </div>
               {:else}
-                <FileIcon mimeType={file.mime_type} name={file.name} size={34} />
+                <FileIcon mimeType={file.mime_type} name={file.name} size={40} />
               {/if}
               {#if file.visibility === 'public'}
                 <span class="inline-badge public">Public</span>
@@ -236,11 +277,11 @@
                 <input
                   type="text"
                   class="rename-input"
-                  value={renameValue}
-                  onchange={(e) => renameValue = e.currentTarget.value}
+                  bind:value={renameValue}
                   onblur={() => finishRename(file)}
                   onkeydown={(e) => handleRenameKeydown(e, file)}
-                  autofocus
+                  onclick={(e) => e.stopPropagation()}
+                  use:autofocusSelect
                 />
               {:else}
                 <strong
@@ -292,11 +333,11 @@
                   <input
                     type="text"
                     class="rename-input"
-                    value={renameValue}
-                    onchange={(e) => renameValue = e.currentTarget.value}
+                    bind:value={renameValue}
                     onblur={() => finishRename(file)}
                     onkeydown={(e) => handleRenameKeydown(e, file)}
-                    autofocus
+                    onclick={(e) => e.stopPropagation()}
+                    use:autofocusSelect
                   />
                 {:else}
                   <span

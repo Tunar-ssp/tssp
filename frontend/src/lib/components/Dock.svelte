@@ -110,34 +110,20 @@
   }
 
   .dock-glow {
-    position: absolute;
-    inset: -24px 14px 0;
-    z-index: -1;
-    border-radius: 40px;
-    background:
-      radial-gradient(circle at 20% 20%, rgba(110, 168, 255, 0.22), transparent 34%),
-      radial-gradient(circle at 78% 12%, rgba(91, 227, 154, 0.18), transparent 30%),
-      radial-gradient(circle at 50% 100%, rgba(255, 95, 162, 0.16), transparent 40%);
-    filter: blur(18px);
-    opacity: 0.85;
+    display: none;
   }
 
   .dock-container {
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    gap: 14px;
-    padding: 14px 18px 12px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.035)),
-      rgba(14, 16, 22, 0.72);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 30px;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--dock-glass);
+    border: 1px solid var(--dock-edge);
+    border-radius: 18px;
     backdrop-filter: blur(20px);
-    box-shadow:
-      0 20px 50px rgba(0,0,0,.58),
-      0 1px 0 rgba(255,255,255,.2) inset,
-      0 -1px 0 rgba(0,0,0,.45) inset;
+    box-shadow: var(--shadow-dock);
     pointer-events: all;
   }
 
@@ -176,34 +162,33 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 72px;
-    height: 72px;
+    width: 58px;
+    height: 58px;
     padding: 0;
-    border: 1px solid rgba(255,255,255,0.1);
-    background:
-      linear-gradient(145deg, color-mix(in srgb, var(--item-accent, var(--blue)) 28%, transparent), rgba(255,255,255,0.04)),
-      rgba(255,255,255,0.035);
-    color: var(--text);
-    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-2);
+    border-radius: 15px;
     cursor: pointer;
     position: relative;
-    transition: all var(--duration-quick) var(--ease-smooth);
-    box-shadow:
-      0 10px 20px rgba(0,0,0,.3),
-      0 1px 0 rgba(255,255,255,.12) inset;
+    transition: transform var(--duration-quick) var(--ease-smooth),
+      background var(--duration-quick) var(--ease-smooth),
+      border-color var(--duration-quick) var(--ease-smooth),
+      color var(--duration-quick) var(--ease-smooth);
   }
 
   .dock-item:hover {
     color: var(--text);
-    border-color: color-mix(in srgb, var(--item-accent, var(--blue)) 52%, white 8%);
-    transform: translateY(-8px) scale(1.08);
+    background: var(--surface-3);
+    border-color: var(--border-2);
+    transform: translateY(-6px);
   }
 
   .dock-item.hovered,
   .dock-item.active {
-    background:
-      linear-gradient(145deg, color-mix(in srgb, var(--item-accent, var(--blue)) 46%, transparent), rgba(255,255,255,0.08)),
-      rgba(255,255,255,0.04);
+    color: color-mix(in srgb, var(--item-accent, var(--accent)) 88%, white);
+    background: color-mix(in srgb, var(--item-accent, var(--accent)) 16%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--item-accent, var(--accent)) 40%, transparent);
   }
 
   .dock-item-wrap:hover .dock-label,
@@ -215,12 +200,11 @@
   .dock-item.active::after {
     content: "";
     position: absolute;
-    bottom: -8px;
-    width: 7px;
-    height: 7px;
+    bottom: -6px;
+    width: 5px;
+    height: 5px;
     border-radius: 999px;
-    background: var(--orange);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--orange) 70%, transparent);
+    background: var(--item-accent, var(--accent));
   }
 
   .dock-icon {

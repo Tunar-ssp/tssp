@@ -5,6 +5,7 @@
   import { isAdmin, user } from '$lib/stores/auth';
   import { navigateTo } from '$lib/stores/ui';
   import LauncherHero from './components/LauncherHero.svelte';
+  import LauncherApps from './components/LauncherApps.svelte';
   import LauncherStatus from './components/LauncherStatus.svelte';
   import LauncherRecentFiles from './components/LauncherRecentFiles.svelte';
   import LauncherRecentNotes from './components/LauncherRecentNotes.svelte';
@@ -118,6 +119,16 @@
     />
     <LauncherStatus {status} system={adminSystem} />
   </div>
+
+  <LauncherApps
+    isAdmin={$isAdmin}
+    fileCount={status?.file_count ?? 0}
+    noteCount={status?.note_count ?? 0}
+    workspaceCount={recentWorkspaces.length}
+    storageBytes={status?.storage_bytes_used ?? 0}
+    pinnedCount={status?.pinned_count ?? 0}
+    onOpen={(view) => navigateTo(view)}
+  />
 
   {#if errorMessage}
     <section class="message-panel error">
@@ -244,7 +255,7 @@
 
   .launcher-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr) minmax(300px, 0.95fr);
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr) minmax(300px, 1fr);
     gap: 18px;
     align-items: start;
   }

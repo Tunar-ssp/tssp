@@ -16,6 +16,10 @@
   let newFolderName = $state('');
   let showNewFolderInput = $state(false);
 
+  function autofocusNode(node: HTMLInputElement) {
+    queueMicrotask(() => node.focus());
+  }
+
   function resetForm() {
     selectedFolder = '';
     newFolderName = '';
@@ -110,7 +114,7 @@
                 bind:value={newFolderName}
                 placeholder="folder name"
                 class="new-folder-input"
-                autofocus
+                use:autofocusNode
               />
             </div>
           {/if}

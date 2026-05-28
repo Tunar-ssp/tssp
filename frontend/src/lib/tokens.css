@@ -21,9 +21,16 @@
   --faint:      #393d49;
 
   /* Borders & dividers */
-  --border:     #262a35;
-  --border-2:   #323744;
-  --hairline:   #1f222b;
+  --border:     #23262f;
+  --border-2:   #313542;
+  --hairline:   #1b1e26;
+
+  /* Primary accent — one restrained accent keeps the product calm and
+     intentional instead of the rainbow-glow look. Use sparingly. */
+  --accent:        #5b8cff;
+  --accent-hover:  #4a7df0;
+  --accent-soft:   rgba(91, 140, 255, 0.12);
+  --accent-border: rgba(91, 140, 255, 0.34);
 
   /* Brand Accent (Green) */
   --green:      #5be39a;
@@ -34,8 +41,8 @@
   --pink-subtle: rgba(255, 95, 162, 0.1);
   --orange:     #ff8a3d;
   --orange-subtle: rgba(255, 138, 61, 0.1);
-  --blue:       #6ea8ff;
-  --blue-subtle: rgba(110, 168, 255, 0.1);
+  --blue:       #5b8cff;
+  --blue-subtle: rgba(91, 140, 255, 0.1);
   --cyan:       #58d6e0;
   --cyan-subtle: rgba(88, 214, 224, 0.1);
   --violet:     #a394ff;
@@ -45,24 +52,36 @@
   --success:    #34d399;
   --warning:    #fbbf24;
   --danger:     #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, 0.12);
   --info:       #6ea8ff;
 
-  /* Glass & Elevation */
-  --dock-glass: rgba(20,22,29,0.62);
+  /* Semantic aliases (these were referenced widely but never defined,
+     leaving cards/hovers transparent — defining them fixes that). */
+  --bg-secondary: #14161d;        /* card / panel surface */
+  --text-3:    var(--dim);
+  --blue-hover: var(--accent-hover);
+  --blue-soft: rgba(91, 140, 255, 0.16);
+  --green-soft: rgba(91, 227, 154, 0.18);
+  --orange-soft: rgba(255, 138, 61, 0.18);
+
+  /* Elevation — quiet, single-direction shadows. No glassy inset
+     highlights (those read as "AI demo"). */
+  --dock-glass: rgba(18, 20, 27, 0.8);
   --dock-edge:  rgba(255,255,255,0.06);
-  --dock-hi:    rgba(255,255,255,0.08);
-  --shadow-dock: 0 18px 40px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.04) inset, 0 -1px 0 rgba(0,0,0,.5) inset;
-  --shadow-card: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.32);
-  --shadow-modal: 0 30px 80px rgba(0,0,0,.6), 0 2px 0 rgba(255,255,255,.04) inset;
+  --dock-hi:    rgba(255,255,255,0.06);
+  --shadow-dock: 0 12px 32px rgba(0,0,0,.45);
+  --shadow-card: 0 1px 2px rgba(0,0,0,.24);
+  --shadow-pop:  0 8px 24px rgba(0,0,0,.36);
+  --shadow-modal: 0 24px 64px rgba(0,0,0,.5);
 
   /* Spacing Scale (4pt base) */
   --s-1:  4px;   --s-2:  8px;   --s-3: 12px;  --s-4: 16px;
   --s-5: 20px;   --s-6: 24px;   --s-7: 32px;  --s-8: 40px;
   --s-9: 48px;  --s-10: 64px;
 
-  /* Radii */
+  /* Radii — tighter, more product-grade (less "big pill everywhere"). */
   --r-1: 4px;  --r-2: 6px;   --r-3: 8px;   --r-4: 10px;
-  --r-5: 14px; --r-6: 18px;  --r-7: 22px;  --r-full: 9999px;
+  --r-5: 12px; --r-6: 14px;  --r-7: 16px;  --r-full: 9999px;
 
   /* Typography */
   --ff-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
@@ -106,6 +125,11 @@ html[data-theme="light"] {
   --border:     #d9dce4;
   --border-2:   #cdd0d9;
   --hairline:   #e5e7ed;
+
+  --bg-secondary: #ffffff;
+  --blue-soft:  rgba(91, 140, 255, 0.12);
+  --danger-soft: rgba(255, 107, 107, 0.14);
+  --accent-soft: rgba(91, 140, 255, 0.12);
 
   --dock-glass: rgba(250,251,252,0.72);
   --dock-edge:  rgba(0,0,0,0.08);
