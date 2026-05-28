@@ -33,7 +33,7 @@ const STORAGE_KEY = 'tssp.shell.preferences.v2';
 const defaultPreferences: ShellPreferences = {
   theme: 'dark',
   accent: 'green',
-  dockMode: 'always',
+  dockMode: 'autohide',
   dockOrder: ['drive', 'notes', 'workspace', 'admin'],
   density: 'comfortable',
   defaultDriveView: 'grid',
@@ -83,8 +83,12 @@ function readPreferences(): ShellPreferences {
       ...defaultPreferences,
       ...parsed,
       dockOrder: Array.isArray(parsed?.dockOrder) && parsed.dockOrder.length
-        ? parsed.dockOrder.filter((item: string) =>
-            defaultPreferences.dockOrder.includes(item as ShellPreferences['dockOrder'][number])
+        ? Array.from(
+            new Set(
+              parsed.dockOrder.filter((item: string) =>
+                defaultPreferences.dockOrder.includes(item as ShellPreferences['dockOrder'][number])
+              )
+            )
           )
         : defaultPreferences.dockOrder,
     };

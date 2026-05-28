@@ -4,14 +4,25 @@
   import { api } from '$lib/api';
 
   type Status = Awaited<ReturnType<typeof api.getStatus>>;
-  type AdminOverview = Awaited<ReturnType<typeof api.getAdminOverview>>;
+  type AdminSystem = Awaited<ReturnType<typeof api.getAdminSystem>>;
 
   interface Props {
     status?: Status;
-    adminOverview?: AdminOverview;
+    system?: AdminSystem;
   }
 
-  let { status, adminOverview }: Props = $props();
+  let { status, system }: Props = $props();
+
+  const percent = (used: number, total: number) =>
+    total > 0 ? Math.round((used / total) * 100) : 0;
+
+  let memoryPercent = $derived(
+    system ? percent(system.total_memory_bytes - system.available_memory_bytes, system.total_memory_bytes) : null
+  );
+  let diskPercent = $derived(
+    system ? percent(system.data_dir_total_bytes - system.data_dir_free_bytes, system.data_dir_total_bytes) : null
+  );
+  let loadAverage = $derived(system ? system.load_average_1m.toFixed(2) : null);
 
   const formatUptime = (seconds = 0) => {
     if (seconds < 60) return `${seconds}s`;
@@ -36,15 +47,15 @@
 
     <div class="status-rings">
       <div class="ring green">
-        <strong>{adminOverview?.system.cpu_percent ?? 'ok'}</strong>
-        <span>CPU</span>
+        <strong>{loadAverage ?? '—'}</strong>
+        <span>Load</span>
       </div>
       <div class="ring blue">
-        <strong>{adminOverview?.system.memory_percent ?? 'local'}</strong>
+        <strong>{memoryPercent !== null ? `${memoryPercent}%` : '—'}</strong>
         <span>Memory</span>
       </div>
       <div class="ring orange">
-        <strong>{adminOverview?.system.disk_percent ?? 'ready'}</strong>
+        <strong>{diskPercent !== null ? `${diskPercent}%` : '—'}</strong>
         <span>Disk</span>
       </div>
     </div>

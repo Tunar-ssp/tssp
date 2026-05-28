@@ -12,12 +12,12 @@
   import LauncherActivityPanel from './components/LauncherActivityPanel.svelte';
 
   type Status = Awaited<ReturnType<typeof api.getStatus>>;
-  type AdminOverview = Awaited<ReturnType<typeof api.getAdminOverview>>;
+  type AdminSystem = Awaited<ReturnType<typeof api.getAdminSystem>>;
 
   let loading = $state(true);
   let errorMessage = $state('');
   let status = $state<Status | undefined>();
-  let adminOverview = $state<AdminOverview | undefined>();
+  let adminSystem = $state<AdminSystem | undefined>();
   let recentFiles = $state<FileRecord[]>([]);
   let recentNotes = $state<Note[]>([]);
   let recentWorkspaces = $state<Workspace[]>([]);
@@ -40,9 +40,9 @@
       ] as const;
 
       if ($isAdmin) {
-        const [statusData, filesData, notesData, workspacesData, overviewData, activityData] = await Promise.all([
+        const [statusData, filesData, notesData, workspacesData, systemData, activityData] = await Promise.all([
           ...baseRequests,
-          api.getAdminOverview(),
+          api.getAdminSystem().catch(() => undefined),
           api.listAdminActivity(8),
         ]);
 
@@ -50,7 +50,7 @@
         recentFiles = filesData.files || [];
         recentNotes = notesData.notes || [];
         recentWorkspaces = workspacesData.workspaces || [];
-        adminOverview = overviewData;
+        adminSystem = systemData;
         activityItems = activityData.items || [];
       } else {
         const [statusData, filesData, notesData, workspacesData] = await Promise.all(baseRequests);
@@ -59,7 +59,7 @@
         recentFiles = filesData.files || [];
         recentNotes = notesData.notes || [];
         recentWorkspaces = workspacesData.workspaces || [];
-        adminOverview = undefined;
+        adminSystem = undefined;
         activityItems = [];
       }
     } catch (error) {
@@ -116,7 +116,7 @@
       onOpenWorkspace={() => navigateTo('workspace')}
       onOpenShare={() => navigateTo('drive')}
     />
-    <LauncherStatus {status} {adminOverview} />
+    <LauncherStatus {status} system={adminSystem} />
   </div>
 
   {#if errorMessage}

@@ -27,48 +27,84 @@
 </script>
 
 {#if mode !== 'hidden'}
-<nav class="dock {className || ''}" class:autohide={mode === 'autohide'} class:compact={mode === 'compact'}>
-  <div class="dock-glow" aria-hidden="true"></div>
-  <div class="dock-container">
-    {#each items as item (item.id)}
-      {@const Icon = item.icon}
-      <div class="dock-item-wrap">
-        <span class="dock-label">
-          {item.label}
-          {#if item.shortcut}<kbd class="dock-shortcut">{item.shortcut}</kbd>{/if}
-        </span>
-        <button
-          class="dock-item"
-          class:active={activeId === item.id}
-          class:hovered={hoveredId === item.id}
-          style={item.accent ? `--item-accent:${item.accent}` : ''}
-          onmouseenter={() => (hoveredId = item.id)}
-          onmouseleave={() => (hoveredId = null)}
-          onclick={item.action}
-          title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
-          aria-label={`Open ${item.label}`}
-          aria-current={activeId === item.id ? 'page' : undefined}
-        >
-          <div class="dock-icon">
-            <Icon size={mode === 'compact' ? 22 : 26} />
-          </div>
-          {#if item.badge}
-            <div class="dock-badge">{item.badge}</div>
-          {/if}
-        </button>
-      </div>
-    {/each}
-  </div>
-</nav>
+<div class="dock-zone {className || ''}" class:autohide={mode === 'autohide'} class:compact={mode === 'compact'}>
+  {#if mode === 'autohide'}
+    <div class="dock-hotzone" aria-hidden="true"></div>
+    <div class="dock-handle" aria-hidden="true"></div>
+  {/if}
+  <nav class="dock" aria-label="Application dock">
+    <div class="dock-glow" aria-hidden="true"></div>
+    <div class="dock-container">
+      {#each items as item (item.id)}
+        {@const Icon = item.icon}
+        <div class="dock-item-wrap">
+          <span class="dock-label">{item.label}</span>
+          <button
+            class="dock-item"
+            class:active={activeId === item.id}
+            class:hovered={hoveredId === item.id}
+            style={item.accent ? `--item-accent:${item.accent}` : ''}
+            onmouseenter={() => (hoveredId = item.id)}
+            onmouseleave={() => (hoveredId = null)}
+            onclick={item.action}
+            title={item.label}
+            aria-label={`Open ${item.label}`}
+            aria-current={activeId === item.id ? 'page' : undefined}
+          >
+            <div class="dock-icon">
+              <Icon size={mode === 'compact' ? 22 : 26} />
+            </div>
+            {#if item.badge}
+              <div class="dock-badge">{item.badge}</div>
+            {/if}
+          </button>
+        </div>
+      {/each}
+    </div>
+  </nav>
+</div>
 {/if}
 
 <style>
-  .dock {
+  .dock-zone {
     position: fixed;
-    bottom: 22px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 140;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    padding-bottom: 22px;
+    pointer-events: none;
+  }
+
+  /* Invisible strip along the very bottom edge that reveals an autohidden dock */
+  .dock-hotzone {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 22px;
+    pointer-events: all;
+  }
+
+  /* Subtle peek indicator so the hidden dock stays discoverable */
+  .dock-handle {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    width: 140px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    transform: translateX(-50%);
+    transition: opacity var(--duration-normal) var(--ease-smooth);
+    pointer-events: none;
+  }
+
+  .dock {
+    position: relative;
     pointer-events: none;
     transition: transform var(--duration-normal) var(--ease-smooth), opacity var(--duration-normal) var(--ease-smooth);
   }
@@ -213,36 +249,47 @@
     border: 2px solid var(--surface);
   }
 
-  .dock.compact .dock-container {
+  .dock-zone.compact .dock-container {
     gap: 10px;
     padding: 10px 12px;
   }
 
-  .dock.compact .dock-item {
+  .dock-zone.compact .dock-item {
     width: 58px;
     height: 58px;
     border-radius: 16px;
   }
 
-  .dock.compact .dock-label {
+  .dock-zone.compact .dock-label {
     display: none;
   }
 
-  .dock.autohide {
+  /* Autohide: dock slides out of view, a slim handle hints it is there */
+  .dock-zone.autohide .dock {
     opacity: 0;
-    pointer-events: none;
-    transform: translateX(-50%) translateY(80px);
+    transform: translateY(calc(100% + 30px));
   }
 
-  .dock.autohide:hover {
+  .dock-zone.autohide:hover .dock {
     opacity: 1;
+    transform: translateY(0);
     pointer-events: all;
-    transform: translateX(-50%) translateY(0);
+  }
+
+  .dock-zone.autohide:hover .dock-container {
+    pointer-events: all;
+  }
+
+  .dock-zone.autohide:hover .dock-handle {
+    opacity: 0;
   }
 
   @media (max-width: 640px) {
+    .dock-zone {
+      padding-bottom: 14px;
+    }
+
     .dock {
-      bottom: 14px;
       width: calc(100vw - 20px);
     }
 

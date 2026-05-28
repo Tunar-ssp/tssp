@@ -36,18 +36,29 @@ export const adminApi = {
   getAdminOverview: () =>
     request<{
       schema_version: number;
-      repository: {
-        file_count: number;
-        storage_bytes_used: number;
-        note_count: number;
-      };
-      system: {
-        uptime_seconds: number;
-        cpu_percent?: number;
-        memory_percent?: number;
-        disk_percent?: number;
-      };
+      version: string;
+      uptime_seconds: number;
+      file_count: number;
+      note_count: number;
+      tag_count: number;
+      pinned_count: number;
+      workspace_count: number;
+      corrupt_file_count: number;
+      storage_bytes_used: number;
+      public_url?: string;
     }>('/admin/overview'),
+  getAdminSystem: () =>
+    request<{
+      schema_version: number;
+      hostname: string;
+      os: string;
+      arch: string;
+      load_average_1m: number;
+      total_memory_bytes: number;
+      available_memory_bytes: number;
+      data_dir_free_bytes: number;
+      data_dir_total_bytes: number;
+    }>('/admin/system'),
   getAdminStatus: () =>
     request<{
       schema_version: number;

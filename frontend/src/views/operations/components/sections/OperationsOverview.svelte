@@ -45,6 +45,10 @@
   function healthLabel() {
     return status?.status || 'Status unavailable';
   }
+
+  let memoryPercent = $derived(
+    status?.memory_total ? Math.round((status.memory_used / status.memory_total) * 100) : 0
+  );
 </script>
 
 <div class="admin-content">
@@ -64,23 +68,23 @@
       <div class="metrics-grid">
         <article class="metric-card">
           <span>Repository files</span>
-          <strong>{overview?.repository.file_count || 0}</strong>
-          <p>{formatBytes(overview?.repository.storage_bytes_used || 0)} in use</p>
+          <strong>{overview?.file_count ?? 0}</strong>
+          <p>{formatBytes(overview?.storage_bytes_used ?? 0)} in use</p>
         </article>
         <article class="metric-card">
           <span>Notes</span>
-          <strong>{overview?.repository.note_count || 0}</strong>
+          <strong>{overview?.note_count ?? 0}</strong>
           <p>Knowledge base entries</p>
         </article>
         <article class="metric-card">
-          <span>CPU</span>
-          <strong>{overview?.system.cpu_percent ?? 0}%</strong>
-          <p>Live system load</p>
+          <span>Load</span>
+          <strong>{(status?.load_average ?? 0).toFixed(2)}</strong>
+          <p>1m system load average</p>
         </article>
         <article class="metric-card">
           <span>Memory</span>
-          <strong>{overview?.system.memory_percent ?? 0}%</strong>
-          <p>RAM in use</p>
+          <strong>{memoryPercent}%</strong>
+          <p>{formatBytes(status?.memory_used ?? 0)} of {formatBytes(status?.memory_total ?? 0)}</p>
         </article>
       </div>
     </article>

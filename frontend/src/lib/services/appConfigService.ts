@@ -70,21 +70,18 @@ export const globalCommands = [
     label: 'Open drive',
     description: 'Access your cloud storage',
     icon: Icons.Cloud,
-    shortcut: '⌘2',
   },
   {
     id: 'command-notes',
     label: 'Open notes',
     description: 'View and manage your notes',
     icon: Icons.BookText,
-    shortcut: '⌘3',
   },
   {
     id: 'command-workspace',
     label: 'Open workspace',
     description: 'Edit and run code snippets',
     icon: Icons.Code2,
-    shortcut: '⌘4',
   },
 ];
 

@@ -83,32 +83,24 @@
     ($preferences.dockOrder || []).filter((view) => $isAdmin || view !== 'admin')
   );
 
-  const shortcutForView: Record<string, string> = {
-    home: '⌘1',
-    drive: '⌘2',
-    notes: '⌘3',
-    workspace: '⌘4',
-    admin: '⌘5',
-  };
-
-  let dockItems = $derived([
-    {
-      id: 'home',
-      label: 'Home',
-      shortcut: shortcutForView.home,
-      icon: Icons.Power,
-      accent: '#5be39a',
-      action: () => navigateTo('home'),
-    },
-    ...availableAppIds.map((view) => ({
-      id: view,
-      label: appMeta[view].title,
-      shortcut: shortcutForView[view],
-      icon: appMeta[view].icon,
-      accent: appMeta[view].accent,
-      action: () => navigateTo(view),
-    })),
-  ]);
+  let dockItems = $derived(
+    [
+      {
+        id: 'home',
+        label: 'Home',
+        icon: Icons.Power,
+        accent: '#5be39a',
+        action: () => navigateTo('home'),
+      },
+      ...availableAppIds.map((view) => ({
+        id: view,
+        label: appMeta[view].title,
+        icon: appMeta[view].icon,
+        accent: appMeta[view].accent,
+        action: () => navigateTo(view),
+      })),
+    ].filter((item, index, items) => items.findIndex((other) => other.id === item.id) === index)
+  );
 
   const commands = [
     {
@@ -181,7 +173,7 @@
       </main>
     </div>
 
-    <Dock items={dockItems} activeId={$currentView} mode={['notes', 'workspace'].includes($currentView) ? 'autohide' : $dockMode} />
+    <Dock items={dockItems} activeId={$currentView} mode={$dockMode === 'hidden' ? 'hidden' : $dockMode === 'compact' ? 'compact' : 'autohide'} />
     <UploadQueue />
     <CommandPalette
       {commands}

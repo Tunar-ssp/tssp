@@ -715,35 +715,57 @@
   }
 
   .workspace-activity {
-    width: 50px;
-    background: #0d0f14;
+    width: 48px;
+    background: #0b0c11;
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 12px 0;
-    gap: 8px;
+    padding: 8px 0;
+    gap: 2px;
     flex-shrink: 0;
   }
 
   .activity-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    border: 1px solid transparent;
+    position: relative;
+    width: 48px;
+    height: 44px;
+    border: none;
     background: transparent;
     color: var(--text-3);
+    opacity: 0.65;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: opacity 0.15s, color 0.15s;
   }
 
-  .activity-btn:hover,
-  .activity-btn.active {
+  .activity-btn::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 2px;
+    height: 0;
+    background: var(--text);
+    border-radius: 0 2px 2px 0;
+    transform: translateY(-50%);
+    transition: height 0.15s;
+  }
+
+  .activity-btn:hover {
+    opacity: 1;
     color: var(--text);
-    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .activity-btn.active {
+    opacity: 1;
+    color: var(--text);
+  }
+
+  .activity-btn.active::before {
+    height: 24px;
   }
 
   .activity-spacer {
