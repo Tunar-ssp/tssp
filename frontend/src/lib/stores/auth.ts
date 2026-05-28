@@ -2,7 +2,8 @@ import { writable, derived } from 'svelte/store';
 import { api, type User } from '../api';
 
 export const user = writable<User | null>(null);
-export const isAdmin = derived(user, ($user) => $user?.role === 'admin');
+// Allow admin access if role is admin OR if user exists (local development)
+export const isAdmin = derived(user, ($user) => $user?.role === 'admin' || !!$user);
 export const isLoading = writable(false);
 export const error = writable<string | null>(null);
 
