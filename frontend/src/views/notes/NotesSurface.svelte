@@ -229,8 +229,9 @@
 
   async function handlePinNote(note: any) {
     try {
-      await toggleNotePin(note.id, !!note.pinned_at);
-      success(note.pinned_at ? 'Note Unpinned' : 'Note Pinned', 'Pinned notes stay at the top');
+      const wasPinned = !!note.pinned_at;
+      await toggleNotePin(note.id, wasPinned);
+      success(!wasPinned ? 'Note Pinned' : 'Note Unpinned', 'Pinned notes stay at the top');
     } catch (err) {
       error('Pin Failed', err instanceof Error ? err.message : 'Could not update pin state');
     }
