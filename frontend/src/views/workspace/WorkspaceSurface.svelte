@@ -36,8 +36,8 @@
 
   type InspectorTab = 'preview' | 'outline' | 'terminal';
 
-  let showSidebar = $state(true);
-  let showBottomPanel = $state(false);
+  let showSidebar = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('workspace-sidebar-open') ?? 'true') : true);
+  let showBottomPanel = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('workspace-bottom-panel-open') ?? 'false') : false);
   let contextMenu = $state({ visible: false, x: 0, y: 0, workspace: null as any });
   let isLoading = $state(true);
   let bodyDraft = $state('');
@@ -106,6 +106,20 @@
 
   onDestroy(() => {
     if (saveTimer) clearTimeout(saveTimer);
+  });
+
+  // Persist sidebar state
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('workspace-sidebar-open', String(showSidebar));
+    }
+  });
+
+  // Persist bottom panel state
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('workspace-bottom-panel-open', String(showBottomPanel));
+    }
   });
 
   let lastActiveId = $state<string | null>(null);
