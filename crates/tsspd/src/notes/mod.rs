@@ -20,6 +20,6 @@ pub use response::NoteRecordResponse;
 
 pub(crate) use handlers::{
     add_note_tags, create_note, delete_note, duplicate_note, export_notes, get_note,
-    get_note_backlinks, list_notes, pin_note, remove_note_tag, replace_note_tags, unpin_note,
-    update_note,
+    get_note_backlinks, list_notes, move_note, pin_note, remove_note_tag, replace_note_tags,
+    set_note_icon, unpin_note, update_note,
 };

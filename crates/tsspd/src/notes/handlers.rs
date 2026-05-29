@@ -24,12 +24,30 @@ pub(crate) struct CreateNoteBody {
     pub(crate) tags: Vec<String>,
     #[serde(default)]
     pub(crate) pin: bool,
+    #[serde(default)]
+    pub(crate) parent_id: Option<String>,
+    #[serde(default)]
+    pub(crate) icon: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateNoteBody {
     pub(crate) title: Option<String>,
     pub(crate) body: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct MoveNoteBody {
+    /// New parent id, or `null`/absent to move to the top level.
+    #[serde(default)]
+    pub(crate) parent_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetIconBody {
+    /// New icon, or `null`/absent to clear it.
+    #[serde(default)]
+    pub(crate) icon: Option<String>,
 }
 
 pub(crate) async fn create_note(
@@ -48,6 +66,8 @@ pub(crate) async fn create_note(
         tags: body.tags,
         pin: body.pin,
         owner_id: Some(auth.user_id.clone()),
+        parent_id: body.parent_id,
+        icon: body.icon,
     };
 
     match run_blocking(provider, move |provider| provider.create_note(request)).await {
@@ -188,6 +208,92 @@ pub(crate) async fn update_note(
     }
 }
 
+pub(crate) async fn move_note(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+    Json(body): Json<MoveNoteBody>,
+) -> Response {
+    let note_id = match parse_note_id(id) {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+    let provider = state.note_provider.clone();
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to move this note".to_owned(),
+        }
+        .response();
+    }
+
+    let parent_id = body.parent_id;
+    match run_blocking(provider, move |provider| {
+        provider.move_note(note_id, parent_id)
+    })
+    .await
+    {
+        Ok(record) => (
+            StatusCode::OK,
+            Json(NoteRecordResponse::from_record(&record)),
+        )
+            .into_response(),
+        Err(response) => response,
+    }
+}
+
+pub(crate) async fn set_note_icon(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Path(id): Path<String>,
+    Json(body): Json<SetIconBody>,
+) -> Response {
+    let note_id = match parse_note_id(id) {
+        Ok(value) => value,
+        Err(error) => return error.response(),
+    };
+    let provider = state.note_provider.clone();
+    let provider_clone = provider.clone();
+    let note_id_clone = note_id.clone();
+    let existing = match run_blocking(provider_clone, move |provider| {
+        provider.get_note(note_id_clone)
+    })
+    .await
+    {
+        Ok(record) => record,
+        Err(response) => return response,
+    };
+    if !(auth.is_admin() || existing.owner_id.as_ref() == Some(&auth.user_id)) {
+        return HttpNoteError::Forbidden {
+            message: "you do not have permission to edit this note".to_owned(),
+        }
+        .response();
+    }
+
+    let icon = body.icon;
+    match run_blocking(provider, move |provider| {
+        provider.set_note_icon(note_id, icon)
+    })
+    .await
+    {
+        Ok(record) => (
+            StatusCode::OK,
+            Json(NoteRecordResponse::from_record(&record)),
+        )
+            .into_response(),
+        Err(response) => response,
+    }
+}
+
 pub(crate) async fn delete_note(
     State(state): State<HttpState>,
     auth: crate::auth::AuthContext,
@@ -257,6 +363,8 @@ pub(crate) async fn duplicate_note(
             .collect(),
         pin: false,
         owner_id: Some(auth.user_id.clone()),
+        parent_id: existing.parent_id.clone(),
+        icon: existing.icon.clone(),
     };
 
     match run_blocking(provider, move |provider| provider.create_note(request)).await {

@@ -202,6 +202,18 @@ pub fn build_router(state: HttpState) -> Router {
             post(crate::notes::duplicate_note).options(options_response),
         )
         .route(
+            "/api/v1/notes/{id}/parent",
+            axum::routing::put(crate::notes::move_note)
+                .options(options_response)
+                .layer(json_body_limit()),
+        )
+        .route(
+            "/api/v1/notes/{id}/icon",
+            axum::routing::put(crate::notes::set_note_icon)
+                .options(options_response)
+                .layer(json_body_limit()),
+        )
+        .route(
             "/api/v1/notes/{id}/backlinks",
             get(crate::notes::get_note_backlinks).options(options_response),
         )

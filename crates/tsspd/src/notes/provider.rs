@@ -40,6 +40,21 @@ pub trait NoteProvider: Send + Sync {
         request: UpdateNoteRequest,
     ) -> Result<NoteRecord, HttpNoteError>;
 
+    /// Moves a note under a new parent (`None` = top level).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when the move is invalid or persistence fails.
+    fn move_note(&self, id: NoteId, parent_id: Option<String>)
+        -> Result<NoteRecord, HttpNoteError>;
+
+    /// Sets a note's icon (`None` clears it).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpNoteError`] when the note is missing or persistence fails.
+    fn set_note_icon(&self, id: NoteId, icon: Option<String>) -> Result<NoteRecord, HttpNoteError>;
+
     /// Deletes a note.
     ///
     /// # Errors
@@ -111,6 +126,22 @@ impl NoteProvider for StaticNoteProvider {
         &self,
         _id: NoteId,
         _request: UpdateNoteRequest,
+    ) -> Result<NoteRecord, HttpNoteError> {
+        Err(unavailable())
+    }
+
+    fn move_note(
+        &self,
+        _id: NoteId,
+        _parent_id: Option<String>,
+    ) -> Result<NoteRecord, HttpNoteError> {
+        Err(unavailable())
+    }
+
+    fn set_note_icon(
+        &self,
+        _id: NoteId,
+        _icon: Option<String>,
     ) -> Result<NoteRecord, HttpNoteError> {
         Err(unavailable())
     }
@@ -193,6 +224,22 @@ where
     ) -> Result<NoteRecord, HttpNoteError> {
         self.service
             .update_note(&id, request)
+            .map_err(map_note_error)
+    }
+
+    fn move_note(
+        &self,
+        id: NoteId,
+        parent_id: Option<String>,
+    ) -> Result<NoteRecord, HttpNoteError> {
+        self.service
+            .move_note(&id, parent_id.as_deref())
+            .map_err(map_note_error)
+    }
+
+    fn set_note_icon(&self, id: NoteId, icon: Option<String>) -> Result<NoteRecord, HttpNoteError> {
+        self.service
+            .set_note_icon(&id, icon.as_deref())
             .map_err(map_note_error)
     }
 

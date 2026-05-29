@@ -41,6 +41,10 @@ pub struct CreateNoteRequest {
     pub pin: bool,
     /// Owning user id.
     pub owner_id: Option<UserId>,
+    /// Optional parent note id for page nesting.
+    pub parent_id: Option<String>,
+    /// Optional page icon.
+    pub icon: Option<String>,
 }
 
 /// Input for replacing a note.
@@ -78,6 +82,8 @@ where
                 .as_str(),
         )?;
         let pinned_at = request.pin.then_some(1_u32);
+        let parent_id = request.parent_id.filter(|value| !value.trim().is_empty());
+        let icon = request.icon.filter(|value| !value.trim().is_empty());
 
         let record = self
             .repository
@@ -91,6 +97,8 @@ where
                 pinned_at,
                 folder_path: String::new(),
                 owner_id: request.owner_id,
+                parent_id,
+                icon,
             })
             .map_err(NoteError::Repository)?;
 
@@ -145,6 +153,54 @@ where
         let _ = self.repository.update_note_links(id, &linked);
 
         Ok(record)
+    }
+
+    /// Moves a note under a new parent (`None` = top level), guarding against
+    /// cycles (a note cannot become its own ancestor).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NoteError`] when the note is missing or the move is invalid.
+    pub fn move_note(&self, id: &NoteId, parent_id: Option<&str>) -> Result<NoteRecord, NoteError> {
+        let parent_id = parent_id.map(str::trim).filter(|value| !value.is_empty());
+        if let Some(parent) = parent_id {
+            if parent == id.as_str() {
+                return Err(NoteError::InvalidMove);
+            }
+            // Walk the prospective parent's ancestry; reject if `id` appears.
+            let mut cursor = Some(parent.to_owned());
+            while let Some(current) = cursor {
+                if current == id.as_str() {
+                    return Err(NoteError::InvalidMove);
+                }
+                let ancestor = NoteId::new(&current).ok();
+                cursor = match ancestor {
+                    Some(ancestor_id) => self
+                        .repository
+                        .find_note(&ancestor_id)
+                        .map_err(NoteError::Repository)?
+                        .and_then(|note| note.parent_id),
+                    None => None,
+                };
+            }
+        }
+        let updated_at = self.clock.now();
+        self.repository
+            .set_note_parent(id, parent_id, updated_at)
+            .map_err(NoteError::Repository)
+    }
+
+    /// Sets a note's icon (`None` clears it).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NoteError`] when the note is missing or persistence fails.
+    pub fn set_note_icon(&self, id: &NoteId, icon: Option<&str>) -> Result<NoteRecord, NoteError> {
+        let icon = icon.map(str::trim).filter(|value| !value.is_empty());
+        let updated_at = self.clock.now();
+        self.repository
+            .set_note_icon(id, icon, updated_at)
+            .map_err(NoteError::Repository)
     }
 
     /// Deletes a note and cleans up its link graph entries.
@@ -278,6 +334,10 @@ pub enum NoteError {
     #[error("note was not found")]
     NotFound,
 
+    /// Attempted to move a note under itself or one of its descendants.
+    #[error("invalid note move: would create a cycle")]
+    InvalidMove,
+
     /// Identifier generation failed.
     #[error("could not generate note id: {0}")]
     IdGeneration(String),
@@ -349,6 +409,8 @@ mod tests {
                 tags: vec!["journal".to_owned()],
                 pin: false,
                 owner_id: None,
+                parent_id: None,
+                icon: None,
             })
             .unwrap_or_else(|error| panic!("create failed: {error}"));
 
@@ -374,6 +436,8 @@ mod tests {
                 pinned_at: None,
                 folder_path: String::new(),
                 owner_id: None,
+                parent_id: None,
+                icon: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -409,6 +473,8 @@ mod tests {
                 pinned_at: None,
                 folder_path: String::new(),
                 owner_id: None,
+                parent_id: None,
+                icon: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -440,6 +506,8 @@ mod tests {
                     pinned_at: None,
                     folder_path: String::new(),
                     owner_id: None,
+                    parent_id: None,
+                    icon: None,
                 })
                 .unwrap_or_else(|error| panic!("insert failed: {error}"));
         }

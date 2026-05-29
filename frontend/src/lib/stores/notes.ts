@@ -46,12 +46,13 @@ export function setActiveNote(id: string | null) {
   activeNoteId.set(id);
 }
 
-export async function createNewNote() {
+export async function createNewNote(parentId: string | null = null) {
   try {
     const newNote = await api.createNote({
-      title: 'Untitled Note',
-      body: '# New Note\n',
+      title: 'Untitled',
+      body: '',
       tags: [],
+      parent_id: parentId,
     });
     notes.update(n => [newNote, ...n]);
     activeNoteId.set(newNote.id);
@@ -60,6 +61,20 @@ export async function createNewNote() {
     console.error('Failed to create note:', err);
     throw err;
   }
+}
+
+/** Moves a note under a new parent (null = top level). */
+export async function moveNoteToParent(id: string, parentId: string | null) {
+  const updated = await api.moveNote(id, parentId);
+  notes.update(n => n.map(note => note.id === id ? updated : note));
+  return updated;
+}
+
+/** Sets or clears a note's icon. */
+export async function setNoteIcon(id: string, icon: string | null) {
+  const updated = await api.setNoteIcon(id, icon);
+  notes.update(n => n.map(note => note.id === id ? updated : note));
+  return updated;
 }
 
 export async function updateActiveNote(updates: Partial<Note>) {
@@ -73,6 +88,25 @@ export async function updateActiveNote(updates: Partial<Note>) {
     notes.update(n => n.map(note => note.id === id ? updated : note));
   } catch (err) {
     console.error('Failed to update note:', err);
+    throw err;
+  } finally {
+    isSaving.set(false);
+  }
+}
+
+/**
+ * Persist updates to a specific note by id (independent of which note is
+ * currently active). Used to flush a pending autosave when switching notes so
+ * the outgoing note's edits are never written onto the incoming note.
+ */
+export async function saveNote(id: string, updates: Partial<Note>) {
+  if (!id) return;
+  isSaving.set(true);
+  try {
+    const updated = await api.updateNote(id, updates);
+    notes.update(n => n.map(note => note.id === id ? updated : note));
+  } catch (err) {
+    console.error('Failed to save note:', err);
     throw err;
   } finally {
     isSaving.set(false);

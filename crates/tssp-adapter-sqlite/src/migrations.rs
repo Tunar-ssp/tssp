@@ -101,7 +101,8 @@ pub(crate) fn run_migrations(connection: &Connection) -> Result<(), SqliteReposi
     migrate_public_link_expiry(connection)?;
     migrate_upload_sessions_table(connection)?;
     migrate_note_links_table(connection)?;
-    migrate_workspace_documents_remove_body(connection)
+    migrate_workspace_documents_remove_body(connection)?;
+    notes::migrate_notes_nesting(connection)
 }
 
 /// Adds ownership, visibility, and public link columns (schema v7/v8).

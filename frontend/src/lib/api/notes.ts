@@ -8,6 +8,10 @@ export interface Note {
   pinned_at?: number;
   created_at: number;
   updated_at: number;
+  /** Parent note id for page nesting (undefined/null = top level). */
+  parent_id?: string | null;
+  /** Optional page icon (emoji). */
+  icon?: string | null;
 }
 
 export const notesApi = {
@@ -49,4 +53,16 @@ export const notesApi = {
     request(`/notes/${encodeURIComponent(id)}/pin`, { method: 'PUT' }),
   unpinNote: (id: string) =>
     request(`/notes/${encodeURIComponent(id)}/pin`, { method: 'DELETE' }),
+  // Move a note under a new parent (null = top level).
+  moveNote: (id: string, parentId: string | null) =>
+    request<Note>(`/notes/${encodeURIComponent(id)}/parent`, {
+      method: 'PUT',
+      body: JSON.stringify({ parent_id: parentId }),
+    }),
+  // Set or clear a note's icon (null clears).
+  setNoteIcon: (id: string, icon: string | null) =>
+    request<Note>(`/notes/${encodeURIComponent(id)}/icon`, {
+      method: 'PUT',
+      body: JSON.stringify({ icon }),
+    }),
 };

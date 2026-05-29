@@ -129,6 +129,10 @@ pub struct NoteRecord {
     pub folder_path: String,
     /// Owning user id.
     pub owner_id: Option<UserId>,
+    /// Parent note id for page nesting (Notion-style tree). `None` = top level.
+    pub parent_id: Option<String>,
+    /// Optional page icon (emoji or short token) shown in the tree and header.
+    pub icon: Option<String>,
 }
 
 /// Derives a title from Markdown when the caller did not supply one.
@@ -218,6 +222,8 @@ mod tests {
             pinned_at: None,
             folder_path: String::new(),
             owner_id: None,
+            parent_id: None,
+            icon: None,
         };
         assert_eq!(record.title.as_str(), "Title");
     }

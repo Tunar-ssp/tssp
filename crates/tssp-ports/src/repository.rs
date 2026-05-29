@@ -301,6 +301,30 @@ pub trait NoteRepository {
         updated_at: UnixTimestamp,
     ) -> Result<NoteRecord, RepositoryError>;
 
+    /// Sets a note's parent for page nesting (`None` = move to top level).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn set_note_parent(
+        &self,
+        id: &NoteId,
+        parent_id: Option<&str>,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError>;
+
+    /// Sets a note's icon (`None` clears it).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError::NotFound`] when the note does not exist.
+    fn set_note_icon(
+        &self,
+        id: &NoteId,
+        icon: Option<&str>,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError>;
+
     /// Deletes a note idempotently.
     ///
     /// # Errors
@@ -596,6 +620,24 @@ where
         updated_at: UnixTimestamp,
     ) -> Result<NoteRecord, RepositoryError> {
         self.as_ref().update_note(id, title, body, updated_at)
+    }
+
+    fn set_note_parent(
+        &self,
+        id: &NoteId,
+        parent_id: Option<&str>,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError> {
+        self.as_ref().set_note_parent(id, parent_id, updated_at)
+    }
+
+    fn set_note_icon(
+        &self,
+        id: &NoteId,
+        icon: Option<&str>,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError> {
+        self.as_ref().set_note_icon(id, icon, updated_at)
     }
 
     fn delete_note(&self, id: &NoteId) -> Result<bool, RepositoryError> {

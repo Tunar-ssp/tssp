@@ -23,6 +23,7 @@
   "dependencies": {
     "@tiptap/core": "^3.23.6",
     "@tiptap/extension-link": "^3.23.6",
+    "@tiptap/extension-table": "^3.23.6",
     "@tiptap/starter-kit": "^3.23.6",
     "lucide-svelte": "^0.369.0",
     "monaco-editor": "^0.55.1",

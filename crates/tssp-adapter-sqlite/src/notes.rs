@@ -42,7 +42,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id
+                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id, parent_id, icon
                  FROM notes
                  WHERE id = ?1",
             )
@@ -99,10 +99,73 @@ impl NoteRepository for SqliteFileRepository {
             })
     }
 
+    fn set_note_parent(
+        &self,
+        id: &NoteId,
+        parent_id: Option<&str>,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError> {
+        let mut connection = self.connect()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_note_exists(&transaction, id)?;
+        transaction
+            .execute(
+                "UPDATE notes SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
+                params![parent_id, updated_at.seconds(), id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+        drop(connection);
+        self.find_note(id)?
+            .ok_or_else(|| RepositoryError::OperationFailed {
+                message: "moved note could not be read back".to_owned(),
+            })
+    }
+
+    fn set_note_icon(
+        &self,
+        id: &NoteId,
+        icon: Option<&str>,
+        updated_at: UnixTimestamp,
+    ) -> Result<NoteRecord, RepositoryError> {
+        let mut connection = self.connect()?;
+        let transaction = connection
+            .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        ensure_note_exists(&transaction, id)?;
+        transaction
+            .execute(
+                "UPDATE notes SET icon = ?1, updated_at = ?2 WHERE id = ?3",
+                params![icon, updated_at.seconds(), id.as_str()],
+            )
+            .map_err(map_rusqlite_repository_error)?;
+        transaction
+            .commit()
+            .map_err(map_rusqlite_repository_error)?;
+        drop(connection);
+        self.find_note(id)?
+            .ok_or_else(|| RepositoryError::OperationFailed {
+                message: "note could not be read back".to_owned(),
+            })
+    }
+
     fn delete_note(&self, id: &NoteId) -> Result<bool, RepositoryError> {
         let mut connection = self.connect()?;
         let transaction = connection
             .transaction()
+            .map_err(map_rusqlite_repository_error)?;
+        // Re-parent any child pages up to the deleted page's parent so the
+        // tree never loses notes to a dangling parent_id.
+        transaction
+            .execute(
+                "UPDATE notes SET parent_id = (SELECT parent_id FROM notes WHERE id = ?1)
+                 WHERE parent_id = ?1",
+                params![id.as_str()],
+            )
             .map_err(map_rusqlite_repository_error)?;
         let changed = transaction
             .execute("DELETE FROM notes WHERE id = ?1", params![id.as_str()])
@@ -123,7 +186,7 @@ impl NoteRepository for SqliteFileRepository {
 
         let connection = self.connect()?;
         let mut sql = String::from(
-            "SELECT n.id, n.title, substr(n.body, 1, 200) as body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
+            "SELECT n.id, n.title, substr(n.body, 1, 200) as body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon
              FROM notes n",
         );
         let mut where_clauses = Vec::new();
@@ -358,7 +421,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
+                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon
                  FROM note_search s
                  JOIN notes n ON n.id = s.note_id
                  WHERE note_search MATCH ?1
@@ -535,7 +598,7 @@ fn fuzzy_note_candidates(
     let like_prefix = format!("{prefix}%");
     let mut statement = connection
         .prepare(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id
+            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon
              FROM notes n
              WHERE n.title LIKE ?1 COLLATE NOCASE
                 OR EXISTS (
@@ -775,6 +838,26 @@ pub(crate) fn migrate_notes_folders(connection: &Connection) -> Result<(), Sqlit
     Ok(())
 }
 
+/// Adds `parent_id` (page nesting) and `icon` to notes (schema v21).
+pub(crate) fn migrate_notes_nesting(connection: &Connection) -> Result<(), SqliteRepositoryError> {
+    if migration_applied(connection, 21)? {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            ALTER TABLE notes ADD COLUMN parent_id TEXT;
+            ALTER TABLE notes ADD COLUMN icon TEXT;
+            CREATE INDEX IF NOT EXISTS idx_notes_parent_id ON notes(parent_id);
+            ",
+        )
+        .map_err(SqliteRepositoryError::Migration)?;
+
+    record_migration(connection, 21)?;
+    Ok(())
+}
+
 pub(crate) fn ensure_note_exists(
     transaction: &Transaction<'_>,
     id: &NoteId,
@@ -842,6 +925,8 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
         pinned_at,
         folder_path: row.get(6).map_err(map_rusqlite_repository_error)?,
         owner_id,
+        parent_id: row.get(8).map_err(map_rusqlite_repository_error)?,
+        icon: row.get(9).map_err(map_rusqlite_repository_error)?,
     })
 }
 
@@ -928,8 +1013,8 @@ fn insert_note_row(
 ) -> Result<(), RepositoryError> {
     transaction
         .execute(
-            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id, parent_id, icon)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 new_note.id.as_str(),
                 new_note.title.as_str(),
@@ -939,6 +1024,8 @@ fn insert_note_row(
                 new_note.pinned_at,
                 new_note.folder_path,
                 new_note.owner_id.as_ref().map(tssp_domain::UserId::as_str),
+                new_note.parent_id.as_deref(),
+                new_note.icon.as_deref(),
             ],
         )
         .map(|_rows| ())
@@ -1020,6 +1107,8 @@ mod tests {
                 pinned_at: None,
                 folder_path: String::new(),
                 owner_id: None,
+                parent_id: None,
+                icon: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -1055,6 +1144,8 @@ mod tests {
                 pinned_at: None,
                 folder_path: String::new(),
                 owner_id: None,
+                parent_id: None,
+                icon: None,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
         assert_eq!(created.body.as_str(), "Body text");

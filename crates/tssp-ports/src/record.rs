@@ -68,6 +68,10 @@ pub struct NewNoteRecord {
     pub folder_path: String,
     /// Owning user id.
     pub owner_id: Option<UserId>,
+    /// Parent note id for page nesting (`None` = top level).
+    pub parent_id: Option<String>,
+    /// Optional page icon (emoji or short token).
+    pub icon: Option<String>,
 }
 
 /// Durable result of writing a blob.

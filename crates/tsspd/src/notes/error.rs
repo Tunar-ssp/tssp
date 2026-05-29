@@ -92,6 +92,9 @@ pub(crate) fn map_note_error(error: NoteError) -> HttpNoteError {
                 message: "note was not found".to_owned(),
             }
         }
+        NoteError::InvalidMove => HttpNoteError::InvalidRequest {
+            message: "cannot move a note under itself or one of its descendants".to_owned(),
+        },
         NoteError::IdGeneration(message) => HttpNoteError::Internal { message },
         NoteError::Repository(other) => HttpNoteError::Internal {
             message: other.to_string(),

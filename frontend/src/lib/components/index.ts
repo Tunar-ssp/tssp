@@ -77,9 +77,7 @@ export { default as DeviceManager } from './DeviceManager.svelte';
 // ============================================================================
 export { default as CodeEditor } from './CodeEditor.svelte';
 export { default as MonacoEditor } from './MonacoEditor.svelte';
-export { default as NoteEditor } from './NoteEditor.svelte';
 export { default as NotesList } from './NotesList.svelte';
-export { default as TiptapEditor } from './TiptapEditor.svelte';
 export { default as MarkdownPreview } from './MarkdownPreview.svelte';
 export { default as FindWidget } from './FindWidget.svelte';
 export { default as FindReplaceWidget } from './FindReplaceWidget.svelte';
