@@ -308,6 +308,22 @@ impl NoteRepository for MockRepo {
     fn delete_note(&self, _id: &tssp_domain::NoteId) -> Result<bool, tssp_ports::RepositoryError> {
         unimplemented!()
     }
+    fn set_note_parent(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _parent_id: Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn set_note_icon(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _icon: Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
     fn list_notes(
         &self,
         _query: &tssp_ports::NoteListQuery,
@@ -605,6 +621,22 @@ impl NoteRepository for FailingMockRepo {
         unimplemented!()
     }
     fn delete_note(&self, _id: &tssp_domain::NoteId) -> Result<bool, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn set_note_parent(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _parent_id: Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+    fn set_note_icon(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _icon: Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
         unimplemented!()
     }
     fn list_notes(

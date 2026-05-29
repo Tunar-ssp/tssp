@@ -22,6 +22,11 @@ fn total_memory_bytes() -> Option<u64> {
 
 /// Computes the per-session address-space cap (80% of RAM), if determinable.
 fn memory_limit_bytes() -> Option<u64> {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     total_memory_bytes().map(|total| (total as f64 * MEMORY_LIMIT_FRACTION) as u64)
 }
 

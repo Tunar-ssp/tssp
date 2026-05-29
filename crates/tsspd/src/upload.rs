@@ -26,8 +26,8 @@ const SNIFF_HEADER_BYTES: usize = 8192;
 /// type. Reads only the file header to avoid loading large files into memory.
 pub(crate) fn sniff_mime_type(path: &Path) -> Result<String, String> {
     use std::io::Read;
-    let mut file =
-        std::fs::File::open(path).map_err(|e| format!("could not open file for MIME sniffing: {e}"))?;
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| format!("could not open file for MIME sniffing: {e}"))?;
     let mut header = vec![0u8; SNIFF_HEADER_BYTES];
     let read = file
         .read(&mut header)

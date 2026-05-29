@@ -129,7 +129,7 @@ impl SqliteFileRepository {
     /// Returns [`RepositoryError`] if the checkpoint operation fails.
     pub fn checkpoint_wal(&self) -> Result<(), RepositoryError> {
         let connection = self.connect()?;
-        let _ = connection
+        connection
             .query_row("PRAGMA wal_checkpoint(RESTART)", [], |_| Ok(()))
             .map_err(map_rusqlite_repository_error)?;
         Ok(())
