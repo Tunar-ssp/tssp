@@ -50,10 +50,11 @@ jobs:
       - name: Clippy lint
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Install tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+
       - name: Generate coverage report
-        uses: xd009642/tarpaulin-action@v1
-        with:
-          args: '--workspace --lib --timeout 300 --out xml'
+        run: cargo tarpaulin --workspace --lib --timeout 300 --out xml
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -154,12 +155,12 @@ jobs:
             echo "Workspace version did not change. Deploy skipped."
           fi
 
-  build-arm64-release:
-    name: Build ARM64 Release
-    runs-on: ubuntu-24.04-arm
+  deploy-orange-pi:
+    name: Build and Deploy on Orange Pi
+    runs-on: [self-hosted, Linux, ARM64]
     needs: [rust, frontend, check-workspace-version]
     if: needs.check-workspace-version.outputs.version_changed == 'true'
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -171,14 +172,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
+      - name: Install Node dependencies
         run: npm ci
         working-directory: frontend
 
@@ -186,44 +180,8 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: Build ARM64 backend
+      - name: Build backend on Orange Pi
         run: cargo build -p tsspd --release
-
-      - name: Package release
-        run: |
-          set -euo pipefail
-
-          mkdir -p package
-          cp target/release/tsspd package/tsspd
-
-          # The frontend is already built into crates/tsspd/assets/web-v2
-          # and potentially used at runtime or embedded.
-          # We package it separately just in case the backend needs it on disk.
-          if [ -d crates/tsspd/assets/web-v2 ]; then
-            cp -r crates/tsspd/assets/web-v2 package/web-v2
-          fi
-
-          tar -czf tssp-linux-arm64.tar.gz -C package .
-
-      - name: Upload ARM64 release artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tssp-linux-arm64
-          path: tssp-linux-arm64.tar.gz
-          retention-days: 7
-
-  deploy-orange-pi:
-    name: Deploy to Orange Pi
-    runs-on: [self-hosted, Linux, ARM64]
-    needs: [build-arm64-release, check-workspace-version]
-    if: needs.check-workspace-version.outputs.version_changed == 'true'
-    timeout-minutes: 10
-
-    steps:
-      - name: Download ARM64 release artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tssp-linux-arm64
 
       - name: Deploy release
         run: |
@@ -232,9 +190,15 @@ jobs:
           RELEASE_DIR="/opt/tssp/releases/${GITHUB_SHA}"
 
           mkdir -p "$RELEASE_DIR"
-          tar -xzf tssp-linux-arm64.tar.gz -C "$RELEASE_DIR"
 
+          # Copy binary
+          cp target/release/tsspd "$RELEASE_DIR/tsspd"
           chmod +x "$RELEASE_DIR/tsspd"
+
+          # Copy frontend assets (built into crates/tsspd/assets/web-v2)
+          if [ -d crates/tsspd/assets/web-v2 ]; then
+            cp -r crates/tsspd/assets/web-v2 "$RELEASE_DIR/web-v2"
+          fi
 
           rm -rf /opt/tssp/current
           ln -s "$RELEASE_DIR" /opt/tssp/current
