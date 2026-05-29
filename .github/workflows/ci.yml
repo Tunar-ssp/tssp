@@ -110,3 +110,91 @@ jobs:
             echo "Coverage report not available"
           fi
         continue-on-error: true
+  build-arm64-release:
+    name: Build ARM64 Release
+    runs-on: ubuntu-24.04-arm
+    needs: [rust, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      - name: Build ARM64 backend
+        run: cargo build -p tsspd --release
+
+      - name: Package release
+        run: |
+          set -euo pipefail
+
+          mkdir -p package
+          cp target/release/tsspd package/tsspd
+
+          if [ -d frontend/dist ]; then
+            cp -r frontend/dist package/dist
+          fi
+
+          if [ -d frontend/build ]; then
+            cp -r frontend/build package/build
+          fi
+
+          tar -czf tssp-linux-arm64.tar.gz -C package .
+
+      - name: Upload ARM64 release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tssp-linux-arm64
+          path: tssp-linux-arm64.tar.gz
+          retention-days: 7
+
+  deploy-orange-pi:
+    name: Deploy to Orange Pi
+    runs-on: [self-hosted, Linux, ARM64]
+    needs: build-arm64-release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 10
+
+    steps:
+      - name: Download ARM64 release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tssp-linux-arm64
+
+      - name: Deploy release
+        run: |
+          set -euo pipefail
+
+          RELEASE_DIR="/opt/tssp/releases/${GITHUB_SHA}"
+
+          mkdir -p "$RELEASE_DIR"
+          tar -xzf tssp-linux-arm64.tar.gz -C "$RELEASE_DIR"
+
+          chmod +x "$RELEASE_DIR/tsspd"
+
+          ln -sfn "$RELEASE_DIR" /opt/tssp/current
+
+          sudo systemctl restart tsspd
+
+          echo "Deployed ${GITHUB_SHA} to Orange Pi"
