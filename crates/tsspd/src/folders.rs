@@ -13,18 +13,39 @@ use crate::{ErrorBody, ErrorResponse, HttpState};
 
 /// Handles folder operations through the application layer.
 pub trait FolderProvider: Send + Sync {
-    /// Renames or moves a virtual folder.
+    /// Renames or moves a virtual folder (admin: affects all users).
     ///
     /// # Errors
     ///
     /// Returns [`HttpFolderError`] when the path is invalid or the operation fails.
     fn move_folder(&self, from: &str, to: &str) -> Result<u64, HttpFolderError>;
-    /// Moves all files out of a virtual folder.
+    /// Moves all files out of a virtual folder (admin: affects all users).
     ///
     /// # Errors
     ///
     /// Returns [`HttpFolderError`] when the path is invalid or the operation fails.
     fn delete_folder(&self, path: &str) -> Result<u64, HttpFolderError>;
+    /// Renames or moves a virtual folder scoped to a single owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpFolderError`] when the path is invalid or the operation fails.
+    fn move_folder_for_user(
+        &self,
+        from: &str,
+        to: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, HttpFolderError>;
+    /// Moves all files owned by a user out of a virtual folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HttpFolderError`] when the path is invalid or the operation fails.
+    fn delete_folder_for_user(
+        &self,
+        path: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, HttpFolderError>;
     /// Lists virtual folders and their file counts.
     ///
     /// # Errors
@@ -58,6 +79,27 @@ where
 
     fn delete_folder(&self, path: &str) -> Result<u64, HttpFolderError> {
         self.service.delete_folder(path).map_err(map_folder_error)
+    }
+
+    fn move_folder_for_user(
+        &self,
+        from: &str,
+        to: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, HttpFolderError> {
+        self.service
+            .move_folder_for_user(from, to, owner_id)
+            .map_err(map_folder_error)
+    }
+
+    fn delete_folder_for_user(
+        &self,
+        path: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, HttpFolderError> {
+        self.service
+            .delete_folder_for_user(path, owner_id)
+            .map_err(map_folder_error)
     }
 
     fn list_folders(
@@ -171,17 +213,23 @@ pub async fn list_folders(State(state): State<HttpState>, auth: AuthContext) -> 
     }
 }
 
-/// `POST /api/v1/folders/move` — rewrite `folder_path` prefixes (admin).
+/// `POST /api/v1/folders/move` — rewrite `folder_path` prefixes.
+///
+/// Admins affect all users' files; regular users are scoped to their own files.
 pub async fn move_folder(
     State(state): State<HttpState>,
     auth: AuthContext,
     Json(body): Json<FolderMoveBody>,
 ) -> Response {
-    if !auth.is_admin() {
-        return forbidden();
-    }
+    let result = if auth.is_admin() {
+        state.folder_provider.move_folder(&body.from, &body.to)
+    } else {
+        state
+            .folder_provider
+            .move_folder_for_user(&body.from, &body.to, &auth.user_id)
+    };
 
-    match state.folder_provider.move_folder(&body.from, &body.to) {
+    match result {
         Ok(count) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -194,17 +242,23 @@ pub async fn move_folder(
     }
 }
 
-/// `POST /api/v1/folders/delete` — move all files out of a folder (admin).
+/// `POST /api/v1/folders/delete` — move all files out of a folder.
+///
+/// Admins affect all users' files; regular users are scoped to their own files.
 pub async fn delete_folder(
     State(state): State<HttpState>,
     auth: AuthContext,
     Json(body): Json<FolderDeleteBody>,
 ) -> Response {
-    if !auth.is_admin() {
-        return forbidden();
-    }
+    let result = if auth.is_admin() {
+        state.folder_provider.delete_folder(&body.path)
+    } else {
+        state
+            .folder_provider
+            .delete_folder_for_user(&body.path, &auth.user_id)
+    };
 
-    match state.folder_provider.delete_folder(&body.path) {
+    match result {
         Ok(count) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -271,8 +325,4 @@ fn map_folder_error(error: FolderError) -> HttpFolderError {
         FolderError::Repository(error) => HttpFolderError::Internal(error.to_string()),
         FolderError::Forbidden => HttpFolderError::Forbidden,
     }
-}
-
-fn forbidden() -> Response {
-    HttpFolderError::Forbidden.response()
 }

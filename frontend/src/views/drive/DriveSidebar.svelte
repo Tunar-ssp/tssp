@@ -18,12 +18,18 @@
     currentFolder?: string;
     publicCount?: number;
     trashCount?: number;
+    imageCount?: number;
+    videoCount?: number;
+    documentCount?: number;
+    allFilesCount?: number;
     usedBytes?: number;
     totalObjects?: number;
     onLensChange?: (lens: any) => void;
     onFolderChange?: (path: string) => void;
     onNewFolder?: () => void;
     onMoveToFolder?: (fileIds: string[], path: string) => void;
+    onRenameFolder?: (oldPath: string, newName: string) => void;
+    onDeleteFolder?: (path: string) => void;
     onClose?: () => void;
   }
 
@@ -34,16 +40,21 @@
     currentFolder = '',
     publicCount = 0,
     trashCount = 0,
+    imageCount = 0,
+    videoCount = 0,
+    documentCount = 0,
+    allFilesCount = 0,
     usedBytes = 0,
     totalObjects = 0,
     onLensChange,
     onFolderChange,
     onNewFolder,
     onMoveToFolder,
+    onRenameFolder,
+    onDeleteFolder,
     onClose,
   }: Props = $props();
 
-  // Build a nested tree out of the flat folder paths the backend returns.
   let folderTree = $derived.by(() => {
     const roots: FolderNode[] = [];
     const index = new Map<string, FolderNode>();
@@ -76,9 +87,6 @@
     return roots;
   });
 
-  // Auto-expand ancestors of the active folder so it is always visible.
-  // Only depend on currentFolder — untrack the expanded read/write so the
-  // effect doesn't retrigger itself (effect_update_depth_exceeded).
   let expanded = $state<Set<string>>(new Set());
   $effect(() => {
     const folder = currentFolder;
@@ -103,56 +111,61 @@
     expanded = new Set(expanded);
   }
 
-  const TOTAL_STORAGE_BYTES = 1024 * 1024 * 1024 * 100; // 100GB
-  let storagePercentage = $derived(Math.min(100, (usedBytes / TOTAL_STORAGE_BYTES) * 100));
+  function getCount(id: string) {
+    if (id === 'all') return allFilesCount;
+    if (id === 'public') return publicCount;
+    if (id === 'trash') return trashCount;
+    if (id === 'images') return imageCount;
+    if (id === 'videos') return videoCount;
+    if (id === 'documents') return documentCount;
+    return 0;
+  }
 </script>
 
 <aside class="drive-sidebar">
-  {#if onClose}
-    <div class="sidebar-top">
-      <button type="button" class="sb-close" onclick={onClose} title="Hide sidebar (Ctrl+B)">
-        <Icons.PanelLeftClose size={16} />
-      </button>
-    </div>
-  {/if}
-  <div class="sidebar-group filters">
-    <div class="group-label">Filters</div>
+  <div class="sidebar-header">
+    <span class="sidebar-title">Files</span>
+    <button type="button" class="sb-close" onclick={onClose} title="Collapse sidebar">
+      <Icons.PanelLeftClose size={15} />
+    </button>
+  </div>
+
+  <nav class="sidebar-nav">
     {#each filters as filter (filter.id)}
       {@const Icon = filter.icon}
+      {@const count = getCount(filter.id)}
       <button
         type="button"
-        class="sidebar-item"
-        class:active={activeLens === filter.id}
-        onclick={() => onLensChange?.(filter.id)}
+        class="nav-item"
+        class:active={activeLens === filter.id && currentFolder === ''}
+        onclick={() => { onLensChange?.(filter.id); if (filter.id !== 'trash') onFolderChange?.(''); }}
       >
-        <Icon size={14} />
+        <Icon size={16} />
         <span>{filter.label}</span>
-        {#if filter.id === 'public'}
-          <small>{publicCount}</small>
-        {:else if filter.id === 'trash'}
-          <small>{trashCount}</small>
+        {#if count > 0}
+          <span class="nav-count">{count}</span>
         {/if}
       </button>
     {/each}
-  </div>
+  </nav>
 
-  <div class="sidebar-group folders">
-    <div class="group-label">
+  <div class="section-divider"></div>
+
+  <div class="folders-section">
+    <div class="section-header">
       <span>Folders</span>
-      {#if onNewFolder}
-        <button type="button" class="group-action" onclick={onNewFolder} title="New folder">
-          <Icons.FolderPlus size={14} />
-        </button>
-      {/if}
+      <button type="button" class="new-folder-btn" onclick={onNewFolder} title="New folder">
+        <Icons.FolderPlus size={13} />
+      </button>
     </div>
     <button
       type="button"
-      class="sidebar-item root-folder"
-      class:active={currentFolder === ''}
-      onclick={() => onFolderChange?.('')}
+      class="nav-item"
+      class:active={currentFolder === '' && activeLens === 'all'}
+      onclick={() => { onFolderChange?.(''); onLensChange?.('all'); }}
     >
-      <Icons.HardDrive size={14} />
-      <span>All files</span>
+      <Icons.Home size={16} />
+      <span>Home</span>
     </button>
 
     {#if folderTree.length > 0}
@@ -160,214 +173,162 @@
         nodes={folderTree}
         {currentFolder}
         {expanded}
-        onSelect={(path) => onFolderChange?.(path)}
+        onSelect={(path) => { onFolderChange?.(path); onLensChange?.('all'); }}
         onToggle={toggle}
         {onMoveToFolder}
+        onRename={onRenameFolder}
+        onDelete={onDeleteFolder}
       />
-    {:else}
-      <p class="folders-empty">No folders yet</p>
     {/if}
   </div>
 
-  <div class="sidebar-storage">
-    <div class="group-label">Storage</div>
-    <div class="storage-bar">
-      <div class="storage-progress" style="width: {storagePercentage}%"></div>
+  <div class="sidebar-footer">
+    <div class="storage-row">
+      <Icons.HardDrive size={14} />
+      <span class="storage-label">{formatBytes(usedBytes)} used</span>
+      <span class="storage-objs">{totalObjects} files</span>
     </div>
-    <div class="storage-info">
-      <strong>{formatBytes(usedBytes)}</strong>
-      <span>{storagePercentage.toFixed(1)}% used</span>
-    </div>
-    <span class="storage-objects">{totalObjects} objects</span>
   </div>
 </aside>
 
 <style>
   .drive-sidebar {
-    width: 240px;
+    width: 220px;
     background: var(--surface);
     border-right: 1px solid var(--border);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 0 0 16px;
     flex-shrink: 0;
   }
 
-  .sidebar-top {
-    padding: 8px 12px;
-    display: flex;
-    justify-content: flex-end;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  }
-  .sb-close {
-    width: 28px;
-    height: 28px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-2);
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .sb-close:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text);
-    border-color: var(--border);
-  }
-
-  .sidebar-group {
-    padding: 12px 0;
-  }
-
-  .sidebar-group:not(:first-child) {
-    border-top: 1px solid var(--border);
-  }
-
-  .group-label {
+  .sidebar-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--muted);
-    margin-bottom: 8px;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .group-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
+  .sidebar-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+    letter-spacing: 0.2px;
+  }
+
+  .sb-close {
+    width: 26px;
+    height: 26px;
     border: none;
     background: transparent;
     color: var(--muted);
     border-radius: 5px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background 0.12s, color 0.12s;
   }
+  .sb-close:hover { background: var(--surface-2); color: var(--text); }
 
-  .group-action:hover {
-    background: var(--surface-2);
-    color: var(--text);
+  .sidebar-nav {
+    padding: 6px 6px 0;
   }
 
-  .folders-empty {
-    margin: 4px 16px;
-    font-size: 12px;
-    color: var(--dim);
-  }
-
-  .sidebar-item {
+  .nav-item {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
+    gap: 9px;
+    padding: 7px 10px;
     background: transparent;
     border: none;
-    border-right: 2px solid transparent;
+    border-radius: 7px;
     cursor: pointer;
     color: var(--text-2);
     font-size: 13px;
-    transition: all 0.2s;
+    transition: background 0.1s, color 0.1s;
     text-align: left;
-    position: relative;
+    margin-bottom: 1px;
   }
+  .nav-item:hover { background: var(--surface-2); color: var(--text); }
+  .nav-item.active { background: var(--blue-soft); color: var(--blue); }
+  .nav-item span:first-of-type { flex: 1; }
 
-  .sidebar-item:hover {
-    background: var(--surface-2);
-    color: var(--text);
-  }
-
-  .sidebar-item.active {
-    color: var(--blue);
-    border-right-color: var(--blue);
-    background: var(--blue-soft);
-  }
-
-  .sidebar-item small {
-    margin-left: auto;
+  .nav-count {
     font-size: 11px;
     background: var(--surface-3);
-    padding: 2px 6px;
-    border-radius: 3px;
+    color: var(--muted);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .section-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 6px 0;
+  }
+
+  .folders-section {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 6px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     color: var(--muted);
   }
 
-  .sidebar-storage {
-    flex: 1;
+  .new-folder-btn {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    cursor: pointer;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 16px;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s, color 0.1s;
+  }
+  .new-folder-btn:hover { background: var(--surface-2); color: var(--text); }
+
+  .sidebar-footer {
+    padding: 10px 12px;
     border-top: 1px solid var(--border);
     margin-top: auto;
   }
 
-  .sidebar-storage .group-label {
-    padding: 0;
-    margin: 0;
-  }
-
-  .sidebar-storage strong {
-    font-size: 16px;
-    color: var(--text);
-  }
-
-  .sidebar-storage span {
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  .storage-bar {
-    width: 100%;
-    height: 6px;
-    background: var(--surface-2);
-    border-radius: 3px;
-    overflow: hidden;
-    margin: 4px 0;
-  }
-
-  .storage-progress {
-    height: 100%;
-    background: linear-gradient(90deg, var(--blue), var(--blue-hover));
-    transition: width 300ms ease-out;
-  }
-
-  .storage-info {
+  .storage-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 8px;
-  }
-
-  .storage-info strong {
-    font-size: 13px;
-    color: var(--text);
-  }
-
-  .storage-info span {
-    font-size: 11px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
-  .storage-objects {
-    font-size: 11px;
+    gap: 6px;
     color: var(--muted);
   }
 
-  @media (max-width: 1200px) {
-    .drive-sidebar {
-      display: none;
-    }
+  .storage-label {
+    font-size: 12px;
+    flex: 1;
+  }
+
+  .storage-objs {
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  @media (max-width: 900px) {
+    .drive-sidebar { display: none; }
   }
 </style>

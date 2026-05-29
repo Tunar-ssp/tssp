@@ -630,6 +630,27 @@ impl crate::folders::FolderProvider for StaticFolderProvider {
         ))
     }
 
+    fn move_folder_for_user(
+        &self,
+        _from: &str,
+        _to: &str,
+        _owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, crate::folders::HttpFolderError> {
+        Err(crate::folders::HttpFolderError::Internal(
+            "folder service is not configured".to_owned(),
+        ))
+    }
+
+    fn delete_folder_for_user(
+        &self,
+        _path: &str,
+        _owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, crate::folders::HttpFolderError> {
+        Err(crate::folders::HttpFolderError::Internal(
+            "folder service is not configured".to_owned(),
+        ))
+    }
+
     fn list_folders(
         &self,
         _owner_id: Option<&tssp_domain::UserId>,

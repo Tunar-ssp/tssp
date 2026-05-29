@@ -479,6 +479,23 @@ impl FolderProvider for FixedFolderProvider {
         Ok(0)
     }
 
+    fn move_folder_for_user(
+        &self,
+        _from: &str,
+        _to: &str,
+        _owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, HttpFolderError> {
+        Ok(0)
+    }
+
+    fn delete_folder_for_user(
+        &self,
+        _path: &str,
+        _owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, HttpFolderError> {
+        Ok(0)
+    }
+
     fn list_folders(
         &self,
         _owner_id: Option<&tssp_domain::UserId>,

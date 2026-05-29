@@ -3,7 +3,8 @@
 mod tests {
     use crate::SqliteFileRepository;
     use tssp_domain::{
-        ContentHash, FileId, FileName, FileSize, MimeType, StorageHandle, UnixTimestamp,
+        ContentHash, FileId, FileName, FileSize, MimeType, StorageHandle, UnixTimestamp, UserId,
+        Visibility,
     };
     use tssp_ports::{FileRepository, NewFileRecord};
 
@@ -12,6 +13,10 @@ mod tests {
     }
 
     fn new_file(id: &str, folder: &str) -> NewFileRecord {
+        new_file_owned(id, folder, None)
+    }
+
+    fn new_file_owned(id: &str, folder: &str, owner: Option<&str>) -> NewFileRecord {
         NewFileRecord {
             id: FileId::new(id).expect("valid id"),
             name: FileName::new("test.txt").expect("valid name"),
@@ -26,8 +31,8 @@ mod tests {
             tags: vec![],
             pinned_at: None,
             folder_path: folder.to_owned(),
-            owner_id: None,
-            visibility: tssp_domain::Visibility::Private,
+            owner_id: owner.map(|o| UserId::new(o).expect("valid owner")),
+            visibility: Visibility::Private,
             public_token: None,
             public_expires_at: None,
         }
@@ -144,6 +149,62 @@ mod tests {
                 .expect("missing")
                 .folder_path,
             "archive"
+        );
+    }
+
+    #[test]
+    fn test_update_folder_path_prefix_owned_only_touches_owner_files() {
+        let repo = test_repo();
+        let alice = UserId::new("alice").expect("valid user");
+        let bob = UserId::new("bob").expect("valid user");
+
+        repo.insert_file(new_file_owned("f1", "work/2024", Some("alice")))
+            .expect("insert");
+        repo.insert_file(new_file_owned("f2", "work/2024", Some("bob")))
+            .expect("insert");
+        repo.insert_file(new_file_owned("f3", "work/2024/sub", Some("alice")))
+            .expect("insert");
+
+        // Alice renames her folder — should not touch Bob's file.
+        let count = repo
+            .update_folder_path_prefix_owned("work/2024", "archive/2024", &alice)
+            .expect("update failed");
+        assert_eq!(count, 2);
+
+        assert_eq!(
+            repo.find_file(&FileId::new("f1").expect("valid"))
+                .expect("find")
+                .expect("missing")
+                .folder_path,
+            "archive/2024"
+        );
+        assert_eq!(
+            repo.find_file(&FileId::new("f3").expect("valid"))
+                .expect("find")
+                .expect("missing")
+                .folder_path,
+            "archive/2024/sub"
+        );
+        // Bob's file untouched.
+        assert_eq!(
+            repo.find_file(&FileId::new("f2").expect("valid"))
+                .expect("find")
+                .expect("missing")
+                .folder_path,
+            "work/2024"
+        );
+
+        // Bob deletes his folder (moves to root).
+        let count = repo
+            .update_folder_path_prefix_owned("work/2024", "", &bob)
+            .expect("update failed");
+        assert_eq!(count, 1);
+        assert_eq!(
+            repo.find_file(&FileId::new("f2").expect("valid"))
+                .expect("find")
+                .expect("missing")
+                .folder_path,
+            ""
         );
     }
 }

@@ -1,6 +1,7 @@
 //! Virtual folder management orchestration.
 
 use thiserror::Error;
+use tssp_domain::UserId;
 use tssp_ports::{FileRepository, RepositoryError};
 
 /// Folder use case errors.
@@ -66,6 +67,52 @@ where
 
         self.repository
             .update_folder_path_prefix(&path, "")
+            .map_err(FolderError::Repository)
+    }
+
+    /// Renames or moves a virtual folder scoped to a single owner.
+    ///
+    /// Only files belonging to `owner_id` are affected.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FolderError`] when paths are invalid or the repository update fails.
+    pub fn move_folder_for_user(
+        &self,
+        from: &str,
+        to: &str,
+        owner_id: &UserId,
+    ) -> Result<u64, FolderError> {
+        let from = normalize_folder_path(from);
+        let to = normalize_folder_path(to);
+
+        validate_folder_path(&from).map_err(FolderError::InvalidPath)?;
+        validate_folder_path(&to).map_err(FolderError::InvalidPath)?;
+
+        self.repository
+            .update_folder_path_prefix_owned(&from, &to, owner_id)
+            .map_err(FolderError::Repository)
+    }
+
+    /// Moves all files owned by `owner_id` out of a virtual folder into bucket root.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FolderError`] when the path is invalid or the repository update fails.
+    pub fn delete_folder_for_user(
+        &self,
+        path: &str,
+        owner_id: &UserId,
+    ) -> Result<u64, FolderError> {
+        let path = normalize_folder_path(path);
+        if path.is_empty() {
+            return Err(FolderError::InvalidPath("cannot delete the bucket root"));
+        }
+
+        validate_folder_path(&path).map_err(FolderError::InvalidPath)?;
+
+        self.repository
+            .update_folder_path_prefix_owned(&path, "", owner_id)
             .map_err(FolderError::Repository)
     }
 

@@ -5,6 +5,26 @@ use tokio::process::Command;
 use tssp_domain::{SandboxStrategy, TerminalConfig};
 use tssp_ports::terminal::{PtyProcess, TerminalProvider};
 
+/// Fraction of system memory a terminal session (and its children) may use.
+const MEMORY_LIMIT_FRACTION: f64 = 0.80;
+
+/// Reads total system memory (bytes) from `/proc/meminfo`.
+fn total_memory_bytes() -> Option<u64> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    for line in meminfo.lines() {
+        if let Some(rest) = line.strip_prefix("MemTotal:") {
+            let kb: u64 = rest.trim().trim_end_matches(" kB").trim().parse().ok()?;
+            return Some(kb.saturating_mul(1024));
+        }
+    }
+    None
+}
+
+/// Computes the per-session address-space cap (80% of RAM), if determinable.
+fn memory_limit_bytes() -> Option<u64> {
+    total_memory_bytes().map(|total| (total as f64 * MEMORY_LIMIT_FRACTION) as u64)
+}
+
 /// Linux implementation of terminal provider using bubblewrap or systemd-nspawn.
 pub struct LinuxTerminalProvider;
 
@@ -49,7 +69,22 @@ impl TerminalProvider for LinuxTerminalProvider {
 
         match config.sandbox {
             SandboxStrategy::Bubblewrap => {
-                let mut cmd = Command::new("bwrap");
+                // Wrap bwrap in `prlimit` so the shell and every child it spawns
+                // inherit an address-space cap (~80% of RAM). This bounds runaway
+                // memory without restricting the user's commands otherwise. The
+                // limit is best-effort: if prlimit or meminfo is unavailable we
+                // fall back to launching bwrap directly.
+                let mem_limit = memory_limit_bytes();
+                let use_prlimit = mem_limit.is_some() && which::which("prlimit").is_ok();
+
+                let mut cmd = if use_prlimit {
+                    let mut c = Command::new("prlimit");
+                    c.arg(format!("--as={}", mem_limit.unwrap_or(0)));
+                    c.arg("bwrap");
+                    c
+                } else {
+                    Command::new("bwrap")
+                };
                 // Bind workspace as /workspace (read-write)
                 cmd.arg("--bind").arg(&abs_workspace).arg("/workspace");
                 // Temporary filesystem for /tmp

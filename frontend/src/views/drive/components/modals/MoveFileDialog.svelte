@@ -12,42 +12,35 @@
   }
 
   let { file, folders, isOpen, isMoving = false, onMove, onClose }: Props = $props();
-  let selectedFolder = $state('');
-  let newFolderName = $state('');
-  let showNewFolderInput = $state(false);
-
-  function autofocusNode(node: HTMLInputElement) {
-    queueMicrotask(() => node.focus());
-  }
+  let selectedFolder = $state<string | null>(null);
 
   function resetForm() {
-    selectedFolder = '';
-    newFolderName = '';
-    showNewFolderInput = false;
+    selectedFolder = null;
   }
 
   async function handleMove() {
-    if (!file) return;
-
-    let targetPath = selectedFolder;
-    if (showNewFolderInput && newFolderName.trim()) {
-      targetPath = selectedFolder ? `${selectedFolder}/${newFolderName.trim()}` : newFolderName.trim();
-    }
-
-    if (!targetPath) return;
-
+    if (!file || selectedFolder === null) return;
     try {
-      await onMove(file.id, targetPath);
+      await onMove(file.id, selectedFolder);
       resetForm();
       onClose();
     } catch {
-      // Error already handled by service
+      // Error handled by caller
     }
   }
 
-  let availableFolders = $derived(
-    folders.filter(f => !f.includes(file?.folder_path || '')).sort()
+  // Sort folders and build tree structure with depth info
+  let sortedFolders = $derived(
+    folders.slice().sort((a, b) => a.localeCompare(b))
   );
+
+  function getDepth(path: string): number {
+    return path.split('/').length - 1;
+  }
+
+  function getFolderName(path: string): string {
+    return path.split('/').pop() || path;
+  }
 
   $effect(() => {
     if (!isOpen) {
@@ -57,7 +50,12 @@
 </script>
 
 {#if isOpen && file}
-  <div class="dialog-overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()} onkeydown={(e) => e.key === 'Escape' && onClose()}>
+  <div
+    class="dialog-overlay"
+    role="presentation"
+    onclick={(e) => e.target === e.currentTarget && onClose()}
+    onkeydown={(e) => e.key === 'Escape' && onClose()}
+  >
     <div class="dialog">
       <div class="dialog-header">
         <h3>Move: <strong>{file.name}</strong></h3>
@@ -67,62 +65,48 @@
       </div>
 
       <div class="dialog-content">
+        <div class="current-location">
+          <Icons.MapPin size={13} />
+          <span>Currently in: <strong>{file.folder_path || 'Root /'}</strong></span>
+        </div>
+
         <div class="folder-tree">
+          <!-- Move to root -->
           <button
             type="button"
             class="folder-item"
             class:selected={selectedFolder === ''}
-            onclick={() => { selectedFolder = ''; showNewFolderInput = false; }}
+            class:current={file.folder_path === '' || !file.folder_path}
+            disabled={file.folder_path === '' || !file.folder_path}
+            onclick={() => selectedFolder = ''}
           >
-            <Icons.HardDrive size={16} />
-            <span>Root (Bucket)</span>
+            <Icons.HardDrive size={15} />
+            <span class="folder-label">Root /</span>
+            {#if file.folder_path === '' || !file.folder_path}
+              <span class="current-tag">current</span>
+            {/if}
           </button>
 
-          {#each availableFolders as folder}
+          {#each sortedFolders as folder}
+            {@const depth = getDepth(folder)}
+            {@const name = getFolderName(folder)}
+            {@const isCurrent = file.folder_path === folder}
             <button
               type="button"
               class="folder-item"
               class:selected={selectedFolder === folder}
-              onclick={() => { selectedFolder = folder; showNewFolderInput = false; }}
+              class:current={isCurrent}
+              disabled={isCurrent}
+              style="padding-left: {12 + depth * 16}px"
+              onclick={() => selectedFolder = folder}
             >
-              <Icons.Folder size={16} />
-              <span>{folder}</span>
+              <Icons.Folder size={15} />
+              <span class="folder-label">{name}</span>
+              {#if isCurrent}
+                <span class="current-tag">current</span>
+              {/if}
             </button>
           {/each}
-        </div>
-
-        <div class="divider">OR</div>
-
-        <div class="new-folder-section">
-          <button
-            type="button"
-            class="new-folder-btn"
-            class:active={showNewFolderInput}
-            onclick={() => showNewFolderInput = !showNewFolderInput}
-          >
-            <Icons.FolderPlus size={16} />
-            Create New Folder
-          </button>
-
-          {#if showNewFolderInput}
-            <div class="new-folder-input-group">
-              {#if selectedFolder}
-                <div class="folder-path">{selectedFolder} /</div>
-              {/if}
-              <input
-                type="text"
-                bind:value={newFolderName}
-                placeholder="folder name"
-                class="new-folder-input"
-                use:autofocusNode
-              />
-            </div>
-          {/if}
-        </div>
-
-        <div class="current-location">
-          <span class="label">Current Location:</span>
-          <span class="value">{file.folder_path || 'Root'}</span>
         </div>
       </div>
 
@@ -134,11 +118,11 @@
           type="button"
           class="btn-primary"
           onclick={handleMove}
-          disabled={!selectedFolder && !(showNewFolderInput && newFolderName.trim()) || isMoving}
+          disabled={selectedFolder === null || isMoving}
         >
           {#if isMoving}
             <div class="spinner"></div>
-            Moving...
+            Moving…
           {:else}
             <Icons.ArrowRight size={14} />
             Move Here
@@ -152,23 +136,22 @@
 <style>
   .dialog-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
+    z-index: 2000;
+    backdrop-filter: blur(2px);
   }
 
   .dialog {
     background: var(--surface);
-    border-radius: var(--r-3);
-    box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border);
+    border-radius: var(--r-3, 10px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     width: 90%;
-    max-width: 500px;
+    max-width: 420px;
     display: flex;
     flex-direction: column;
     max-height: 80vh;
@@ -178,232 +161,159 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--s-4);
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
 
   .dialog-header h3 {
     margin: 0;
-    font-size: var(--fs-16);
+    font-size: 14px;
     font-weight: 600;
     color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .dialog-header strong {
-    color: var(--blue);
-  }
+  .dialog-header strong { color: var(--blue); }
 
   .close-btn {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text-2);
-    border-radius: 8px;
+    border-radius: 7px;
     cursor: pointer;
+    transition: all 0.15s;
   }
-
-  .close-btn:hover {
-    background: var(--surface-2);
-    color: var(--text);
-  }
+  .close-btn:hover { background: var(--surface-2); color: var(--text); }
 
   .dialog-content {
     flex: 1;
     overflow-y: auto;
-    padding: var(--s-4);
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: var(--s-4);
+    gap: 10px;
   }
+
+  .current-location {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: rgba(110, 168, 255, 0.06);
+    border: 1px solid rgba(110, 168, 255, 0.15);
+    font-size: 12px;
+    color: var(--text-2);
+    flex-shrink: 0;
+  }
+  .current-location strong { color: var(--text); }
 
   .folder-tree {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
   }
 
   .folder-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: 10px;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-2);
     text-align: left;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.12s;
+    font-size: 13px;
+    width: 100%;
   }
-
-  .folder-item:hover {
+  .folder-item:hover:not(:disabled) {
     background: var(--surface-2);
     color: var(--text);
     border-color: var(--border);
   }
-
   .folder-item.selected {
-    background: rgba(110, 168, 255, 0.15);
+    background: rgba(110, 168, 255, 0.12);
     border-color: rgba(110, 168, 255, 0.3);
     color: var(--text);
   }
+  .folder-item.current, .folder-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 
-  .folder-item span {
+  .folder-label {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
   }
 
-  .divider {
-    text-align: center;
-    color: var(--text-3);
-    font-size: var(--fs-12);
-    padding: var(--s-2) 0;
-    opacity: 0.6;
-  }
-
-  .new-folder-section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .new-folder-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .new-folder-btn:hover,
-  .new-folder-btn.active {
-    background: var(--surface-2);
-    color: var(--text);
-    border-color: rgba(110, 168, 255, 0.3);
-  }
-
-  .new-folder-input-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--surface-2);
-    border-radius: 8px;
-    border: 1px solid var(--border);
-  }
-
-  .folder-path {
-    color: var(--text-2);
-    font-family: var(--ff-mono);
-    font-size: var(--fs-12);
-    white-space: nowrap;
-  }
-
-  .new-folder-input {
-    flex: 1;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-family: var(--ff-mono);
-    font-size: var(--fs-13);
-    outline: none;
-  }
-
-  .new-folder-input::placeholder {
-    color: var(--text-3);
-  }
-
-  .current-location {
-    padding: var(--s-3);
-    border-radius: 8px;
-    background: rgba(110, 168, 255, 0.05);
-    border: 1px solid rgba(110, 168, 255, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: var(--fs-13);
-  }
-
-  .current-location .label {
-    color: var(--text-2);
+  .current-tag {
+    font-size: 10px;
     font-weight: 600;
-  }
-
-  .current-location .value {
-    color: var(--text);
-    font-family: var(--ff-mono);
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--muted);
+    flex-shrink: 0;
+    letter-spacing: 0.3px;
   }
 
   .dialog-actions {
     display: flex;
-    gap: 10px;
-    padding: var(--s-4);
+    gap: 8px;
+    padding: 12px 16px;
     border-top: 1px solid var(--border);
     justify-content: flex-end;
+    flex-shrink: 0;
   }
 
   .btn-secondary,
   .btn-primary {
-    height: 40px;
-    padding: 0 20px;
-    border-radius: 10px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--surface-2);
     color: var(--text-2);
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    transition: all 0.2s;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
   }
-
-  .btn-secondary:hover {
-    background: var(--surface);
-    color: var(--text);
-  }
+  .btn-secondary:hover { background: var(--surface); color: var(--text); }
 
   .btn-primary {
     background: rgba(110, 168, 255, 0.15);
     border-color: rgba(110, 168, 255, 0.3);
     color: var(--text);
   }
-
-  .btn-primary:hover:not(:disabled) {
-    background: rgba(110, 168, 255, 0.25);
-  }
-
-  .btn-primary:disabled,
-  .btn-secondary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  .btn-primary:hover:not(:disabled) { background: rgba(110, 168, 255, 0.25); }
+  .btn-primary:disabled, .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .spinner {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border: 2px solid rgba(255, 255, 255, 0.2);
     border-top-color: currentColor;
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>

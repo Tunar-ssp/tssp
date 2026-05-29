@@ -5,9 +5,16 @@
   import type { FileRecord } from '$lib/api';
   import { formatBytes, formatRelative } from '$lib/utils';
 
+  interface FolderItem {
+    path: string;
+    name: string;
+    fileCount: number;
+  }
+
   interface Props {
     files?: FileRecord[];
     trash?: FileRecord[];
+    folders?: FolderItem[];
     isLoading?: boolean;
     isTrashView?: boolean;
     viewMode?: 'grid' | 'list';
@@ -18,9 +25,12 @@
     hasMore?: boolean;
     isLoadingMore?: boolean;
     showThumbnails?: boolean;
+    renameTargetId?: string | null;
+    onRenameStarted?: () => void;
     onSelectFile?: (file: FileRecord, event?: MouseEvent) => void;
     onPreviewFile?: (file: FileRecord) => void;
     onContextMenu?: (event: MouseEvent, file: FileRecord) => void;
+    onOpenFolder?: (path: string) => void;
     onLoadMore?: () => void;
     onRestore?: (file: FileRecord) => void;
     onDelete?: (file: FileRecord) => void;
@@ -35,6 +45,7 @@
   let {
     files = [],
     trash = [],
+    folders = [],
     isLoading = false,
     isTrashView = false,
     viewMode = 'grid',
@@ -45,9 +56,12 @@
     hasMore = false,
     isLoadingMore = false,
     showThumbnails = true,
+    renameTargetId = null,
+    onRenameStarted = () => {},
     onSelectFile = () => {},
     onPreviewFile = () => {},
     onContextMenu = () => {},
+    onOpenFolder = () => {},
     onLoadMore = () => {},
     onRestore = () => {},
     onDelete = () => {},
@@ -56,10 +70,14 @@
     onDownload = () => {},
     onCopy = () => {},
     onRename = () => {},
-    onDropFiles = async (fileIds: string[], targetFileId: string) => {},
+    onDropFiles = async (_fileIds: string[], _targetFileId: string) => {},
   }: Props = $props();
 
-  let displayFiles = $derived(isTrashView ? trash : files);
+  // Deduplicate to prevent each_key_duplicate errors
+  let displayFiles = $derived(
+    Array.from(new Map((isTrashView ? trash : files).map((f) => [f.id, f])).values())
+  );
+  let displayFolders = $derived(isTrashView ? [] : folders);
   let draggedOverFile = $state<string | null>(null);
   let renamingFileId = $state<string | null>(null);
   let renameValue = $state<string>('');
@@ -97,9 +115,18 @@
     });
   }
 
-  interface OnDragEvent extends DragEvent {
-    dataTransfer: DataTransfer | null;
-  }
+  // React to external rename triggers (e.g. F2 key, context menu)
+  $effect(() => {
+    const target = renameTargetId;
+    if (!target) return;
+    const allFiles = isTrashView ? trash : files;
+    const file = allFiles.find((f) => f.id === target);
+    if (file) {
+      renamingFileId = file.id;
+      renameValue = file.name;
+    }
+    onRenameStarted();
+  });
 
   function startRename(file: FileRecord) {
     renamingFileId = file.id;
@@ -192,6 +219,24 @@
       </div>
     {:else if viewMode === 'grid'}
       <div class="file-grid">
+        {#each displayFolders as folder (folder.path)}
+          <div
+            class="file-card folder-card"
+            ondblclick={() => onOpenFolder?.(folder.path)}
+            onclick={(e) => e.currentTarget.focus()}
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => { if (e.key === 'Enter') onOpenFolder?.(folder.path); }}
+          >
+            <div class="file-surface folder-surface">
+              <Icons.Folder size={44} class="folder-glyph-big" />
+            </div>
+            <div class="file-copy">
+              <strong class="filename-text">{folder.name}</strong>
+              <span>{folder.fileCount} item{folder.fileCount !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        {/each}
         {#each displayFiles as file (file.id)}
           <div
             class="file-card"
@@ -215,7 +260,7 @@
             }}
           >
             <div class="file-surface">
-              {#if showThumbnails && IMG_THUMB.test(file.name) && stageOf(file.id) !== 'failed'}
+              {#if showThumbnails && (IMG_THUMB.test(file.name) || VID_THUMB.test(file.name)) && stageOf(file.id) !== 'failed'}
                 <img
                   src={thumbSrc(file.id)}
                   alt={file.name}
@@ -223,7 +268,12 @@
                   loading="lazy"
                   onerror={() => onThumbError(file.id)}
                 />
-              {:else if showThumbnails && VID_THUMB.test(file.name)}
+                {#if VID_THUMB.test(file.name) && stageOf(file.id) === 'thumb'}
+                  <div class="video-play-overlay">
+                    <Icons.Play size={20} />
+                  </div>
+                {/if}
+              {:else if showThumbnails && VID_THUMB.test(file.name) && stageOf(file.id) === 'failed'}
                 <div class="video-thumbnail">
                   <Icons.Play size={24} />
                 </div>
@@ -285,7 +335,7 @@
                 />
               {:else}
                 <strong
-                  ondblclick={() => startRename(file)}
+                  ondblclick={(e) => { e.stopPropagation(); startRename(file); }}
                   class="filename-text"
                 >
                   {file.name}
@@ -302,9 +352,31 @@
           <span>Name</span>
           <span>Size</span>
           <span>Updated</span>
-          <span>Folder</span>
+          <span>Location</span>
           <span>State</span>
         </div>
+
+        {#each displayFolders as folder (folder.path)}
+          <button
+            type="button"
+            class="list-row folder-row"
+            ondblclick={() => onOpenFolder?.(folder.path)}
+          >
+            <div class="list-row-content">
+              <div class="name-cell">
+                <div class="list-thumb folder-thumb">
+                  <Icons.Folder size={18} class="folder-list-icon" />
+                </div>
+                <span class="filename-text folder-name">{folder.name}</span>
+              </div>
+              <span class="muted-state">{folder.fileCount} item{folder.fileCount !== 1 ? 's' : ''}</span>
+              <span></span>
+              <span class="muted-state">Folder</span>
+              <span></span>
+            </div>
+            <div class="list-row-actions"></div>
+          </button>
+        {/each}
 
         {#each displayFiles as file (file.id)}
           <button
@@ -328,7 +400,19 @@
               class="list-row-content"
             >
               <div class="name-cell">
-                <FileIcon mimeType={file.mime_type} name={file.name} size={20} />
+                <div class="list-thumb">
+                  {#if showThumbnails && (IMG_THUMB.test(file.name) || VID_THUMB.test(file.name)) && stageOf(file.id) !== 'failed'}
+                    <img
+                      src={thumbSrc(file.id)}
+                      alt={file.name}
+                      class="list-thumbnail"
+                      loading="lazy"
+                      onerror={() => onThumbError(file.id)}
+                    />
+                  {:else}
+                    <FileIcon mimeType={file.mime_type} name={file.name} size={18} />
+                  {/if}
+                </div>
                 {#if renamingFileId === file.id}
                   <input
                     type="text"
@@ -341,7 +425,9 @@
                   />
                 {:else}
                   <span
-                    ondblclick={() => startRename(file)}
+                    role="button"
+                    tabindex="-1"
+                    ondblclick={(e) => { e.stopPropagation(); startRename(file); }}
                     class="filename-text"
                   >
                     {file.name}
@@ -544,10 +630,30 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 80px;
+    height: 110px;
     background: var(--bg);
     border-radius: 6px;
     position: relative;
+    overflow: hidden;
+  }
+
+  .folder-surface {
+    background: rgba(250, 176, 5, 0.08);
+    border: 1px solid rgba(250, 176, 5, 0.18);
+  }
+
+  .folder-card {
+    border-color: rgba(250, 176, 5, 0.25) !important;
+  }
+
+  .folder-card:hover {
+    border-color: rgba(250, 176, 5, 0.5) !important;
+    background: rgba(250, 176, 5, 0.06) !important;
+  }
+
+  .folder-surface :global(.folder-glyph-big) {
+    color: #f59e0b;
+    filter: drop-shadow(0 2px 6px rgba(245, 158, 11, 0.35));
   }
 
   .quick-actions {
@@ -775,7 +881,6 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
-    flex-wrap: wrap;
   }
 
   .name-cell span {
@@ -783,6 +888,44 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .list-thumb {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .list-thumbnail {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .folder-thumb {
+    background: rgba(250, 176, 5, 0.1);
+  }
+
+  .folder-thumb :global(.folder-list-icon) {
+    color: #f59e0b;
+  }
+
+  .folder-row {
+    border-left: 2px solid rgba(250, 176, 5, 0.3);
+  }
+
+  .folder-row:hover {
+    background: rgba(250, 176, 5, 0.04) !important;
+  }
+
+  .folder-name {
+    font-weight: 500;
   }
 
   .load-more-row {
@@ -840,7 +983,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: 0;
   }
 
   .video-thumbnail {
@@ -852,6 +995,18 @@
     background: linear-gradient(135deg, rgba(30, 30, 30, 0.8), rgba(50, 50, 50, 0.8));
     color: var(--text-2);
     border-radius: 4px;
+  }
+
+  .video-play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    color: white;
+    pointer-events: none;
   }
 
   .muted-state {

@@ -78,8 +78,17 @@ export const driveApi = {
   createFolder: (name: string, parentPath?: string) =>
     request<FolderEntry>('/folders', {
       method: 'POST',
-      // Backend expects a single virtual `path`; join parent + name here.
       body: JSON.stringify({ path: parentPath ? `${parentPath}/${name}` : name }),
+    }),
+  moveFolder: (from: string, to: string) =>
+    request<{ schema_version: number; files_updated: number }>('/folders/move', {
+      method: 'POST',
+      body: JSON.stringify({ from, to }),
+    }),
+  deleteFolder: (path: string) =>
+    request<{ schema_version: number; files_updated: number }>('/folders/delete', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
     }),
   getFile: async (id: string) => normalizeFileRecord(await request<FileRecord>(`/files/${id}`)),
   deleteFile: (id: string) =>

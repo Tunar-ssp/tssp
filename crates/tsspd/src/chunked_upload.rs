@@ -849,10 +849,20 @@ pub async fn complete_upload(
         );
     }
 
+    // Re-sniff the assembled file's MIME type from magic bytes. The client hint
+    // (session.mime_type) is often a generic "application/octet-stream" for
+    // chunked uploads, which would otherwise break type filtering, thumbnails,
+    // and the details panel. Prefer a specific sniffed type over a generic hint.
+    let sniffed_mime = crate::upload::sniff_mime_type(&assembled_path).ok();
+    let final_mime = match sniffed_mime {
+        Some(sniffed) if sniffed != "application/octet-stream" => Some(sniffed),
+        _ => session.mime_type.clone(),
+    };
+
     let owner_id = auth.0.as_ref().map(|ctx| ctx.user_id.clone());
     let upload_request = HttpUploadRequest {
         filename: session.filename.clone(),
-        mime_type: session.mime_type.clone(),
+        mime_type: final_mime,
         tags: session.tags.clone(),
         pinned: false,
         folder_path: session.folder_path.clone(),

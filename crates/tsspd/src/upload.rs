@@ -17,11 +17,23 @@ use tssp_ports::{BlobStore, Clock, FileRepository, IdGenerator, RepositoryError}
 
 use crate::{ErrorBody, ErrorResponse, HttpState};
 
-/// Sniff MIME type from file magic bytes, overriding untrusted client-provided type.
-fn sniff_mime_type(path: &Path) -> Result<String, String> {
-    let bytes =
-        std::fs::read(path).map_err(|e| format!("could not read file for MIME sniffing: {e}"))?;
-    let mime = infer::get(&bytes).map_or_else(
+/// Number of leading bytes inspected for MIME sniffing. Magic-byte signatures
+/// live in the first few dozen bytes, so reading a small header keeps RAM flat
+/// even for multi-GB uploads on the Orange Pi.
+const SNIFF_HEADER_BYTES: usize = 8192;
+
+/// Sniff MIME type from file magic bytes, overriding untrusted client-provided
+/// type. Reads only the file header to avoid loading large files into memory.
+pub(crate) fn sniff_mime_type(path: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let mut file =
+        std::fs::File::open(path).map_err(|e| format!("could not open file for MIME sniffing: {e}"))?;
+    let mut header = vec![0u8; SNIFF_HEADER_BYTES];
+    let read = file
+        .read(&mut header)
+        .map_err(|e| format!("could not read file for MIME sniffing: {e}"))?;
+    header.truncate(read);
+    let mime = infer::get(&header).map_or_else(
         || "application/octet-stream".to_string(),
         |info| info.mime_type().to_string(),
     );

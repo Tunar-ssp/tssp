@@ -1029,6 +1029,54 @@ impl FileRepository for SqliteFileRepository {
         Ok(u64::try_from(changed).unwrap_or(0))
     }
 
+    fn update_folder_path_prefix_owned(
+        &self,
+        from_prefix: &str,
+        to_prefix: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, RepositoryError> {
+        let from = normalize_folder_prefix(from_prefix);
+        let to = normalize_folder_prefix(to_prefix);
+        let owner = owner_id.as_str();
+        let connection = self.connect()?;
+        let changed = if from.is_empty() {
+            connection
+                .execute(
+                    "UPDATE files
+                     SET folder_path = CASE
+                         WHEN folder_path = '' THEN ?1
+                         ELSE ?1 || '/' || folder_path
+                     END
+                     WHERE owner_id = ?3
+                       AND (folder_path = '' OR folder_path LIKE ?2 ESCAPE '\\')",
+                    params![to, format!("{from}/%"), owner],
+                )
+                .map_err(map_rusqlite_repository_error)?
+        } else {
+            connection
+                .execute(
+                    "UPDATE files
+                     SET folder_path = CASE
+                         WHEN folder_path = ?1 THEN ?2
+                         WHEN folder_path LIKE ?3 ESCAPE '\\' THEN
+                             CASE
+                                 WHEN length(folder_path) > length(?1) + 1 AND ?2 != ''
+                                 THEN ?2 || '/' || substr(folder_path, length(?1) + 2)
+                                 WHEN length(folder_path) > length(?1) + 1 AND ?2 = ''
+                                 THEN substr(folder_path, length(?1) + 2)
+                                 ELSE ?2
+                             END
+                         ELSE folder_path
+                     END
+                     WHERE owner_id = ?4
+                       AND (folder_path = ?1 OR folder_path LIKE ?3 ESCAPE '\\')",
+                    params![from, to, format!("{from}/%"), owner],
+                )
+                .map_err(map_rusqlite_repository_error)?
+        };
+        Ok(u64::try_from(changed).unwrap_or(0))
+    }
+
     fn set_file_folder_path(
         &self,
         id: &FileId,

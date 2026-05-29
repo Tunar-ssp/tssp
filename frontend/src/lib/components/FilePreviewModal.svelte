@@ -183,11 +183,16 @@
             <video
               src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
               controls
-              autoplay
+              preload="metadata"
             >
               <track kind="captions" />
-              Your browser does not support the video tag.
+              Your browser does not support this video format.
             </video>
+            <p class="video-note">
+              {#if ['mkv','avi','wmv'].includes(ext)}
+                <Icons.AlertCircle size={13} /> {ext.toUpperCase()} may not play in browser — download to watch.
+              {/if}
+            </p>
           </div>
         {:else if previewLens === 'audio' && isAud}
           <div class="preview-audio">
@@ -201,10 +206,13 @@
           </div>
         {:else if previewLens === 'pdf' && isPdf}
           <div class="preview-pdf">
-            <iframe
-              src={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
+            <object
+              data={`/api/v1/files/${encodeURIComponent(file.id)}/content?disposition=inline`}
+              type="application/pdf"
               title={file.name}
-            ></iframe>
+            >
+              <p>PDF cannot be displayed. <a href={`/api/v1/files/${encodeURIComponent(file.id)}/content`} target="_blank">Open in new tab</a> or download.</p>
+            </object>
           </div>
         {:else if previewLens === 'text' && isTextPreviewable(file)}
           <div class="preview-text">
@@ -302,10 +310,8 @@
   }
 
   .preview-modal {
-    width: 90%;
-    max-width: 800px;
-    height: 90%;
-    max-height: 700px;
+    width: min(95vw, 1100px);
+    height: min(92vh, 860px);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-3);
@@ -506,12 +512,38 @@
   .preview-pdf {
     width: 100%;
     height: 100%;
+    display: flex;
+    flex-direction: column;
   }
-  .preview-pdf iframe {
+  .preview-pdf object {
+    flex: 1;
     width: 100%;
-    height: 100%;
     border: none;
     background: #fff;
+    min-height: 0;
+  }
+  .preview-pdf p {
+    padding: 16px;
+    color: var(--text-2);
+    font-size: 13px;
+    text-align: center;
+  }
+  .preview-pdf a { color: var(--blue); }
+
+  .preview-video { position: relative; }
+  .video-note {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
   }
 
   .preview-text {

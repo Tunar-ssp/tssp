@@ -225,6 +225,25 @@ pub trait FileRepository {
         to_prefix: &str,
     ) -> Result<u64, RepositoryError>;
 
+    /// Renames or moves a logical folder scoped to a single owner.
+    ///
+    /// Only files belonging to `owner_id` are affected. Implementations should
+    /// provide a real scoped SQL query; the default delegates to the unscoped
+    /// variant and is intended only for test stubs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the update fails.
+    fn update_folder_path_prefix_owned(
+        &self,
+        from_prefix: &str,
+        to_prefix: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, RepositoryError> {
+        let _ = owner_id;
+        self.update_folder_path_prefix(from_prefix, to_prefix)
+    }
+
     /// Sets `folder_path` for one file.
     ///
     /// # Errors
@@ -555,6 +574,16 @@ where
     ) -> Result<u64, RepositoryError> {
         self.as_ref()
             .update_folder_path_prefix(from_prefix, to_prefix)
+    }
+
+    fn update_folder_path_prefix_owned(
+        &self,
+        from_prefix: &str,
+        to_prefix: &str,
+        owner_id: &tssp_domain::UserId,
+    ) -> Result<u64, RepositoryError> {
+        self.as_ref()
+            .update_folder_path_prefix_owned(from_prefix, to_prefix, owner_id)
     }
 
     fn set_file_folder_path(

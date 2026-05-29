@@ -83,6 +83,12 @@
   });
   let showBulkMoveMenu = $state(false);
   let showKeyboardHelp = $state(false);
+  let inlineRenameId = $state<string | null>(null);
+  let confirmDialog = $state<{ title: string; body: string; onConfirm: () => void } | null>(null);
+
+  function showConfirm(title: string, body: string, onConfirm: () => void) {
+    confirmDialog = { title, body, onConfirm };
+  }
 
   let clipboardFileIds = $derived(clipboard.getItemIds());
   let clipboardOperation: 'copy' | 'cut' | null = $state(null);
@@ -219,6 +225,7 @@
     }
 
     void loadLibrary(true).then(() => consumeIntent());
+    void loadTrash();
 
     return () => {
       if (typeof document !== 'undefined') {
@@ -303,6 +310,12 @@
       e.preventDefault();
       openPreview(selectedFile);
     }
+    if (e.key === 'F2') {
+      e.preventDefault();
+      if (selectedFileIds.size === 1 && selectedFile) {
+        inlineRenameId = selectedFile.id;
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === '?') {
       e.preventDefault();
       showKeyboardHelp = true;
@@ -323,6 +336,7 @@
         { key: 'ArrowDown', handler: handleDriveKeydown },
         { key: 'ArrowUp', handler: handleDriveKeydown },
         { key: 'Enter', handler: handleDriveKeydown },
+        { key: 'F2', handler: handleDriveKeydown },
         { key: '?', ctrl: true, handler: handleDriveKeydown },
       ],
       document
@@ -332,6 +346,24 @@
   });
 
   let isTrashView = $derived(activeLens === 'trash');
+
+  // Immediate subfolders of the current folder to show in the content area
+  let subFolders = $derived.by(() => {
+    if (isTrashView) return [];
+    const prefix = currentFolder ? currentFolder + '/' : '';
+    return folderEntries
+      .filter((f) => {
+        if (!f.path.startsWith(prefix)) return false;
+        const rest = f.path.slice(prefix.length);
+        return rest.length > 0 && !rest.includes('/');
+      })
+      .map((f) => ({
+        path: f.path,
+        name: f.path.split('/').pop() ?? f.path,
+        fileCount: f.file_count || 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
 
   const IMG_EXT = new Set(['jpg','jpeg','png','gif','webp','svg','avif','bmp','ico','heic']);
   const VID_EXT = new Set(['mp4','webm','mov','mkv','avi','m4v','ogv','flv','wmv']);
@@ -518,6 +550,13 @@
   async function confirmNewFolder() {
     const name = newFolderName.trim();
     if (!name) return;
+
+    const fullPath = currentFolder ? `${currentFolder}/${name}` : name;
+    if (folderEntries.some(f => f.path === fullPath)) {
+      error('Already Exists', `A folder named "${name}" already exists here`);
+      return;
+    }
+
     try {
       creatingFolder = true;
       await createFolder(name, currentFolder);
@@ -624,6 +663,14 @@
   async function handleRename(file: FileRecord, nextName: string) {
     if (!nextName || nextName === file.name) return;
 
+    const sameFolderFiles = files.filter(
+      (f) => f.id !== file.id && (f.folder_path || '') === (file.folder_path || '')
+    );
+    if (sameFolderFiles.some((f) => f.name.toLowerCase() === nextName.trim().toLowerCase())) {
+      error('Name Conflict', `"${nextName}" already exists in this folder`);
+      return;
+    }
+
     try {
       isRenaming = true;
       const success_op = await driveStateManager.renameFile(file, nextName);
@@ -653,20 +700,20 @@
   }
 
 
-  async function handleDelete(file: FileRecord) {
-    if (!confirm(`Move "${file.name}" to trash?`)) return;
-
-    try {
-      const success_op = await driveStateManager.deleteFile(file);
-      if (success_op) {
-        files = files.filter((item) => item.id !== file.id);
-        if (selectedFile?.id === file.id) selectedFile = null;
-        await Promise.all([loadTrash(), refreshMetadata()]);
-        success('Moved to Trash', `${file.name} can be restored from trash`);
+  function handleDelete(file: FileRecord) {
+    showConfirm('Move to Trash', `Move "${file.name}" to trash?`, async () => {
+      try {
+        const success_op = await driveStateManager.deleteFile(file);
+        if (success_op) {
+          files = files.filter((item) => item.id !== file.id);
+          if (selectedFile?.id === file.id) selectedFile = null;
+          await Promise.all([loadTrash(), refreshMetadata()]);
+          success('Moved to Trash', `${file.name} can be restored from trash`);
+        }
+      } catch (cause) {
+        error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete file');
       }
-    } catch (cause) {
-      error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete file');
-    }
+    });
   }
 
   async function handlePasteFiles() {
@@ -714,38 +761,38 @@
     }
   }
 
-  async function handlePermanentDelete(file: FileRecord) {
-    if (!confirm(`Permanently purge "${file.name}" from trash?`)) return;
-
-    try {
-      const success_op = await driveStateManager.permanentlyDeleteFile(file);
-      if (success_op) {
-        trash = trash.filter((item) => item.id !== file.id);
-        if (selectedFile?.id === file.id) selectedFile = null;
-        success('Purged', `${file.name} was permanently deleted`);
+  function handlePermanentDelete(file: FileRecord) {
+    showConfirm('Permanently Delete', `Permanently purge "${file.name}" from trash? This cannot be undone.`, async () => {
+      try {
+        const success_op = await driveStateManager.permanentlyDeleteFile(file);
+        if (success_op) {
+          trash = trash.filter((item) => item.id !== file.id);
+          if (selectedFile?.id === file.id) selectedFile = null;
+          success('Purged', `${file.name} was permanently deleted`);
+        }
+      } catch (cause) {
+        error('Purge Failed', cause instanceof Error ? cause.message : 'Could not purge file');
       }
-    } catch (cause) {
-      error('Purge Failed', cause instanceof Error ? cause.message : 'Could not purge file');
-    }
+    });
   }
 
-  async function handleBulkDelete() {
+  function handleBulkDelete() {
     const fileCount = selectedFileIds.size;
     if (fileCount === 0) return;
-    if (!confirm(`Move ${fileCount} file(s) to trash?`)) return;
-
-    try {
-      const success_op = await driveStateManager.deleteFiles(Array.from(selectedFileIds));
-      if (success_op) {
-        selectedFileIds.clear();
-        selectedFileIds = new Set();
-        selectedFile = null;
-        await Promise.all([loadTrash(), refreshMetadata()]);
-        success('Moved to Trash', `${fileCount} file(s) moved to trash`);
+    showConfirm('Move to Trash', `Move ${fileCount} file(s) to trash?`, async () => {
+      try {
+        const success_op = await driveStateManager.deleteFiles(Array.from(selectedFileIds));
+        if (success_op) {
+          selectedFileIds.clear();
+          selectedFileIds = new Set();
+          selectedFile = null;
+          await Promise.all([loadTrash(), refreshMetadata()]);
+          success('Moved to Trash', `${fileCount} file(s) moved to trash`);
+        }
+      } catch (cause) {
+        error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete files');
       }
-    } catch (cause) {
-      error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete files');
-    }
+    });
   }
 
   async function handleMoveToFolder(fileIds: string[], targetFolder: string) {
@@ -787,19 +834,53 @@
     }
   }
 
-  async function handlePurgeExpiredTrash() {
-    const confirmed = confirm('Purge only trash items older than the configured retention period?');
-    if (!confirmed) return;
-
+  async function handleRenameFolder(oldPath: string, newName: string) {
+    const parts = oldPath.split('/');
+    parts[parts.length - 1] = newName;
+    const newPath = parts.join('/');
     try {
-      const success_op = await driveStateManager.emptyTrash();
-      if (success_op) {
-        await loadTrash();
-        success('Expired Trash Purged', 'Only items older than retention were removed');
+      await api.moveFolder(oldPath, newPath);
+      folderEntries = folderEntries.map(f => {
+        if (f.path === oldPath) return { ...f, path: newPath };
+        if (f.path.startsWith(oldPath + '/')) return { ...f, path: newPath + f.path.slice(oldPath.length) };
+        return f;
+      });
+      if (currentFolder === oldPath || currentFolder.startsWith(oldPath + '/')) {
+        currentFolder = currentFolder.replace(oldPath, newPath);
       }
-    } catch (cause) {
-      error('Trash Purge Failed', cause instanceof Error ? cause.message : 'Could not purge expired trash');
+      await loadLibrary(true);
+      success('Folder Renamed', newName);
+    } catch (err) {
+      error('Rename Failed', err instanceof Error ? err.message : 'Could not rename folder');
     }
+  }
+
+  async function handleDeleteFolder(path: string) {
+    showConfirm('Delete Folder', `Delete folder "${path}"? Files inside will move to root.`, async () => {
+      try {
+        await api.deleteFolder(path);
+        folderEntries = folderEntries.filter(f => f.path !== path && !f.path.startsWith(path + '/'));
+        if (currentFolder === path || currentFolder.startsWith(path + '/')) currentFolder = '';
+        await loadLibrary(true);
+        success('Folder Deleted', path);
+      } catch (err) {
+        error('Delete Failed', err instanceof Error ? err.message : 'Could not delete folder');
+      }
+    });
+  }
+
+  function handlePurgeExpiredTrash() {
+    showConfirm('Purge Expired Trash', 'Purge only trash items older than the configured retention period?', async () => {
+      try {
+        const success_op = await driveStateManager.emptyTrash();
+        if (success_op) {
+          await loadTrash();
+          success('Expired Trash Purged', 'Only items older than retention were removed');
+        }
+      } catch (cause) {
+        error('Trash Purge Failed', cause instanceof Error ? cause.message : 'Could not purge expired trash');
+      }
+    });
   }
 
   async function handleMove(fileId: string, folderPath: string) {
@@ -812,7 +893,7 @@
       }
       const success_op = await driveStateManager.moveFile(file, folderPath);
       if (success_op) {
-        await refreshMetadata();
+        await loadLibrary(true);
         success('Moved', `File moved to ${folderPath || 'Bucket root'}`);
       }
     } catch (cause) {
@@ -890,7 +971,7 @@
       { icon: Icons.Download, label: 'Download', action: () => downloadFile(file) },
       { icon: Icons.Share2, label: file.visibility === 'public' ? 'Manage sharing' : 'Share', action: () => { selectedFile = file; shareFile = file; } },
       { icon: Icons.Pin, label: file.pinned_at ? 'Unpin' : 'Pin', action: () => handlePin(file) },
-      { icon: Icons.Pencil, label: 'Rename', action: () => { selectedFile = file; renameDialogFile = file; isRenameDialogOpen = true; } },
+      { icon: Icons.Pencil, label: 'Rename', action: () => { selectedFile = file; inlineRenameId = file.id; } },
       { icon: Icons.FolderOpen, label: 'Move', action: () => { selectedFile = file; moveDialogFile = file; isMoveDialogOpen = true; } },
     ];
 
@@ -946,59 +1027,55 @@
       {activeLens}
       folders={folderEntries}
       {currentFolder}
+      allFilesCount={files.length}
       publicCount={files.filter((f) => f.visibility === 'public').length}
       trashCount={trash.length}
+      {imageCount}
+      {videoCount}
+      {documentCount}
       usedBytes={status?.storage_bytes_used || 0}
       totalObjects={status?.file_count || files.length}
       onLensChange={setLens}
       onFolderChange={(path) => {
         currentFolder = path;
         if (activeLens === 'trash') activeLens = 'all';
+        selectedFileIds = new Set(); selectedFile = null; showBulkMoveMenu = false; detailsPanelOpen = false;
       }}
       onNewFolder={handleNewFolder}
       onMoveToFolder={handleMoveToFolder}
+      onRenameFolder={handleRenameFolder}
+      onDeleteFolder={handleDeleteFolder}
       onClose={() => sidebarOpen = false}
     />
   {/if}
 
-  <section class="drive-main" class:sidebar-closed={!sidebarOpen}>
-    {#if !sidebarOpen}
-      <button class="sidebar-toggle" onclick={() => sidebarOpen = true} title="Show sidebar">
-        <Icons.PanelLeft size={16} />
-      </button>
-    {/if}
+  <section class="drive-main">
     <DriveHeader
-      title={isTrashView ? 'Trash' : 'Cloud Drive'}
       {currentFolder}
       {isTrashView}
       fileCount={status?.file_count || files.length}
       visibleCount={isTrashView ? filteredTrash.length : filteredLibraryFiles.length}
-      pinnedCount={status?.pinned_count || files.filter((f) => f.pinned_at).length}
-      publicCount={files.filter((f) => f.visibility === 'public').length}
       selectedCount={selectedFileIds.size}
-      {imageCount}
-      {videoCount}
-      {documentCount}
       onRefresh={handleRefresh}
-      onUpload={requestUpload}
       onUploadFolder={requestFolderUpload}
       onNewFolder={handleNewFolder}
       onPurgeTrash={handlePurgeExpiredTrash}
+      onToggleSidebar={() => sidebarOpen = !sidebarOpen}
+      sidebarOpen={sidebarOpen}
       onNavigateFolder={(path) => {
         currentFolder = path;
         if (activeLens === 'trash') activeLens = 'all';
+        selectedFileIds = new Set(); selectedFile = null; showBulkMoveMenu = false; detailsPanelOpen = false;
       }}
       trashEmpty={trash.length === 0}
     />
 
     <div class="toolbar-with-panel-toggle">
       <DriveToolbarRow
-        filterQuery={filterQuery}
         isTrashView={isTrashView}
         viewMode={viewMode}
         {sortBy}
         {sortOrder}
-        onFilterChange={(query) => filterQuery = query}
         onViewModeChange={setViewMode}
         onSortChange={(newSortBy) => sortBy = newSortBy}
         onSortOrderChange={(newOrder) => sortOrder = newOrder}
@@ -1067,9 +1144,9 @@
                   disabled={isMoving || currentFolder === ''}
                 >
                   <Icons.HardDrive size={12} />
-                  Bucket root
+                  Root /
                 </button>
-                {#each folderEntries as folder}
+                {#each folderEntries.slice().sort((a, b) => a.path.localeCompare(b.path)) as folder}
                   <button
                     type="button"
                     onclick={() => {
@@ -1079,7 +1156,7 @@
                     disabled={isMoving || currentFolder === folder.path}
                   >
                     <Icons.Folder size={12} />
-                    {folder.path}
+                    {folder.path.split('/').pop() || folder.path}
                   </button>
                 {/each}
               </div>
@@ -1097,7 +1174,8 @@
       <DriveContent
         files={filteredLibraryFiles}
         trash={filteredTrash}
-        {isLoading}
+        folders={subFolders}
+        isLoading={isTrashView ? trashLoading : isLoading}
         {isTrashView}
         {viewMode}
         selectedFileId={selectedFile?.id}
@@ -1106,9 +1184,16 @@
         {clipboardOperation}
         {hasMore}
         {isLoadingMore}
+        renameTargetId={inlineRenameId}
+        onRenameStarted={() => inlineRenameId = null}
         onSelectFile={selectFile}
         onPreviewFile={openPreview}
         onContextMenu={showContextMenu}
+        onOpenFolder={(path) => {
+          currentFolder = path;
+          if (activeLens === 'trash') activeLens = 'all';
+          selectedFileIds = new Set(); selectedFile = null;
+        }}
         onLoadMore={() => loadLibrary(false)}
         onRestore={handleRestore}
         onDelete={handlePermanentDelete}
@@ -1127,12 +1212,8 @@
           onShare={() => {
             if (selectedFile) shareFile = selectedFile;
           }}
-          onMove={() => {
-            if (selectedFile) {
-              moveDialogFile = selectedFile;
-              isMoveDialogOpen = true;
-            }
-          }}
+          onDownload={(f) => downloadFile(f)}
+          onRename={(f) => { inlineRenameId = f.id; }}
         />
       {/if}
     </div>
@@ -1191,6 +1272,35 @@
   isOpen={showKeyboardHelp}
   onClose={() => (showKeyboardHelp = false)}
 />
+
+{#if confirmDialog}
+  <div
+    class="confirm-overlay"
+    role="presentation"
+    onclick={(e) => { if (e.target === e.currentTarget) confirmDialog = null; }}
+  >
+    <div class="confirm-dialog" role="dialog" aria-modal="true">
+      <h3 class="confirm-title">{confirmDialog.title}</h3>
+      <p class="confirm-body">{confirmDialog.body}</p>
+      <div class="confirm-actions">
+        <button type="button" class="confirm-btn ghost" onclick={() => confirmDialog = null}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="confirm-btn primary"
+          onclick={() => {
+            const action = confirmDialog?.onConfirm;
+            confirmDialog = null;
+            action?.();
+          }}
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if newFolderOpen}
   <div
@@ -1659,4 +1769,70 @@
       grid-template-columns: 1fr;
     }
   }
+
+  /* ── Confirm dialog ─────────────────────────────────── */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    animation: fade-in 0.1s ease-out;
+  }
+
+  .confirm-dialog {
+    width: min(400px, calc(100vw - 32px));
+    padding: 20px;
+    border-radius: var(--r-4, 10px);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary, var(--surface));
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  .confirm-title {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .confirm-body {
+    margin: 0 0 18px;
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .confirm-btn {
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--r-2, 6px);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: all 0.12s;
+  }
+
+  .confirm-btn.ghost {
+    background: transparent;
+    color: var(--text-2);
+  }
+  .confirm-btn.ghost:hover { color: var(--text); border-color: var(--border-2); }
+
+  .confirm-btn.primary {
+    background: var(--danger, #ef4444);
+    border-color: transparent;
+    color: #fff;
+  }
+  .confirm-btn.primary:hover { opacity: 0.9; }
 </style>
