@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { formatBytes } from '$lib/utils/formatters';
+  import { formatBytes } from '$lib/utils/format';
   import { api } from '$lib/api';
 
   type Status = Awaited<ReturnType<typeof api.getStatus>>;

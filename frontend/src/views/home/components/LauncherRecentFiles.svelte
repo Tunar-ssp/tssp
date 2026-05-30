@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import FileThumb from '$lib/components/FileThumb.svelte';
-  import { formatBytes, formatRelative } from '$lib/utils/formatters';
+  import { formatBytes, formatRelative } from '$lib/utils/format';
   import type { FileRecord } from '$lib/api';
 
   interface Props {

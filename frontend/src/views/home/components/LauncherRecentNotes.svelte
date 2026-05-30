@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
-  import { formatRelative } from '$lib/utils/formatters';
+  import { formatRelative } from '$lib/utils/format';
   import type { Note } from '$lib/api';
 
   interface Props {
