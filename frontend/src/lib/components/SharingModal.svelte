@@ -4,6 +4,7 @@
   import Btn from './Btn.svelte';
   import { api, type FileRecord, type VisibilityResponse } from '$lib/api';
   import { success, error } from '$lib/stores/notifications';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface $$Props {
     file?: any;
@@ -20,6 +21,13 @@
     onShare,
     class: className,
   }: $$Props = $props();
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('modal');
+      return () => activeOverlays.remove('modal');
+    }
+  });
 
   let isPublic = $state(false);
   let shareLink = $state('');

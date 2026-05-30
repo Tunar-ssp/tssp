@@ -11,7 +11,8 @@ export interface NoteTreeNode {
 }
 
 function siblingSort(a: Note, b: Note): number {
-  // Stable ordering: oldest first, so newly created pages append predictably.
+  // Respect sort_order, fallback to created_at
+  if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
   if (a.created_at !== b.created_at) return a.created_at - b.created_at;
   return a.id.localeCompare(b.id);
 }

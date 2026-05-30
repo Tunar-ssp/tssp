@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import type { FileRecord } from '$lib/api';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface Props {
     file: FileRecord | null;
@@ -12,6 +13,13 @@
 
   let { file, isOpen, isRenaming = false, onRename, onClose }: Props = $props();
   let nextName = $state('');
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('modal');
+      return () => activeOverlays.remove('modal');
+    }
+  });
 
   $effect(() => {
     if (isOpen && file) {

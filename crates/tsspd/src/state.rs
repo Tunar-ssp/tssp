@@ -612,6 +612,10 @@ impl FileRepository for StaticFileRepository {
     ) -> Result<u64, tssp_ports::RepositoryError> {
         Ok(0)
     }
+
+    fn vacuum(&self) -> Result<(), tssp_ports::RepositoryError> {
+        Ok(())
+    }
 }
 
 /// No-op folder provider for testing.

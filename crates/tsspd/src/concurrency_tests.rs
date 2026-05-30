@@ -192,6 +192,10 @@ mod tests {
         ) -> Result<u64, RepositoryError> {
             Ok(0)
         }
+
+        fn vacuum(&self) -> Result<(), RepositoryError> {
+            Ok(())
+        }
     }
 
     #[tokio::test]

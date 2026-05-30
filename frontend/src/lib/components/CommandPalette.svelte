@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import { api, type SearchResult } from '$lib/api';
-  import { currentView, navigateTo, commandQuery } from '$lib/stores/ui';
+  import { currentView, navigateTo, commandQuery, activeOverlays } from '$lib/stores/ui';
   import { error as notifyError } from '$lib/stores/notifications';
   import { registerKeyboardShortcuts } from '$lib/utils';
 
@@ -40,9 +40,9 @@
   const appCommands = $derived<Command[]>([
     {
       id: 'app-home',
-      label: 'Open launcher',
-      description: 'Return to the local-cloud home screen',
-      icon: Icons.Home,
+      label: 'Open Launcher',
+      description: 'Go to the product home and app launcher',
+      icon: Icons.LayoutGrid,
       action: () => navigateTo('home'),
     },
     {
@@ -84,19 +84,26 @@
   });
 
   const handlePaletteKeydown = (e: KeyboardEvent) => {
+    if (!$activeOverlays.isTop('command-palette')) return;
+
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.stopPropagation();
       e.preventDefault();
       onClose?.();
     } else if (e.key === 'Escape') {
+      e.stopPropagation();
       e.preventDefault();
       onClose?.();
     } else if (e.key === 'ArrowDown') {
+      e.stopPropagation();
       e.preventDefault();
       selectedIndex = Math.min(selectedIndex + 1, visibleItems.length - 1);
     } else if (e.key === 'ArrowUp') {
+      e.stopPropagation();
       e.preventDefault();
       selectedIndex = Math.max(selectedIndex - 1, 0);
     } else if (e.key === 'Enter') {
+      e.stopPropagation();
       e.preventDefault();
       visibleItems[selectedIndex]?.action();
       onClose?.();
@@ -104,20 +111,10 @@
   };
 
   $effect(() => {
-    if (!isOpen) return;
-
-    const cleanup = registerKeyboardShortcuts(
-      [
-        { key: 'k', ctrl: true, handler: handlePaletteKeydown },
-        { key: 'Escape', handler: handlePaletteKeydown },
-        { key: 'ArrowDown', handler: handlePaletteKeydown },
-        { key: 'ArrowUp', handler: handlePaletteKeydown },
-        { key: 'Enter', handler: handlePaletteKeydown },
-      ],
-      document
-    );
-
-    return cleanup;
+    if (isOpen) {
+      window.addEventListener('keydown', handlePaletteKeydown, true);
+      return () => window.removeEventListener('keydown', handlePaletteKeydown, true);
+    }
   });
 
   $effect(() => {

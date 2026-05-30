@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
   import type { FileRecord } from '$lib/api';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface Props {
     file: FileRecord | null;
@@ -13,6 +14,13 @@
 
   let { file, folders, isOpen, isMoving = false, onMove, onClose }: Props = $props();
   let selectedFolder = $state<string | null>(null);
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('modal');
+      return () => activeOverlays.remove('modal');
+    }
+  });
 
   function resetForm() {
     selectedFolder = null;

@@ -17,7 +17,8 @@ pub(crate) use editor::{
 };
 pub use handlers::{
     admin_activity, admin_cleanup_sessions, admin_cleanup_temp, admin_corrupt_files,
-    admin_delete_file, admin_folders, admin_list_files, admin_overview, admin_status, admin_system,
+    admin_delete_file, admin_folders, admin_list_files, admin_maintenance_prune_logs,
+    admin_maintenance_vacuum, admin_overview, admin_status, admin_system,
 };
 pub use sessions::{
     admin_list_devices, admin_list_sessions, admin_revoke_device, admin_revoke_session,

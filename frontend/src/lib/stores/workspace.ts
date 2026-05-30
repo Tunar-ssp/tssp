@@ -11,6 +11,7 @@ export const fileTree = writable<WorkspaceFileEntry[]>([]);
 export const activeFilePath = writable<string | null>(null);
 export const fileContent = writable<string>('');
 export const isDirty = writable(false);
+export const dirtyFiles = writable<Set<string>>(new Set());
 export const isFileLoading = writable(false);
 export const fileError = writable<string | null>(null);
 
@@ -122,6 +123,10 @@ export async function saveFile(workspaceId: string, path: string, content: strin
     await api.writeWorkspaceFile(workspaceId, path, content);
     fileContent.set(content);
     isDirty.set(false);
+    dirtyFiles.update(set => {
+      set.delete(path);
+      return set;
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save file';
     fileError.set(message);
@@ -132,8 +137,14 @@ export async function saveFile(workspaceId: string, path: string, content: strin
   }
 }
 
-export function markFileDirty() {
+export function markFileDirty(path?: string) {
   isDirty.set(true);
+  if (path) {
+    dirtyFiles.update(set => {
+      set.add(path);
+      return set;
+    });
+  }
 }
 
 export function clearFileState() {

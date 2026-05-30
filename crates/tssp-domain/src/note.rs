@@ -133,6 +133,8 @@ pub struct NoteRecord {
     pub parent_id: Option<String>,
     /// Optional page icon (emoji or short token) shown in the tree and header.
     pub icon: Option<String>,
+    /// Ordering position within the current level of the tree.
+    pub sort_order: i64,
 }
 
 /// Derives a title from Markdown when the caller did not supply one.
@@ -224,6 +226,7 @@ mod tests {
             owner_id: None,
             parent_id: None,
             icon: None,
+            sort_order: 0,
         };
         assert_eq!(record.title.as_str(), "Title");
     }

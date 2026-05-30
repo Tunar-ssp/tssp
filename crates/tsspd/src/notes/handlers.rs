@@ -28,6 +28,8 @@ pub(crate) struct CreateNoteBody {
     pub(crate) parent_id: Option<String>,
     #[serde(default)]
     pub(crate) icon: Option<String>,
+    #[serde(default)]
+    pub(crate) sort_order: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +70,7 @@ pub(crate) async fn create_note(
         owner_id: Some(auth.user_id.clone()),
         parent_id: body.parent_id,
         icon: body.icon,
+        sort_order: body.sort_order,
     };
 
     match run_blocking(provider, move |provider| provider.create_note(request)).await {
@@ -365,6 +368,7 @@ pub(crate) async fn duplicate_note(
         owner_id: Some(auth.user_id.clone()),
         parent_id: existing.parent_id.clone(),
         icon: existing.icon.clone(),
+        sort_order: Some(existing.sort_order),
     };
 
     match run_blocking(provider, move |provider| provider.create_note(request)).await {

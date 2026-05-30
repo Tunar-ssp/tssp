@@ -148,6 +148,30 @@ export const driveApi = {
   emptyTrash: () =>
     request('/trash/empty', { method: 'POST' }),
 
+  bulkTrashFiles: (ids: string[]) =>
+    request<{ trashed: string[]; count: number }>('/files/bulk/trash', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  bulkRestoreFiles: (ids: string[]) =>
+    request<{ restored: string[]; count: number }>('/files/bulk/restore', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  bulkPurgeFiles: (ids: string[]) =>
+    request<{ purged: string[]; count: number }>('/files/bulk/purge', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  bulkMoveFiles: (ids: string[], folderPath: string) =>
+    request<{ schema_version: number; updated: FileRecord[]; count: number }>('/files/bulk/move', {
+      method: 'POST',
+      body: JSON.stringify({ ids, folder_path: folderPath }),
+    }).then((response) => ({
+      ...response,
+      updated: (response.updated || []).map(normalizeFileRecord),
+    })),
+
   // File download (returns blob)
   downloadFile: async (id: string, disposition?: 'inline') => {
     const query = disposition ? `?disposition=${disposition}` : '';

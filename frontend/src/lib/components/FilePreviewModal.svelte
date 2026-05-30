@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import { api } from '$lib/api';
   import { formatBytes, formatDate } from '$lib/utils';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface $$Props {
     file?: any;
@@ -18,6 +19,13 @@
     onDownload,
     class: className,
   }: $$Props = $props();
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('preview');
+      return () => activeOverlays.remove('preview');
+    }
+  });
 
   function fileExt(target: any): string {
     return (target?.name?.split('.').pop() || '').toLowerCase();

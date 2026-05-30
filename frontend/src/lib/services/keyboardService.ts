@@ -7,10 +7,14 @@ import { get } from 'svelte/store';
 import {
   toggleCommandPalette,
   commandPaletteOpen,
+  closeCommandPalette,
   toggleSettingsTray,
   settingsTrayOpen,
+  closeSettingsTray,
   toggleShortcutsOverlay,
   shortcutsOverlayOpen,
+  closeShortcutsOverlay,
+  activeOverlays,
 } from '$lib/stores/ui';
 
 /**
@@ -26,17 +30,20 @@ export function handleGlobalKeydown(e: KeyboardEvent): void {
 
   // Escape - Close open overlays in priority order
   if (e.key === 'Escape') {
-    if (get(commandPaletteOpen)) {
-      commandPaletteOpen.set(false);
+    const top = activeOverlays.pop();
+    if (top === 'command-palette') {
+      closeCommandPalette();
       return;
     }
-    if (get(settingsTrayOpen)) {
-      settingsTrayOpen.set(false);
+    if (top === 'settings-tray') {
+      closeSettingsTray();
       return;
     }
-    if (get(shortcutsOverlayOpen)) {
-      shortcutsOverlayOpen.set(false);
+    if (top === 'shortcuts') {
+      closeShortcutsOverlay();
+      return;
     }
+    // Modals and other overlays should register themselves with activeOverlays
     return;
   }
 

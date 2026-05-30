@@ -1,10 +1,18 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { activeOverlays } from '$lib/stores/ui';
+
   interface Props {
     onPick: (emoji: string) => void;
     onRemove?: () => void;
     onClose: () => void;
   }
   let { onPick, onRemove, onClose }: Props = $props();
+
+  onMount(() => {
+    activeOverlays.push('modal');
+    return () => activeOverlays.remove('modal');
+  });
 
   const EMOJIS = [
     '📄','📝','📒','📕','📗','📘','📙','📚','📖','🗒️','📋','🗂️','📁','📂','🗃️','🏷️',

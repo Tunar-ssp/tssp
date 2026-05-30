@@ -101,8 +101,22 @@ export const adminApi = {
     request<{ schema_version: number; sessions: AdminSession[] }>(
       `/admin/sessions${limit ? `?limit=${limit}` : ''}`
     ),
-  listAdminActivity: (limit?: number) =>
-    request<{ schema_version: number; items: AdminActivityItem[] }>(
-      `/admin/activity${limit ? `?limit=${limit}` : ''}`
+  listAdminActivity: (limit?: number, cursor?: string) => {
+    const params = new URLSearchParams();
+    if (limit) params.set('limit', limit.toString());
+    if (cursor) params.set('cursor', cursor);
+    const qs = params.toString();
+    return request<{ schema_version: number; items: AdminActivityItem[]; next_cursor?: string }>(
+      `/admin/activity${qs ? `?${qs}` : ''}`
+    );
+  },
+  vacuumDatabase: () =>
+    request<{ schema_version: number; message: string }>('/admin/maintenance/vacuum', {
+      method: 'POST',
+    }),
+  pruneAuditLogs: (days: number) =>
+    request<{ schema_version: number; removed_count: number }>(
+      `/admin/maintenance/prune-logs?days=${days}`,
+      { method: 'POST' }
     ),
 };

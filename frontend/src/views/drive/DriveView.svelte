@@ -14,8 +14,6 @@
   import { isDriveFolder, createWorkspaceFromFolder } from '$lib/services/driveWorkspaceIntegration';
   import FilePreviewModal from '$lib/components/FilePreviewModal.svelte';
   import SharingModal from '$lib/components/SharingModal.svelte';
-  import MoveFileDialog from './components/modals/MoveFileDialog.svelte';
-  import RenameFileDialog from './components/modals/RenameFileDialog.svelte';
   import DriveDetailsPanel from './components/panels/DriveDetailsPanel.svelte';
   import DriveHeader from './DriveHeader.svelte';
   import DriveSidebar from './DriveSidebar.svelte';
@@ -779,16 +777,31 @@
   function handleBulkDelete() {
     const fileCount = selectedFileIds.size;
     if (fileCount === 0) return;
-    showConfirm('Move to Trash', `Move ${fileCount} file(s) to trash?`, async () => {
-      try {
-        const success_op = await driveStateManager.deleteFiles(Array.from(selectedFileIds));
-        if (success_op) {
+
+    if (activeLens === 'trash') {
+      showConfirm('Permanently Delete', `Permanently purge ${fileCount} file(s) from trash?`, async () => {
+        try {
+          await api.bulkPurgeFiles(Array.from(selectedFileIds));
           selectedFileIds.clear();
           selectedFileIds = new Set();
           selectedFile = null;
-          await Promise.all([loadTrash(), refreshMetadata()]);
-          success('Moved to Trash', `${fileCount} file(s) moved to trash`);
+          await loadTrash();
+          success('Purged', `${fileCount} file(s) permanently deleted`);
+        } catch (cause) {
+          error('Purge Failed', cause instanceof Error ? cause.message : 'Could not purge files');
         }
+      });
+      return;
+    }
+
+    showConfirm('Move to Trash', `Move ${fileCount} file(s) to trash?`, async () => {
+      try {
+        await api.bulkTrashFiles(Array.from(selectedFileIds));
+        selectedFileIds.clear();
+        selectedFileIds = new Set();
+        selectedFile = null;
+        await Promise.all([loadTrash(), refreshMetadata(), loadLibrary(true)]);
+        success('Moved to Trash', `${fileCount} file(s) moved to trash`);
       } catch (cause) {
         error('Delete Failed', cause instanceof Error ? cause.message : 'Could not delete files');
       }
@@ -819,18 +832,32 @@
 
     try {
       isMoving = true;
-      const success_op = await driveStateManager.moveFiles(Array.from(selectedFileIds), currentFolder, targetFolder);
-      if (success_op) {
-        selectedFileIds.clear();
-        selectedFileIds = new Set();
-        selectedFile = null;
-        await refreshMetadata();
-        success('Moved', `${fileCount} file(s) moved to ${targetFolder || 'Bucket root'}`);
-      }
+      await api.bulkMoveFiles(Array.from(selectedFileIds), targetFolder);
+      selectedFileIds.clear();
+      selectedFileIds = new Set();
+      selectedFile = null;
+      await Promise.all([refreshMetadata(), loadLibrary(true)]);
+      success('Moved', `${fileCount} file(s) moved to ${targetFolder || 'Bucket root'}`);
     } catch (cause) {
       error('Move Failed', cause instanceof Error ? cause.message : 'Could not move files');
     } finally {
       isMoving = false;
+    }
+  }
+
+  async function handleBulkRestore() {
+    const fileCount = selectedFileIds.size;
+    if (fileCount === 0) return;
+
+    try {
+      await api.bulkRestoreFiles(Array.from(selectedFileIds));
+      selectedFileIds.clear();
+      selectedFileIds = new Set();
+      selectedFile = null;
+      await Promise.all([loadLibrary(true), loadTrash()]);
+      success('Restored', `${fileCount} file(s) restored to Drive`);
+    } catch (cause) {
+      error('Restore Failed', cause instanceof Error ? cause.message : 'Could not restore files');
     }
   }
 
@@ -1127,44 +1154,51 @@
           </button>
         </div>
         <div class="bulk-actions">
-          <div class="move-dropdown">
-            <button type="button" class="action-btn" onclick={() => showBulkMoveMenu = !showBulkMoveMenu}>
-              <Icons.FolderOpen size={14} />
-              Move to
-              <Icons.ChevronDown size={12} />
+          {#if isTrashView}
+            <button type="button" class="action-btn" onclick={handleBulkRestore}>
+              <Icons.RotateCcw size={14} />
+              Restore
             </button>
-            {#if showBulkMoveMenu}
-              <div class="move-menu">
-                <button
-                  type="button"
-                  onclick={() => {
-                    void handleBulkMove('');
-                    showBulkMoveMenu = false;
-                  }}
-                  disabled={isMoving || currentFolder === ''}
-                >
-                  <Icons.HardDrive size={12} />
-                  Root /
-                </button>
-                {#each folderEntries.slice().sort((a, b) => a.path.localeCompare(b.path)) as folder}
+          {:else}
+            <div class="move-dropdown">
+              <button type="button" class="action-btn" onclick={() => showBulkMoveMenu = !showBulkMoveMenu}>
+                <Icons.FolderOpen size={14} />
+                Move to
+                <Icons.ChevronDown size={12} />
+              </button>
+              {#if showBulkMoveMenu}
+                <div class="move-menu">
                   <button
                     type="button"
                     onclick={() => {
-                      void handleBulkMove(folder.path);
+                      void handleBulkMove('');
                       showBulkMoveMenu = false;
                     }}
-                    disabled={isMoving || currentFolder === folder.path}
+                    disabled={isMoving || currentFolder === ''}
                   >
-                    <Icons.Folder size={12} />
-                    {folder.path.split('/').pop() || folder.path}
+                    <Icons.HardDrive size={12} />
+                    Root /
                   </button>
-                {/each}
-              </div>
-            {/if}
-          </div>
+                  {#each folderEntries.slice().sort((a, b) => a.path.localeCompare(b.path)) as folder}
+                    <button
+                      type="button"
+                      onclick={() => {
+                        void handleBulkMove(folder.path);
+                        showBulkMoveMenu = false;
+                      }}
+                      disabled={isMoving || currentFolder === folder.path}
+                    >
+                      <Icons.Folder size={12} />
+                      {folder.path.split('/').pop() || folder.path}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
           <button type="button" class="action-btn danger" onclick={handleBulkDelete}>
             <Icons.Trash2 size={14} />
-            Delete selected
+            {isTrashView ? 'Purge' : 'Trash'}
           </button>
         </div>
       </div>
@@ -1243,29 +1277,6 @@
   isOpen={shareFile !== null}
   onClose={() => (shareFile = null)}
   onShare={handleShareChange}
-/>
-
-<RenameFileDialog
-  file={renameDialogFile}
-  isOpen={isRenameDialogOpen}
-  isRenaming={isRenaming}
-  onRename={handleRename}
-  onClose={() => {
-    isRenameDialogOpen = false;
-    renameDialogFile = null;
-  }}
-/>
-
-<MoveFileDialog
-  file={moveDialogFile}
-  folders={folderEntries.map((entry) => entry.path)}
-  isOpen={isMoveDialogOpen}
-  isMoving={isMoving}
-  onMove={handleMove}
-  onClose={() => {
-    isMoveDialogOpen = false;
-    moveDialogFile = null;
-  }}
 />
 
 <KeyboardHelpModal

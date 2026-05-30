@@ -17,6 +17,10 @@
     toggleSettingsTray,
     toggleShortcutsOverlay,
     toggleCommandPalette,
+    closeCommandPalette,
+    closeSettingsTray,
+    closeShortcutsOverlay,
+    activeOverlays,
   } from '$lib/stores/ui';
   import * as Icons from 'lucide-svelte';
   import TopBar from '$lib/components/TopBar.svelte';
@@ -178,15 +182,15 @@
     <CommandPalette
       {commands}
       isOpen={$commandPaletteOpen}
-      onClose={() => commandPaletteOpen.set(false)}
+      onClose={closeCommandPalette}
     />
     <SettingsTray
       isOpen={$settingsTrayOpen}
-      onClose={() => settingsTrayOpen.set(false)}
+      onClose={closeSettingsTray}
     />
     <ShortcutsOverlay
       isOpen={$shortcutsOverlayOpen}
-      onClose={() => shortcutsOverlayOpen.set(false)}
+      onClose={closeShortcutsOverlay}
     />
     <NotificationCenter />
   </div>
