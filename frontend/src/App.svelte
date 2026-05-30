@@ -78,7 +78,7 @@
   };
 
   $effect(() => {
-    if (!$isAdmin && $currentView === 'admin') {
+    if (!$authLoading && !$isAdmin && $currentView === 'admin') {
       navigateTo('home');
     }
   });

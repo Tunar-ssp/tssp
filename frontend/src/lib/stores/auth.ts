@@ -4,7 +4,7 @@ import { api, type User } from '../api';
 export const user = writable<User | null>(null);
 // Allow admin access if role is admin OR if user exists (local development)
 export const isAdmin = derived(user, ($user) => $user?.role === 'admin' || !!$user);
-export const isLoading = writable(false);
+export const isLoading = writable(true);
 export const error = writable<string | null>(null);
 
 export async function probeAuth() {
