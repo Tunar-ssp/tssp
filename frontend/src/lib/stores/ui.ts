@@ -1,4 +1,5 @@
 import { derived, get, writable } from 'svelte/store';
+import { dismissDialog } from './dialog';
 
 export type AppView = 'home' | 'drive' | 'notes' | 'workspace' | 'admin';
 export type BannerType = 'success' | 'error' | 'info';
@@ -130,6 +131,10 @@ export const activeOverlays = {
     return popped;
   },
   remove: (id: OverlayId) => overlayStack.update(stack => stack.filter(i => i !== id)),
+  peek: (): OverlayId | undefined => {
+    const stack = get(overlayStack);
+    return stack[stack.length - 1];
+  },
   isTop: (id: OverlayId) => {
     const stack = get(overlayStack);
     return stack[stack.length - 1] === id;
@@ -158,7 +163,21 @@ if (isBrowser()) {
 export const dockMode = derived(preferences, ($preferences) => $preferences.dockMode);
 export const dockOrder = derived(preferences, ($preferences) => $preferences.dockOrder);
 
+/**
+ * Close every global/transient overlay that the shell owns. View-scoped overlays
+ * (modals, previews, context menus rendered inside a view) clean themselves up via
+ * their own lifecycle when the view unmounts on navigation.
+ */
+export function closeTransientOverlays() {
+  if (get(commandPaletteOpen)) closeCommandPalette();
+  if (get(settingsTrayOpen)) closeSettingsTray();
+  if (get(shortcutsOverlayOpen)) closeShortcutsOverlay();
+  dismissDialog();
+}
+
 export function navigateTo(view: AppView, intent?: SelectionIntent | null) {
+  // Navigation must never leave a conflicting overlay stuck on top of the new view.
+  closeTransientOverlays();
   currentView.set(view);
   syncHash(view);
   if (intent) {

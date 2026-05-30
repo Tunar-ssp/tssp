@@ -29,6 +29,7 @@
   import SettingsTray from '$lib/components/SettingsTray.svelte';
   import ShortcutsOverlay from '$lib/components/ShortcutsOverlay.svelte';
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
+  import AppDialog from '$lib/components/AppDialog.svelte';
   import '$lib/responsive.css';
   import SignInView from './views/auth/SignInView.svelte';
   import HomeView from './views/home/HomeLauncher.svelte';
@@ -193,6 +194,7 @@
       onClose={closeShortcutsOverlay}
     />
     <NotificationCenter />
+    <AppDialog />
   </div>
 {/if}
 

@@ -12,6 +12,7 @@
     isSaving,
   } from '$lib/stores/workspace';
   import { success, error } from '$lib/stores/notifications';
+  import { confirmDialog, promptDialog } from '$lib/stores/dialog';
   import TabBar from '$lib/components/TabBar.svelte';
   import FindReplaceWidget from '$lib/components/FindReplaceWidget.svelte';
   import MarkdownPreview from '$lib/components/MarkdownPreview.svelte';
@@ -402,7 +403,13 @@
   }
 
   async function handleDeleteWorkspace(workspace: any) {
-    if (!confirm(`Delete "${workspace.name}"?`)) return;
+    const ok = await confirmDialog({
+      title: 'Delete workspace',
+      message: `"${workspace.name}" and its files will be permanently removed.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteWorkspace(workspace.id);
       openTabs = openTabs.filter((tab) => tab.id !== workspace.id);
@@ -413,8 +420,17 @@
   }
 
   async function handleCreateWorkspace() {
-    const name = window.prompt('Workspace name:', '')?.trim();
+    const raw = await promptDialog({
+      title: 'New workspace',
+      placeholder: 'Workspace name',
+      confirmLabel: 'Create',
+    });
+    const name = raw?.trim();
     if (!name) return;
+    if ($workspaces.some((w) => w.name.toLowerCase() === name.toLowerCase())) {
+      error('Name In Use', `A workspace named "${name}" already exists`);
+      return;
+    }
     try {
       const workspace = await createNewWorkspace();
       await updateActiveWorkspace({ name });

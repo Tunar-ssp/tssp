@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import { workspaceApi, type WorkspaceFileEntry } from '$lib/api';
   import { error, success } from '$lib/stores/notifications';
+  import { confirmDialog } from '$lib/stores/dialog';
   import FileIcon from '$lib/components/FileIcon.svelte';
 
   interface Props {
@@ -149,7 +150,13 @@
 
   async function deleteNode(node: TreeNode) {
     closeMenu();
-    if (!confirm(`Delete ${node.is_dir ? 'folder' : 'file'} "${node.name}"?`)) return;
+    const ok = await confirmDialog({
+      title: `Delete ${node.is_dir ? 'folder' : 'file'}`,
+      message: `"${node.name}" will be permanently deleted.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await workspaceApi.deleteWorkspaceFile(workspaceId, node.path);
       success('Deleted', node.path);

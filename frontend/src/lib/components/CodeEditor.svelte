@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import type { Workspace } from '$lib/api';
   import { isSaving, updateActiveWorkspace, deleteWorkspace } from '$lib/stores/workspace';
+  import { confirmDialog } from '$lib/stores/dialog';
 
   export let workspace: Workspace | null;
 
@@ -41,8 +42,15 @@
     }, 1500);
   }
 
-  function handleDelete() {
-    if (workspace && confirm(`Delete "${workspace.name}"?`)) {
+  async function handleDelete() {
+    if (!workspace) return;
+    const ok = await confirmDialog({
+      title: 'Delete workspace',
+      message: `"${workspace.name}" will be permanently removed.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (ok) {
       deleteWorkspace(workspace.id).catch(console.error);
     }
   }

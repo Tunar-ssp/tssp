@@ -46,20 +46,51 @@ export function setActiveNote(id: string | null) {
   activeNoteId.set(id);
 }
 
+function isBlankNote(note: Note, parentId: string | null): boolean {
+  const sameParent = (note.parent_id ?? null) === (parentId ?? null);
+  const blankTitle = !note.title?.trim() || note.title.trim() === 'Untitled';
+  const blankBody = !note.body?.trim();
+  return sameParent && blankTitle && blankBody;
+}
+
+// Guards against duplicate API calls when create is triggered rapidly (double
+// click / Ctrl+N spam) at the same parent.
+let pendingCreate: { parentId: string | null; promise: Promise<Note> } | null = null;
+
 export async function createNewNote(parentId: string | null = null) {
+  // Reuse an existing blank page at this level instead of spawning duplicates.
+  const existingBlank = get(notes).find((n) => isBlankNote(n, parentId));
+  if (existingBlank) {
+    activeNoteId.set(existingBlank.id);
+    return existingBlank;
+  }
+
+  if (pendingCreate && pendingCreate.parentId === (parentId ?? null)) {
+    return pendingCreate.promise;
+  }
+
+  const promise = (async () => {
+    try {
+      const newNote = await api.createNote({
+        title: 'Untitled',
+        body: '',
+        tags: [],
+        parent_id: parentId,
+      });
+      notes.update((n) => [newNote, ...n]);
+      activeNoteId.set(newNote.id);
+      return newNote;
+    } catch (err) {
+      console.error('Failed to create note:', err);
+      throw err;
+    }
+  })();
+
+  pendingCreate = { parentId: parentId ?? null, promise };
   try {
-    const newNote = await api.createNote({
-      title: 'Untitled',
-      body: '',
-      tags: [],
-      parent_id: parentId,
-    });
-    notes.update(n => [newNote, ...n]);
-    activeNoteId.set(newNote.id);
-    return newNote;
-  } catch (err) {
-    console.error('Failed to create note:', err);
-    throw err;
+    return await promise;
+  } finally {
+    if (pendingCreate?.promise === promise) pendingCreate = null;
   }
 }
 

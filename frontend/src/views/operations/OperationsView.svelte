@@ -13,6 +13,7 @@
   import OperationsActivityLog from './components/sections/OperationsActivityLog.svelte';
   import OperationsMaintenance from './components/sections/OperationsMaintenance.svelte';
   import { error, success } from '$lib/stores/notifications';
+  import { confirmDialog } from '$lib/stores/dialog';
 
   type AdminSection = 'overview' | 'users' | 'sessions' | 'devices' | 'public' | 'activity' | 'maintenance';
   type NavItem = { id: AdminSection; label: string; icon: any };
@@ -131,7 +132,13 @@
   }
 
   async function revokeDevice(token: string) {
-    if (!confirm('Remove this trusted device?')) return;
+    const ok = await confirmDialog({
+      title: 'Remove trusted device',
+      message: 'The device will be revoked and must re-authenticate.',
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.removeAdminDevice(token);
       devices = devices.filter((item) => item.token !== token);

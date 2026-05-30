@@ -7,6 +7,7 @@
   import { Placeholder } from '@tiptap/extensions';
   import * as Icons from 'lucide-svelte';
   import { markdownToHtml, docToMarkdown } from '$lib/notes/markdown';
+  import { promptDialog } from '$lib/stores/dialog';
   import { SLASH_COMMANDS, filterSlashCommands, type SlashCommand } from '$lib/notes/slashCommands';
 
   interface Props {
@@ -104,19 +105,24 @@
     showBubble = true;
   }
 
-  function toggleLink() {
+  async function toggleLink() {
     if (!editor) return;
     if (editor.isActive('link')) {
       editor.chain().focus().unsetLink().run();
       return;
     }
     const previous = editor.getAttributes('link').href ?? '';
-    const url = window.prompt('Link URL', previous);
+    const url = await promptDialog({
+      title: 'Add link',
+      placeholder: 'https://example.com',
+      defaultValue: previous,
+      confirmLabel: 'Apply',
+    });
     if (url === null) return;
-    if (url === '') {
+    if (url.trim() === '') {
       editor.chain().focus().unsetLink().run();
     } else {
-      editor.chain().focus().setLink({ href: url }).run();
+      editor.chain().focus().setLink({ href: url.trim() }).run();
     }
   }
 

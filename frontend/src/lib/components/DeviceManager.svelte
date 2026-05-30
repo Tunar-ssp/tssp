@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import * as Icons from 'lucide-svelte';
   import { api } from '$lib/api';
+  import { confirmDialog } from '$lib/stores/dialog';
 
   interface Device {
     token: string;
@@ -44,7 +45,13 @@
   }
 
   async function revokeDevice(token: string) {
-    if (!confirm('Revoke this device session?')) return;
+    const ok = await confirmDialog({
+      title: 'Revoke device session',
+      message: 'This device will be signed out immediately.',
+      confirmLabel: 'Revoke',
+      tone: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await api.removeAdminDevice(token);

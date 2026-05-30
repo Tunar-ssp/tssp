@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import { isAdmin } from '$lib/stores/auth';
   import { info } from '$lib/stores/notifications';
+  import { confirmDialog } from '$lib/stores/dialog';
   import Btn from '$lib/components/Btn.svelte';
   import Card from '$lib/components/Card.svelte';
   import StatusDot from '$lib/components/StatusDot.svelte';
@@ -33,7 +34,12 @@
   }
 
   async function revokeInviteCode(codeId: string) {
-    if (!confirm('Revoke this invite code?')) return;
+    const ok = await confirmDialog({
+      title: 'Revoke invite code',
+      confirmLabel: 'Revoke',
+      tone: 'danger',
+    });
+    if (!ok) return;
 
     info('Invite Codes Disabled', `Cannot revoke ${codeId}; invite-code APIs are not available.`);
   }

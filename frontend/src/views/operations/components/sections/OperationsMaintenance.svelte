@@ -18,6 +18,7 @@
 
   import { api } from '$lib/api';
   import { success, error } from '$lib/stores/notifications';
+  import { promptDialog } from '$lib/stores/dialog';
 
   let localExecuting = $state(false);
   let localOutput = $state('');
@@ -38,10 +39,20 @@
   }
 
   async function handlePruneLogs() {
-    const days = window.prompt('Prune logs older than how many days?', '30');
+    const days = await promptDialog({
+      title: 'Prune audit logs',
+      message: 'Remove log entries older than the given number of days.',
+      placeholder: 'Days',
+      defaultValue: '30',
+      confirmLabel: 'Prune',
+      tone: 'danger',
+    });
     if (!days) return;
-    const d = parseInt(days);
-    if (isNaN(d)) return;
+    const d = parseInt(days, 10);
+    if (isNaN(d) || d < 0) {
+      error('Invalid Value', 'Enter a valid number of days');
+      return;
+    }
 
     localExecuting = true;
     localOutput = `Pruning logs older than ${d} days...`;

@@ -18,16 +18,26 @@ import {
  * Handle global keyboard shortcuts
  */
 export function handleGlobalKeydown(e: KeyboardEvent): void {
-  // Cmd/Ctrl+K - Toggle command palette
+  const top = activeOverlays.peek();
+
+  // Cmd/Ctrl+K - Toggle command palette.
+  // The palette has its own capture-phase handler that owns this key while it is
+  // the top-most overlay (it stops propagation), so reaching here means the
+  // palette is not on top. Opening it should not leave a conflicting transient
+  // overlay (settings/shortcuts) stuck behind it.
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
+    if (top === 'settings-tray') closeSettingsTray();
+    if (top === 'shortcuts') closeShortcutsOverlay();
     toggleCommandPalette();
     return;
   }
 
-  // Escape - Close open overlays in priority order
+  // Escape - close the top-most shell-owned overlay only.
+  // We peek instead of pop: component-owned overlays (modal/preview/context-menu,
+  // and the command palette) handle their own Escape and manage the stack
+  // themselves, so destructively popping here would corrupt nested overlay state.
   if (e.key === 'Escape') {
-    const top = activeOverlays.pop();
     if (top === 'command-palette') {
       closeCommandPalette();
       return;
@@ -40,9 +50,12 @@ export function handleGlobalKeydown(e: KeyboardEvent): void {
       closeShortcutsOverlay();
       return;
     }
-    // Modals and other overlays should register themselves with activeOverlays
+    // 'modal' / 'preview' / 'context-menu' are owned by their components.
     return;
   }
+
+  // The remaining shell shortcuts must not fire while an overlay owns the screen.
+  if (top) return;
 
   // Cmd/Ctrl+, - Toggle settings
   if ((e.ctrlKey || e.metaKey) && e.key === ',') {

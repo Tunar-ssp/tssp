@@ -19,6 +19,7 @@
     isSaving,
   } from '$lib/stores/notes';
   import { success, error } from '$lib/stores/notifications';
+  import { confirmDialog } from '$lib/stores/dialog';
   import { consumeSelectionIntent } from '$lib/stores/ui';
   import { registerKeyboardShortcuts } from '$lib/utils';
   import { buildNoteTree, collectSubtreeIds, ancestorIds, type NoteTreeNode } from '$lib/notes/tree';
@@ -180,7 +181,13 @@
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this page? Child pages move up to its parent.')) return;
+    const ok = await confirmDialog({
+      title: 'Delete page',
+      message: 'Child pages will move up to its parent.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteNote(id);
       success('Page deleted');

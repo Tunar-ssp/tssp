@@ -192,6 +192,12 @@ body {
 }
 
 /* Focus Ring (accessible) */
+/* Suppress the harsh user-agent outline for pointer/mouse focus; keyboard focus
+   still gets the premium ring below via :focus-visible. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
 :focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;

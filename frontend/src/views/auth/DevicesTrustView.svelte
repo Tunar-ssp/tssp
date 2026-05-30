@@ -3,6 +3,7 @@
   import { api } from '$lib/api';
   import { user } from '$lib/stores/auth';
   import { success, error as showError } from '$lib/stores/notifications';
+  import { confirmDialog } from '$lib/stores/dialog';
   import Btn from '$lib/components/Btn.svelte';
   import Card from '$lib/components/Card.svelte';
   import StatusDot from '$lib/components/StatusDot.svelte';
@@ -29,7 +30,13 @@
   }
 
   async function revokeDevice(deviceId: string) {
-    if (!confirm('Revoke this device?')) return;
+    const ok = await confirmDialog({
+      title: 'Revoke device',
+      message: 'This device will lose access and must sign in again.',
+      confirmLabel: 'Revoke',
+      tone: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await api.removeDevice(deviceId);
