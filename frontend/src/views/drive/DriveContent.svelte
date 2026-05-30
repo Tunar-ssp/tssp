@@ -30,6 +30,7 @@
     onSelectFile?: (file: FileRecord, event?: MouseEvent) => void;
     onPreviewFile?: (file: FileRecord) => void;
     onContextMenu?: (event: MouseEvent, file: FileRecord) => void;
+    onFolderContextMenu?: (event: MouseEvent, path: string, name: string) => void;
     onOpenFolder?: (path: string) => void;
     onLoadMore?: () => void;
     onRestore?: (file: FileRecord) => void;
@@ -61,6 +62,7 @@
     onSelectFile = () => {},
     onPreviewFile = () => {},
     onContextMenu = () => {},
+    onFolderContextMenu = (_event: MouseEvent, _path: string, _name: string) => {},
     onOpenFolder = () => {},
     onLoadMore = () => {},
     onRestore = () => {},
@@ -211,7 +213,7 @@
         <strong>Loading Drive</strong>
         <p>Fetching files, folders, and storage state.</p>
       </div>
-    {:else if displayFiles.length === 0}
+    {:else if displayFiles.length === 0 && displayFolders.length === 0}
       <div class="empty-panel">
         <Icons.UploadCloud size={36} />
         <strong>Drop files here to upload</strong>
@@ -228,6 +230,7 @@
             class="file-card folder-card"
             ondblclick={() => handleFolderDblClick(folder.path)}
             onclick={(e) => e.currentTarget.focus()}
+            oncontextmenu={(e) => { e.preventDefault(); onFolderContextMenu?.(e, folder.path, folder.name); }}
             role="button"
             tabindex="0"
             onkeydown={(e) => { if (e.key === 'Enter') handleFolderDblClick(folder.path); }}
@@ -365,6 +368,7 @@
             type="button"
             class="list-row folder-row"
             ondblclick={() => handleFolderDblClick(folder.path)}
+            oncontextmenu={(e) => { e.preventDefault(); onFolderContextMenu?.(e, folder.path, folder.name); }}
           >
             <div class="list-row-content">
               <div class="name-cell">

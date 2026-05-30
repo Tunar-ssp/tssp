@@ -524,9 +524,13 @@ pub fn build_router(state: HttpState) -> Router {
             get(crate::terminal_ws::upgrade_terminal_ws),
         )
         .route("/p/{token}", get(crate::public_api::public_download))
-        .route("/app-v2", get(crate::web::serve_web_v2_index))
-        .route("/app-v2/", get(crate::web::serve_web_v2_index))
-        .route("/app-v2/{*path}", get(crate::web::serve_web_v2_path))
+        .route("/app", get(crate::web::serve_app_index))
+        .route("/app/", get(crate::web::serve_app_index))
+        .route("/app/{*path}", get(crate::web::serve_app_path))
+        // Legacy compatibility: redirect the old `/app-v2` route to `/app`.
+        .route("/app-v2", get(crate::web::redirect_legacy_app))
+        .route("/app-v2/", get(crate::web::redirect_legacy_app))
+        .route("/app-v2/{*path}", get(crate::web::redirect_legacy_app_path))
         .route("/assets/{*path}", get(crate::web::serve_asset))
         .fallback(crate::web::web_fallback)
         .layer(middleware::from_fn_with_state(

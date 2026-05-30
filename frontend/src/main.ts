@@ -2,25 +2,25 @@ import { mount } from 'svelte'
 import App from './App.svelte'
 import './lib/tokens.css'
 
-// Fix Monaco Editor worker loading
+// Monaco Editor worker loading.
+// Use Vite `?worker` imports so worker bundles are hashed and resolved
+// relative to the configured base path — no hardcoded asset URLs.
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+
 // @ts-ignore
 window.MonacoEnvironment = {
-  getWorkerUrl: function (_moduleId: any, label: string) {
-    if (label === 'json') {
-      return '/app-v2/assets/json.worker.js';
-    }
-    if (label === 'css' || label === 'scss' || label === 'less') {
-      return '/app-v2/assets/css.worker.js';
-    }
-    if (label === 'html' || label === 'handlebars' || label === 'razor') {
-      return '/app-v2/assets/html.worker.js';
-    }
-    if (label === 'typescript' || label === 'javascript') {
-      return '/app-v2/assets/ts.worker.js';
-    }
-    return '/app-v2/assets/editor.worker.js';
+  getWorker(_moduleId: string, label: string) {
+    if (label === 'json') return new JsonWorker()
+    if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker()
+    if (label === 'html' || label === 'handlebars' || label === 'razor') return new HtmlWorker()
+    if (label === 'typescript' || label === 'javascript') return new TsWorker()
+    return new EditorWorker()
   }
-};
+}
 
 const app = mount(App, {
   target: document.getElementById('app')!,

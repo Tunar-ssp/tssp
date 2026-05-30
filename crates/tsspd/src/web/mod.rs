@@ -77,14 +77,14 @@ pub(crate) async fn serve_asset(Path(path): Path<String>) -> Response<Body> {
     response
 }
 
-const WEB_V2_MISSING_MESSAGE: &str =
-    "web-v2 bundle not built; run `cd frontend && npm run build` first";
+const WEB_BUNDLE_MISSING_MESSAGE: &str =
+    "web bundle not built; run `cd frontend && npm run build` first";
 
-fn web_v2_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/web-v2")
+fn web_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/web")
 }
 
-fn web_v2_mime(path: &FsPath) -> &'static str {
+fn web_mime(path: &FsPath) -> &'static str {
     match path
         .extension()
         .and_then(|value| value.to_str())
@@ -104,13 +104,13 @@ fn web_v2_mime(path: &FsPath) -> &'static str {
     }
 }
 
-async fn serve_web_v2_index_from_dir(base: &FsPath) -> Response<Body> {
+async fn serve_app_index_from_dir(base: &FsPath) -> Response<Body> {
     let index = base.join("index.html");
     let Ok(bytes) = tokio::fs::read(&index).await else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             [(CONTENT_TYPE, "text/plain; charset=utf-8")],
-            WEB_V2_MISSING_MESSAGE,
+            WEB_BUNDLE_MISSING_MESSAGE,
         )
             .into_response();
     };
@@ -124,13 +124,13 @@ async fn serve_web_v2_index_from_dir(base: &FsPath) -> Response<Body> {
     response
 }
 
-async fn serve_web_v2_path_from_dir(base: &FsPath, requested: &str) -> Response<Body> {
+async fn serve_app_path_from_dir(base: &FsPath, requested: &str) -> Response<Body> {
     let normalized = requested.trim_start_matches('/');
     if normalized.contains("..") {
         return StatusCode::NOT_FOUND.into_response();
     }
     if normalized.is_empty() {
-        return serve_web_v2_index_from_dir(base).await;
+        return serve_app_index_from_dir(base).await;
     }
 
     let candidate = base.join(normalized);
@@ -144,7 +144,7 @@ async fn serve_web_v2_path_from_dir(base: &FsPath, requested: &str) -> Response<
             } else {
                 Some("public, max-age=86400, immutable")
             };
-            let mut response = response_with_file_bytes(bytes, web_v2_mime(&candidate), cache);
+            let mut response = response_with_file_bytes(bytes, web_mime(&candidate), cache);
             if normalized == "index.html" {
                 response
                     .headers_mut()
@@ -159,17 +159,28 @@ async fn serve_web_v2_path_from_dir(base: &FsPath, requested: &str) -> Response<
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    serve_web_v2_index_from_dir(base).await
+    serve_app_index_from_dir(base).await
 }
 
-/// Serves the built Svelte/Vite preview bundle at `/app-v2`.
-pub(crate) async fn serve_web_v2_index() -> Response<Body> {
-    serve_web_v2_index_from_dir(&web_v2_dir()).await
+/// Serves the built Svelte/Vite app bundle at `/app`.
+pub(crate) async fn serve_app_index() -> Response<Body> {
+    serve_app_index_from_dir(&web_dir()).await
 }
 
-/// Serves the built Svelte/Vite preview bundle paths at `/app-v2/{*path}`.
-pub(crate) async fn serve_web_v2_path(Path(path): Path<String>) -> Response<Body> {
-    serve_web_v2_path_from_dir(&web_v2_dir(), &path).await
+/// Serves the built Svelte/Vite app bundle paths at `/app/{*path}`.
+pub(crate) async fn serve_app_path(Path(path): Path<String>) -> Response<Body> {
+    serve_app_path_from_dir(&web_dir(), &path).await
+}
+
+/// Permanent redirect from the legacy `/app-v2` route to `/app`.
+pub(crate) async fn redirect_legacy_app() -> Response<Body> {
+    axum::response::Redirect::permanent("/app").into_response()
+}
+
+/// Permanent redirect from legacy `/app-v2/{*path}` to `/app/{path}`.
+pub(crate) async fn redirect_legacy_app_path(Path(path): Path<String>) -> Response<Body> {
+    let target = format!("/app/{}", path.trim_start_matches('/'));
+    axum::response::Redirect::permanent(&target).into_response()
 }
 
 /// SPA fallback: static assets, otherwise `index.html`.

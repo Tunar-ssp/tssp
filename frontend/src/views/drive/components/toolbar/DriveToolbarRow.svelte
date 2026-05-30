@@ -6,9 +6,11 @@
     viewMode?: 'grid' | 'list';
     sortBy?: 'name' | 'date' | 'size';
     sortOrder?: 'asc' | 'desc';
+    filterQuery?: string;
     onViewModeChange?: (mode: 'grid' | 'list') => void;
     onSortChange?: (sortBy: 'name' | 'date' | 'size') => void;
     onSortOrderChange?: (order: 'asc' | 'desc') => void;
+    onFilterChange?: (query: string) => void;
   }
 
   let {
@@ -16,9 +18,11 @@
     viewMode = 'list',
     sortBy = 'date',
     sortOrder = 'desc',
+    filterQuery = '',
     onViewModeChange,
     onSortChange,
     onSortOrderChange,
+    onFilterChange,
   }: Props = $props();
 
   let showSortMenu = $state(false);
@@ -26,6 +30,21 @@
 
 <div class="toolbar">
   <div class="toolbar-left">
+    <div class="search-wrap">
+      <Icons.Search size={13} class="search-icon" />
+      <input
+        type="search"
+        class="search-input"
+        placeholder={isTrashView ? 'Search trash…' : 'Filter files…'}
+        value={filterQuery}
+        oninput={(e) => onFilterChange?.((e.target as HTMLInputElement).value)}
+      />
+      {#if filterQuery}
+        <button type="button" class="search-clear" onclick={() => onFilterChange?.('')} title="Clear filter">
+          <Icons.X size={12} />
+        </button>
+      {/if}
+    </div>
     <div class="sort-control">
       <button
         type="button"
@@ -99,6 +118,56 @@
     align-items: center;
     gap: 8px;
   }
+
+  .search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-wrap :global(.search-icon) {
+    position: absolute;
+    left: 8px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  .search-input {
+    height: 30px;
+    padding: 0 28px 0 28px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    width: 180px;
+    outline: none;
+    transition: border-color 120ms, width 200ms;
+  }
+
+  .search-input:focus {
+    border-color: var(--blue);
+    width: 240px;
+  }
+
+  .search-input::placeholder { color: var(--muted); }
+  .search-input::-webkit-search-cancel-button { display: none; }
+
+  .search-clear {
+    position: absolute;
+    right: 6px;
+    padding: 3px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 3px;
+    transition: color 100ms;
+  }
+  .search-clear:hover { color: var(--text); }
 
   .sort-control { position: relative; }
 

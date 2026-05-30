@@ -84,7 +84,7 @@
   });
 
   const handlePaletteKeydown = (e: KeyboardEvent) => {
-    if (!$activeOverlays.isTop('command-palette')) return;
+    if (!activeOverlays.isTop('command-palette')) return;
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.stopPropagation();

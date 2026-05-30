@@ -20,6 +20,7 @@
   import DriveContent from './DriveContent.svelte';
   import DriveToolbarRow from './components/toolbar/DriveToolbarRow.svelte';
   import KeyboardHelpModal from '$lib/components/KeyboardHelpModal.svelte';
+  import MoveFileDialog from './components/modals/MoveFileDialog.svelte';
   import { consumeSelectionIntent, preferences, setDefaultDriveView, selectionIntent } from '$lib/stores/ui';
   import { error, success, info } from '$lib/stores/notifications';
   import { clipboard } from '$lib/stores/clipboard';
@@ -79,6 +80,15 @@
     y: 0,
     file: null as FileRecord | null,
   });
+  let folderContextMenu = $state({
+    visible: false,
+    x: 0,
+    y: 0,
+    path: '',
+    name: '',
+  });
+  let renameFolderDialog = $state<{ path: string; name: string } | null>(null);
+  let renameFolderValue = $state('');
   let showBulkMoveMenu = $state(false);
   let showKeyboardHelp = $state(false);
   let inlineRenameId = $state<string | null>(null);
@@ -968,6 +978,59 @@
     };
   }
 
+  function showFolderContextMenu(event: MouseEvent, path: string, name: string) {
+    event.preventDefault();
+    folderContextMenu = { visible: true, x: event.clientX, y: event.clientY, path, name };
+  }
+
+  function getFolderContextItems(path: string, name: string) {
+    return [
+      {
+        icon: Icons.FolderOpen,
+        label: 'Open',
+        action: () => {
+          currentFolder = path;
+          if (activeLens === 'trash') activeLens = 'all';
+          selectedFileIds = new Set();
+          selectedFile = null;
+        },
+      },
+      {
+        icon: Icons.Pencil,
+        label: 'Rename',
+        action: () => {
+          renameFolderValue = name;
+          renameFolderDialog = { path, name };
+        },
+      },
+      {
+        icon: Icons.FolderPlus,
+        label: 'New folder inside',
+        action: () => {
+          currentFolder = path;
+          handleNewFolder();
+        },
+      },
+      {
+        icon: Icons.Trash2,
+        label: 'Delete folder',
+        action: () => handleDeleteFolder(path),
+        danger: true,
+      },
+    ];
+  }
+
+  async function confirmRenameFolder() {
+    if (!renameFolderDialog) return;
+    const trimmed = renameFolderValue.trim();
+    if (!trimmed || trimmed === renameFolderDialog.name) {
+      renameFolderDialog = null;
+      return;
+    }
+    await handleRenameFolder(renameFolderDialog.path, trimmed);
+    renameFolderDialog = null;
+  }
+
   async function handleOpenAsWorkspace(file: FileRecord) {
     try {
       const workspaceId = await createWorkspaceFromFolder(file.name, file.folder_path || '');
@@ -1047,7 +1110,7 @@
   </div>
 {/if}
 
-<div class="drive-shell">
+<div class="drive-shell" class:sidebar-hidden={!sidebarOpen}>
   {#if sidebarOpen}
     <DriveSidebar
       filters={libraryFilters}
@@ -1103,9 +1166,11 @@
         viewMode={viewMode}
         {sortBy}
         {sortOrder}
+        {filterQuery}
         onViewModeChange={setViewMode}
         onSortChange={(newSortBy) => sortBy = newSortBy}
         onSortOrderChange={(newOrder) => sortOrder = newOrder}
+        onFilterChange={(q) => filterQuery = q}
       />
       <button class="panel-toggle-btn" title={detailsPanelOpen ? 'Hide details' : 'Show details'} onclick={() => detailsPanelOpen = !detailsPanelOpen}>
         <Icons.ChevronRight size={16} />
@@ -1223,6 +1288,7 @@
         onSelectFile={selectFile}
         onPreviewFile={openPreview}
         onContextMenu={showContextMenu}
+        onFolderContextMenu={showFolderContextMenu}
         onOpenFolder={(path) => {
           currentFolder = path;
           if (activeLens === 'trash') activeLens = 'all';
@@ -1260,6 +1326,23 @@
   y={contextMenu.y}
   items={contextMenu.file ? getContextItems(contextMenu.file) : []}
   onClose={() => contextMenu.visible = false}
+/>
+
+<ContextMenu
+  bind:visible={folderContextMenu.visible}
+  x={folderContextMenu.x}
+  y={folderContextMenu.y}
+  items={folderContextMenu.visible ? getFolderContextItems(folderContextMenu.path, folderContextMenu.name) : []}
+  onClose={() => folderContextMenu.visible = false}
+/>
+
+<MoveFileDialog
+  file={moveDialogFile}
+  folders={folderEntries.map(f => f.path)}
+  isOpen={isMoveDialogOpen}
+  {isMoving}
+  onMove={async (fileId, folderPath) => { await handleMove(fileId, folderPath); isMoveDialogOpen = false; moveDialogFile = null; }}
+  onClose={() => { isMoveDialogOpen = false; moveDialogFile = null; }}
 />
 
 <FilePreviewModal
@@ -1307,6 +1390,41 @@
           }}
         >
           Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if renameFolderDialog}
+  <div
+    class="nf-overlay"
+    role="presentation"
+    onclick={(e) => e.target === e.currentTarget && (renameFolderDialog = null)}
+  >
+    <div class="nf-dialog" role="dialog" aria-modal="true" aria-label="Rename folder">
+      <div class="nf-head">
+        <Icons.Pencil size={18} />
+        <h3>Rename folder</h3>
+      </div>
+      <p class="nf-sub">Current name: {renameFolderDialog.name}</p>
+      <input
+        class="nf-input"
+        type="text"
+        placeholder="New folder name"
+        bind:value={renameFolderValue}
+        use:focusOnMount
+        onkeydown={(e) => {
+          if (e.key === 'Enter') void confirmRenameFolder();
+          else if (e.key === 'Escape') renameFolderDialog = null;
+        }}
+      />
+      <div class="nf-actions">
+        <button type="button" class="nf-btn ghost" onclick={() => renameFolderDialog = null}>
+          Cancel
+        </button>
+        <button type="button" class="nf-btn primary" onclick={confirmRenameFolder} disabled={!renameFolderValue.trim() || renameFolderValue.trim() === renameFolderDialog.name}>
+          Rename
         </button>
       </div>
     </div>
@@ -1482,6 +1600,10 @@
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
     min-height: 0;
+  }
+
+  .drive-shell.sidebar-hidden {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .drive-main {

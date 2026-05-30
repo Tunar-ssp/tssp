@@ -395,24 +395,6 @@ impl NoteRepository for MockRepo {
     ) -> Result<Vec<tssp_domain::NoteId>, tssp_ports::RepositoryError> {
         Ok(vec![])
     }
-
-    fn set_note_parent(
-        &self,
-        _id: &tssp_domain::NoteId,
-        _parent_id: std::option::Option<&str>,
-        _updated_at: tssp_domain::UnixTimestamp,
-    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
-        unimplemented!()
-    }
-
-    fn set_note_icon(
-        &self,
-        _id: &tssp_domain::NoteId,
-        _icon: std::option::Option<&str>,
-        _updated_at: tssp_domain::UnixTimestamp,
-    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
-        unimplemented!()
-    }
 }
 
 #[tokio::test]
@@ -735,24 +717,6 @@ impl NoteRepository for FailingMockRepo {
         _target_id: &tssp_domain::NoteId,
     ) -> Result<Vec<tssp_domain::NoteId>, tssp_ports::RepositoryError> {
         Ok(vec![])
-    }
-
-    fn set_note_parent(
-        &self,
-        _id: &tssp_domain::NoteId,
-        _parent_id: std::option::Option<&str>,
-        _updated_at: tssp_domain::UnixTimestamp,
-    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
-        unimplemented!()
-    }
-
-    fn set_note_icon(
-        &self,
-        _id: &tssp_domain::NoteId,
-        _icon: std::option::Option<&str>,
-        _updated_at: tssp_domain::UnixTimestamp,
-    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
-        unimplemented!()
     }
 }
 

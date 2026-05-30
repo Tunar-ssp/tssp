@@ -1,7 +1,8 @@
-# TSSP Frontend Migration
+# TSSP Frontend
 
-This directory is the maintainable replacement for the legacy dashboard under
-`crates/tsspd/assets/web/`.
+This directory is the source tree for the TSSP web app (Svelte 5 + TypeScript +
+Vite). It builds into `crates/tsspd/assets/web/` and is the live bundle served by
+the daemon.
 
 ## Why this exists
 
@@ -22,11 +23,11 @@ The new frontend fixes that with:
 
 ## Current contract
 
-- `frontend/` is the source tree for the new app
-- `npm run build` writes to `crates/tsspd/assets/web-v2/`
-- built assets use the `/app-v2/` base path
-- the legacy dashboard remains the live bundle until parity is reached
-- once parity is good enough, Rust asset serving can be pointed at the new build
+- `frontend/` is the source tree for the app
+- `npm run build` writes to `crates/tsspd/assets/web/`
+- built assets use the `/app/` base path
+- the daemon serves the app shell at `/` and the bundle under `/app`
+- the legacy `/app-v2` route permanently redirects to `/app`
 
 ## Commands
 
@@ -39,8 +40,8 @@ npm run build
 
 Preview targets:
 
-- Vite dev: `http://127.0.0.1:5173/app-v2/`
-- Rust-served built preview: `http://127.0.0.1:8421/app-v2/`
+- Vite dev: `http://127.0.0.1:5173/app/`
+- Rust-served built app: `http://127.0.0.1:8421/` (or `/app`)
 
 ## Source layout
 

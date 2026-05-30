@@ -3,7 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import path from 'path'
 
 export default defineConfig({
-  base: '/app-v2/',
+  base: '/app/',
   plugins: [svelte()],
   resolve: {
     alias: {
@@ -19,7 +19,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../crates/tsspd/assets/web-v2',
+    outDir: '../crates/tsspd/assets/web',
     emptyOutDir: true,
     sourcemap: false
   }

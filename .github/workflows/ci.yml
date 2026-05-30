@@ -195,9 +195,9 @@ jobs:
           cp target/release/tsspd "$RELEASE_DIR/tsspd"
           chmod +x "$RELEASE_DIR/tsspd"
 
-          # Copy frontend assets (built into crates/tsspd/assets/web-v2)
-          if [ -d crates/tsspd/assets/web-v2 ]; then
-            cp -r crates/tsspd/assets/web-v2 "$RELEASE_DIR/web-v2"
+          # Copy frontend assets (built into crates/tsspd/assets/web)
+          if [ -d crates/tsspd/assets/web ]; then
+            cp -r crates/tsspd/assets/web "$RELEASE_DIR/web"
           fi
 
           rm -rf /opt/tssp/current

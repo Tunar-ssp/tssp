@@ -11,8 +11,8 @@ use tempfile::tempdir;
 
 use super::assets::{INDEX_HTML, SERVICE_WORKER};
 use super::{
-    serve_asset, serve_web_v2_index_from_dir, serve_web_v2_path_from_dir, web_fallback,
-    WEB_V2_MISSING_MESSAGE,
+    serve_app_index_from_dir, serve_app_path_from_dir, serve_asset, web_fallback,
+    WEB_BUNDLE_MISSING_MESSAGE,
 };
 
 #[tokio::test]
@@ -73,9 +73,9 @@ async fn web_fallback_serves_index_with_security_headers() {
         .await
         .unwrap_or_else(|e| panic!("body read: {e}"));
     let text = String::from_utf8_lossy(&body);
-    // Index now redirects to /app-v2
+    // Root serves the Svelte app shell, which loads its bundle from /app/assets.
     assert!(text.contains("TSSP"));
-    assert!(text.contains("/app-v2"));
+    assert!(text.contains("/app/"));
 }
 
 #[tokio::test]
@@ -98,14 +98,14 @@ async fn serve_asset_missing_returns_not_found() {
 }
 
 #[tokio::test]
-async fn embedded_index_redirects_to_app_v2() {
-    // Legacy index.html now redirects to the new Svelte app at /app-v2
-    assert!(INDEX_HTML.contains("/app-v2"));
+async fn embedded_index_loads_app_bundle() {
+    // The embedded index shell loads the Svelte bundle from the /app base path.
+    assert!(INDEX_HTML.contains("/app/"));
 }
 
 #[tokio::test]
 async fn serve_asset_returns_new_js_modules() {
-    // Legacy JS modules are no longer embedded; new Svelte app at /app-v2 handles everything
+    // Legacy JS modules are no longer embedded; the Svelte app handles everything
     for path in [
         "js/files.js",
         "js/notes.js",
@@ -124,18 +124,18 @@ async fn serve_asset_returns_new_js_modules() {
 }
 
 #[tokio::test]
-async fn index_redirects_to_new_app() {
-    // Legacy index.html has been replaced with redirect to new Svelte app
+async fn index_loads_only_modern_bundle() {
+    // The shell no longer references any legacy hand-written JS modules.
     assert!(!INDEX_HTML.contains("pro.js"));
     assert!(!INDEX_HTML.contains("files.js"));
     assert!(!INDEX_HTML.contains("notes.js"));
-    assert!(INDEX_HTML.contains("/app-v2"));
+    assert!(INDEX_HTML.contains("/app/"));
 }
 
 #[tokio::test]
-async fn service_worker_caches_new_app() {
-    // Service worker now caches the new app at /app-v2
-    assert!(SERVICE_WORKER.contains("/app-v2"));
+async fn service_worker_caches_app() {
+    // Service worker caches the app at the /app base path.
+    assert!(SERVICE_WORKER.contains("/app"));
     assert!(SERVICE_WORKER.contains("CACHE_VERSION"));
 }
 
@@ -172,7 +172,7 @@ async fn web_v2_preview_serves_built_asset_from_directory() {
     fs::write(assets_dir.join("index.js"), "console.log('v2');")
         .unwrap_or_else(|error| panic!("write failed: {error}"));
 
-    let response = serve_web_v2_path_from_dir(dir.path(), "assets/index.js").await;
+    let response = serve_app_path_from_dir(dir.path(), "assets/index.js").await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response
@@ -198,7 +198,7 @@ async fn web_v2_preview_falls_back_to_index_for_client_route() {
     )
     .unwrap_or_else(|error| panic!("write failed: {error}"));
 
-    let response = serve_web_v2_path_from_dir(dir.path(), "notes").await;
+    let response = serve_app_path_from_dir(dir.path(), "notes").await;
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().get(CONTENT_SECURITY_POLICY).is_some());
     let body = axum::body::to_bytes(response.into_body(), 256_000)
@@ -210,10 +210,10 @@ async fn web_v2_preview_falls_back_to_index_for_client_route() {
 #[tokio::test]
 async fn web_v2_preview_reports_missing_bundle_helpfully() {
     let dir = tempdir().unwrap_or_else(|error| panic!("tempdir failed: {error}"));
-    let response = serve_web_v2_index_from_dir(dir.path()).await;
+    let response = serve_app_index_from_dir(dir.path()).await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body = axum::body::to_bytes(response.into_body(), 256_000)
         .await
         .unwrap_or_else(|error| panic!("body read: {error}"));
-    assert_eq!(String::from_utf8_lossy(&body), WEB_V2_MISSING_MESSAGE);
+    assert_eq!(String::from_utf8_lossy(&body), WEB_BUNDLE_MISSING_MESSAGE);
 }

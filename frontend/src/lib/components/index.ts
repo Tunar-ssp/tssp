@@ -54,7 +54,6 @@ export { default as QRCodeGenerator } from './QRCodeGenerator.svelte';
 // NAVIGATION COMPONENTS
 // ============================================================================
 export { default as TopBar } from './TopBar.svelte';
-export { default as SideNav } from './SideNav.svelte';
 export { default as Dock } from './Dock.svelte';
 export { default as TabBar } from './TabBar.svelte';
 export { default as SlashMenu } from './SlashMenu.svelte';
@@ -85,7 +84,6 @@ export { default as FindReplaceWidget } from './FindReplaceWidget.svelte';
 // ============================================================================
 // SHARED/LAYOUT COMPONENTS
 // ============================================================================
-export { default as Shell } from './Shell.svelte';
 export { default as ContextMenu } from './ContextMenu.svelte';
 export { default as NotificationCenter } from './NotificationCenter.svelte';
 export { default as SettingsTray } from './SettingsTray.svelte';

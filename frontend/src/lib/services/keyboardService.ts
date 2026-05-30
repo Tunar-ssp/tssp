@@ -6,13 +6,10 @@
 import { get } from 'svelte/store';
 import {
   toggleCommandPalette,
-  commandPaletteOpen,
   closeCommandPalette,
   toggleSettingsTray,
-  settingsTrayOpen,
   closeSettingsTray,
   toggleShortcutsOverlay,
-  shortcutsOverlayOpen,
   closeShortcutsOverlay,
   activeOverlays,
 } from '$lib/stores/ui';

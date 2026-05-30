@@ -21,7 +21,6 @@ export {
 } from './files';
 
 // Keyboard utilities
-export { registerShortcuts } from './keyboard';
 export {
   createShortcutHandler,
   registerKeyboardShortcuts,

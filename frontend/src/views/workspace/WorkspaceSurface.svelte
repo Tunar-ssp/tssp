@@ -17,7 +17,8 @@
   import MarkdownPreview from '$lib/components/MarkdownPreview.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
-  import { consumeSelectionIntent, navigateTo } from '$lib/stores/ui';
+  import { consumeSelectionIntent, navigateTo, activeOverlays } from '$lib/stores/ui';
+  import { get } from 'svelte/store';
   import { renderMarkdownLite } from '$lib/utils/markdown';
   import { formatRelative, getWordCount, registerKeyboardShortcuts } from '$lib/utils';
   import { getWorkspaceCapabilities } from '$lib/services/workspaceService';
@@ -104,6 +105,7 @@
   });
 
   const handleWorkspaceKeydown = (e: KeyboardEvent) => {
+    if (get(activeOverlays).length > 0) return;
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
       showSidebar = !showSidebar;
     }
@@ -325,6 +327,7 @@
   }
 
   function handleEditorKeydown(event: KeyboardEvent) {
+    if (get(activeOverlays).length > 0) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void handleSaveWorkspace();
