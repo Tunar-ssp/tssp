@@ -42,8 +42,22 @@
 </script>
 
 {#if isOpen}
-  <div class="modal-overlay" onclick={onClose}>
-    <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+  <div 
+    class="modal-overlay" 
+    onclick={onClose}
+    onkeydown={(e) => {
+      if (e.key === 'Escape') onClose?.();
+    }}
+    role="presentation"
+    aria-hidden="true"
+  >
+    <div 
+      class="modal-content" 
+      onclick={(e) => e.stopPropagation()} 
+      onkeydown={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-label="Keyboard shortcuts help"
+    >
       <div class="modal-header">
         <h2>Keyboard Shortcuts</h2>
         <button

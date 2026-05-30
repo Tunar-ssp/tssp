@@ -22,5 +22,19 @@ export default defineConfig({
     outDir: '../crates/tsspd/assets/web',
     emptyOutDir: true,
     sourcemap: false
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+    include: ['src/**/*.test.ts', 'tests/unit/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'tests/setup.ts',
+      ]
+    }
   }
 })

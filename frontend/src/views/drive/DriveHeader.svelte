@@ -214,7 +214,6 @@
   .ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   @media (max-width: 640px) {
-    .ghost-btn span, .ghost-btn :global(span) { display: none; }
     .ghost-btn { width: 32px; padding: 0; justify-content: center; }
     .file-count { display: none; }
   }
