@@ -1218,6 +1218,14 @@ impl FileRepository for SqliteFileRepository {
             .map_err(map_rusqlite_repository_error)?;
         Ok(count as u64)
     }
+
+    fn vacuum(&self) -> Result<(), RepositoryError> {
+        let connection = self.connect()?;
+        connection
+            .execute("VACUUM", [])
+            .map_err(map_rusqlite_repository_error)?;
+        Ok(())
+    }
 }
 
 /// Error type returned by low-level `SQLite` operations.

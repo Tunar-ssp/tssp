@@ -115,6 +115,10 @@
     });
   }
 
+  function handleFolderDblClick(path: string) {
+    onOpenFolder?.(path);
+  }
+
   // React to external rename triggers (e.g. F2 key, context menu)
   $effect(() => {
     const target = renameTargetId;
@@ -222,11 +226,11 @@
         {#each displayFolders as folder (folder.path)}
           <div
             class="file-card folder-card"
-            ondblclick={() => onOpenFolder?.(folder.path)}
+            ondblclick={() => handleFolderDblClick(folder.path)}
             onclick={(e) => e.currentTarget.focus()}
             role="button"
             tabindex="0"
-            onkeydown={(e) => { if (e.key === 'Enter') onOpenFolder?.(folder.path); }}
+            onkeydown={(e) => { if (e.key === 'Enter') handleFolderDblClick(folder.path); }}
           >
             <div class="file-surface folder-surface">
               <Icons.Folder size={44} class="folder-glyph-big" />
@@ -360,7 +364,7 @@
           <button
             type="button"
             class="list-row folder-row"
-            ondblclick={() => onOpenFolder?.(folder.path)}
+            ondblclick={() => handleFolderDblClick(folder.path)}
           >
             <div class="list-row-content">
               <div class="name-cell">

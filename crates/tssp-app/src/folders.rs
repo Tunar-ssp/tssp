@@ -44,6 +44,15 @@ where
         let from = normalize_folder_path(from);
         let to = normalize_folder_path(to);
 
+        if from.is_empty() {
+            return Err(FolderError::InvalidPath("cannot move the bucket root"));
+        }
+        if to == from || to.starts_with(&format!("{from}/")) {
+            return Err(FolderError::InvalidPath(
+                "cannot move a folder into itself or its own subfolder",
+            ));
+        }
+
         validate_folder_path(&from).map_err(FolderError::InvalidPath)?;
         validate_folder_path(&to).map_err(FolderError::InvalidPath)?;
 
@@ -85,6 +94,15 @@ where
     ) -> Result<u64, FolderError> {
         let from = normalize_folder_path(from);
         let to = normalize_folder_path(to);
+
+        if from.is_empty() {
+            return Err(FolderError::InvalidPath("cannot move the bucket root"));
+        }
+        if to == from || to.starts_with(&format!("{from}/")) {
+            return Err(FolderError::InvalidPath(
+                "cannot move a folder into itself or its own subfolder",
+            ));
+        }
 
         validate_folder_path(&from).map_err(FolderError::InvalidPath)?;
         validate_folder_path(&to).map_err(FolderError::InvalidPath)?;

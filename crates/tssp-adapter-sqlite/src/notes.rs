@@ -42,7 +42,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id, parent_id, icon
+                "SELECT id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id, parent_id, icon, sort_order
                  FROM notes
                  WHERE id = ?1",
             )
@@ -186,7 +186,7 @@ impl NoteRepository for SqliteFileRepository {
 
         let connection = self.connect()?;
         let mut sql = String::from(
-            "SELECT n.id, n.title, substr(n.body, 1, 200) as body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon
+            "SELECT n.id, n.title, substr(n.body, 1, 200) as body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon, n.sort_order
              FROM notes n",
         );
         let mut where_clauses = Vec::new();
@@ -421,7 +421,7 @@ impl NoteRepository for SqliteFileRepository {
         let connection = self.connect()?;
         let mut statement = connection
             .prepare(
-                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon
+                "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon, n.sort_order
                  FROM note_search s
                  JOIN notes n ON n.id = s.note_id
                  WHERE note_search MATCH ?1
@@ -598,7 +598,7 @@ fn fuzzy_note_candidates(
     let like_prefix = format!("{prefix}%");
     let mut statement = connection
         .prepare(
-            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon
+            "SELECT n.id, n.title, n.body, n.created_at, n.updated_at, n.pinned_at, n.folder_path, n.owner_id, n.parent_id, n.icon, n.sort_order
              FROM notes n
              WHERE n.title LIKE ?1 COLLATE NOCASE
                 OR EXISTS (
@@ -838,7 +838,7 @@ pub(crate) fn migrate_notes_folders(connection: &Connection) -> Result<(), Sqlit
     Ok(())
 }
 
-/// Adds `parent_id` (page nesting) and `icon` to notes (schema v21).
+/// Adds `parent_id` (page nesting), `icon`, and `sort_order` to notes (schema v21).
 pub(crate) fn migrate_notes_nesting(connection: &Connection) -> Result<(), SqliteRepositoryError> {
     if migration_applied(connection, 21)? {
         return Ok(());
@@ -849,6 +849,7 @@ pub(crate) fn migrate_notes_nesting(connection: &Connection) -> Result<(), Sqlit
             "
             ALTER TABLE notes ADD COLUMN parent_id TEXT;
             ALTER TABLE notes ADD COLUMN icon TEXT;
+            ALTER TABLE notes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
             CREATE INDEX IF NOT EXISTS idx_notes_parent_id ON notes(parent_id);
             ",
         )
@@ -927,6 +928,7 @@ pub(crate) fn map_note_row(row: &Row<'_>) -> Result<NoteRecord, RepositoryError>
         owner_id,
         parent_id: row.get(8).map_err(map_rusqlite_repository_error)?,
         icon: row.get(9).map_err(map_rusqlite_repository_error)?,
+        sort_order: row.get(10).map_err(map_rusqlite_repository_error)?,
     })
 }
 
@@ -1013,8 +1015,8 @@ fn insert_note_row(
 ) -> Result<(), RepositoryError> {
     transaction
         .execute(
-            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id, parent_id, icon)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO notes (id, title, body, created_at, updated_at, pinned_at, folder_path, owner_id, parent_id, icon, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 new_note.id.as_str(),
                 new_note.title.as_str(),
@@ -1026,6 +1028,7 @@ fn insert_note_row(
                 new_note.owner_id.as_ref().map(tssp_domain::UserId::as_str),
                 new_note.parent_id.as_deref(),
                 new_note.icon.as_deref(),
+                new_note.sort_order,
             ],
         )
         .map(|_rows| ())
@@ -1109,6 +1112,7 @@ mod tests {
                 owner_id: None,
                 parent_id: None,
                 icon: None,
+                sort_order: 0,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -1146,6 +1150,7 @@ mod tests {
                 owner_id: None,
                 parent_id: None,
                 icon: None,
+                sort_order: 0,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
         assert_eq!(created.body.as_str(), "Body text");

@@ -72,6 +72,8 @@ pub struct NewNoteRecord {
     pub parent_id: Option<String>,
     /// Optional page icon (emoji or short token).
     pub icon: Option<String>,
+    /// Ordering position within the current level of the tree.
+    pub sort_order: i64,
 }
 
 /// Durable result of writing a blob.

@@ -115,6 +115,30 @@ pub fn build_router(state: HttpState) -> Router {
         )
         .layer(json_body_limit())
         .route(
+            "/api/v1/files/bulk/trash",
+            post(crate::delete::bulk_trash_files)
+                .options(options_response)
+                .layer(json_body_limit()),
+        )
+        .route(
+            "/api/v1/files/bulk/restore",
+            post(crate::delete::bulk_restore_files)
+                .options(options_response)
+                .layer(json_body_limit()),
+        )
+        .route(
+            "/api/v1/files/bulk/purge",
+            post(crate::delete::bulk_purge_files)
+                .options(options_response)
+                .layer(json_body_limit()),
+        )
+        .route(
+            "/api/v1/files/bulk/move",
+            post(crate::move_file::bulk_move_files)
+                .options(options_response)
+                .layer(json_body_limit()),
+        )
+        .route(
             "/api/v1/files/{id}/restore",
             post(crate::delete::restore_file).options(options_response),
         )
@@ -337,6 +361,14 @@ pub fn build_router(state: HttpState) -> Router {
         .route(
             "/api/v1/admin/cleanup/sessions",
             post(crate::admin::admin_cleanup_sessions).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/maintenance/vacuum",
+            post(crate::admin::admin_maintenance_vacuum).options(options_response),
+        )
+        .route(
+            "/api/v1/admin/maintenance/prune-logs",
+            post(crate::admin::admin_maintenance_prune_logs).options(options_response),
         )
         .route(
             "/api/v1/admin/backup",

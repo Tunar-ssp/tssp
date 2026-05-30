@@ -17,10 +17,72 @@ pub struct MoveFileRequest {
     pub folder_path: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BulkMoveFileRequest {
+    pub ids: Vec<String>,
+    pub folder_path: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MoveFileResponse {
     pub schema_version: u8,
     pub file: FileRecordResponse,
+}
+
+/// `POST /api/v1/files/bulk/move`
+pub async fn bulk_move_files(
+    State(state): State<HttpState>,
+    auth: AuthContext,
+    Json(body): Json<BulkMoveFileRequest>,
+) -> Response {
+    let folder_path = tssp_app::normalize_folder_path(&body.folder_path);
+    if let Err(message) = tssp_app::validate_folder_path(&folder_path) {
+        return bad_request("invalid_request", format!("invalid folder path: {message}"));
+    }
+
+    let mut moved = Vec::new();
+    let repository = state.repository.clone();
+
+    for id_str in body.ids {
+        let Ok(file_id) = FileId::new(id_str.clone()) else {
+            continue;
+        };
+
+        let existing = match state.stats_provider.find_file(&file_id) {
+            Ok(Some(file)) => file,
+            _ => continue,
+        };
+
+        if !auth.is_admin() && existing.owner_id.as_ref() != Some(&auth.user_id) {
+            continue;
+        }
+
+        if let Ok(Some(file)) = state
+            .stats_provider
+            .set_file_folder_path(&file_id, &folder_path)
+        {
+            log_audit_event(
+                repository.as_ref(),
+                AuditAction::FileMove,
+                Some(&auth.user_id),
+                Some("file"),
+                Some(file_id.as_str()),
+                "success",
+                Some(&format!("bulk moved to folder {folder_path}")),
+            );
+            moved.push(FileRecordResponse::from_record(&file));
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "schema_version": 1,
+            "updated": moved,
+            "count": moved.len(),
+        })),
+    )
+        .into_response()
 }
 
 /// `PATCH /api/v1/files/{id}/folder`

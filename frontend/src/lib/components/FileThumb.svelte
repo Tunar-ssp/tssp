@@ -26,7 +26,18 @@
       : `/api/v1/files/${encodeURIComponent(id)}/thumbnail`
   );
 
+  // Cache failed states globally to prevent repeated 503/404 attempts
+  // This is especially important for the Orange Pi which has expensive I/O
+  const globalFailCache = new Set<string>();
+
+  $effect(() => {
+    if (globalFailCache.has(`${id}:${stage}`)) {
+      onError();
+    }
+  });
+
   function onError() {
+    globalFailCache.add(`${id}:${stage}`);
     stage = stage === 'thumb' ? 'content' : 'failed';
   }
 </script>

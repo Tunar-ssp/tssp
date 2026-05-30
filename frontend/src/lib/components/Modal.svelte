@@ -2,6 +2,7 @@
   import { registerKeyboardShortcuts } from '$lib/utils';
   import type { ModalProps } from './primitives.svelte';
   import type { Snippet } from 'svelte';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface $$Props extends ModalProps {
     class?: string;
@@ -39,12 +40,17 @@
   $effect(() => {
     if (!isOpen) return;
 
+    activeOverlays.push('modal');
+
     const cleanup = registerKeyboardShortcuts(
       [{ key: 'Escape', handler: handleModalKeydown }],
       document
     );
 
-    return cleanup;
+    return () => {
+      activeOverlays.remove('modal');
+      cleanup();
+    };
   });
 </script>
 

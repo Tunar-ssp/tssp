@@ -29,6 +29,8 @@ pub struct NoteRecordResponse {
     /// Optional page icon (emoji or short token).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Ordering position within the current level of the tree.
+    pub sort_order: i64,
 }
 
 impl NoteRecordResponse {
@@ -50,6 +52,7 @@ impl NoteRecordResponse {
             pinned_at: record.pinned_at,
             parent_id: record.parent_id.clone(),
             icon: record.icon.clone(),
+            sort_order: record.sort_order,
         }
     }
 }

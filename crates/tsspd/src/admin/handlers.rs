@@ -220,6 +220,60 @@ pub async fn admin_system(State(state): State<HttpState>) -> impl IntoResponse {
     }
 }
 
+/// `POST /api/v1/admin/maintenance/prune-logs`
+#[derive(Debug, Deserialize)]
+pub struct PruneLogsQuery {
+    pub days: u32,
+}
+
+pub async fn admin_maintenance_prune_logs(
+    State(state): State<HttpState>,
+    Query(params): Query<PruneLogsQuery>,
+) -> impl IntoResponse {
+    let repo = state.repository.clone();
+    let older_than_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        .saturating_sub(u64::from(params.days) * 86_400);
+
+    let ts = match tssp_domain::UnixTimestamp::new(i64::try_from(older_than_secs).unwrap_or(0)) {
+        Ok(ts) => ts,
+        Err(_) => tssp_domain::UnixTimestamp::new(0).unwrap(),
+    };
+
+    match tokio::task::spawn_blocking(move || repo.prune_old_audit_events(ts)).await {
+        Ok(Ok(count)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "schema_version": 1,
+                "removed_count": count,
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "prune_failed",
+                    message: e.to_string(),
+                },
+            }),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "worker_failed",
+                    message: "prune worker failed".to_string(),
+                },
+            }),
+        )
+            .into_response(),
+    }
+}
+
 /// `GET /api/v1/admin/activity`
 pub async fn admin_activity(
     State(state): State<HttpState>,
@@ -490,6 +544,41 @@ pub async fn admin_cleanup_sessions(State(state): State<HttpState>) -> impl Into
 }
 
 /// `GET /api/v1/admin/folders`
+/// `POST /api/v1/admin/maintenance/vacuum`
+pub async fn admin_maintenance_vacuum(State(state): State<HttpState>) -> impl IntoResponse {
+    let repo = state.repository.clone();
+    match tokio::task::spawn_blocking(move || repo.vacuum()).await {
+        Ok(Ok(())) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "schema_version": 1,
+                "message": "database vacuum completed successfully",
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "vacuum_failed",
+                    message: e.to_string(),
+                },
+            }),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: ErrorBody {
+                    code: "worker_failed",
+                    message: "vacuum worker failed".to_string(),
+                },
+            }),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn admin_folders(State(state): State<HttpState>) -> impl IntoResponse {
     match state.stats_provider.list_folder_counts(None) {
         Ok(folders) => {

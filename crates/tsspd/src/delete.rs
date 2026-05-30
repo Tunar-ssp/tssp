@@ -4,6 +4,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde::Deserialize;
 use tssp_app::{
     log_audit_event, AuditAction, DeleteFileError, DeleteFileService, RestoreFileError,
     RestoreFileService,
@@ -133,6 +134,63 @@ where
             })
             .map_err(map_delete_error)
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkDeleteRequest {
+    pub ids: Vec<String>,
+}
+
+pub(crate) async fn bulk_trash_files(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Json(body): Json<BulkDeleteRequest>,
+) -> Response {
+    let mut trashed = Vec::new();
+    let delete_provider = state.delete_provider.clone();
+    let audit_user_id = auth.user_id.clone();
+    let repository = state.repository.clone();
+
+    for id_str in body.ids {
+        let Ok(file_id) = FileId::new(id_str.clone()) else {
+            continue;
+        };
+
+        if let Ok(Some(file)) = state.stats_provider.find_file(&file_id) {
+            if !(auth.is_admin() || file.owner_id.as_ref() == Some(&auth.user_id)) {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        let dp = delete_provider.clone();
+        let fid = file_id.clone();
+        match tokio::task::spawn_blocking(move || dp.delete(fid)).await {
+            Ok(Ok(_)) => {
+                log_audit_event(
+                    repository.as_ref(),
+                    AuditAction::FileDelete,
+                    Some(&audit_user_id),
+                    Some("file"),
+                    Some(id_str.as_str()),
+                    "success",
+                    Some("bulk trashed"),
+                );
+                trashed.push(id_str);
+            }
+            _ => continue,
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "trashed": trashed,
+            "count": trashed.len()
+        })),
+    )
+        .into_response()
 }
 
 pub(crate) async fn delete_file(
@@ -372,6 +430,50 @@ where
     }
 }
 
+pub(crate) async fn bulk_restore_files(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Json(body): Json<BulkDeleteRequest>,
+) -> Response {
+    let mut restored = Vec::new();
+    let restore_provider = state.restore_provider.clone();
+    let audit_user_id = auth.user_id.clone();
+    let repository = state.repository.clone();
+
+    for id_str in body.ids {
+        let Ok(file_id) = FileId::new(id_str.clone()) else {
+            continue;
+        };
+
+        let rp = restore_provider.clone();
+        let fid = file_id.clone();
+        match tokio::task::spawn_blocking(move || rp.restore(fid)).await {
+            Ok(Ok(outcome)) if outcome.existed => {
+                log_audit_event(
+                    repository.as_ref(),
+                    AuditAction::FileRestore,
+                    Some(&audit_user_id),
+                    Some("file"),
+                    Some(id_str.as_str()),
+                    "success",
+                    Some("bulk restored"),
+                );
+                restored.push(id_str);
+            }
+            _ => continue,
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "restored": restored,
+            "count": restored.len()
+        })),
+    )
+        .into_response()
+}
+
 pub(crate) async fn restore_file(
     State(state): State<HttpState>,
     auth: crate::auth::AuthContext,
@@ -458,6 +560,49 @@ fn restore_success_response(outcome: HttpRestoreOutcome) -> Response {
 }
 
 /// Permanently deletes a specific file from trash.
+pub(crate) async fn bulk_purge_files(
+    State(state): State<HttpState>,
+    auth: crate::auth::AuthContext,
+    Json(body): Json<BulkDeleteRequest>,
+) -> Response {
+    let mut purged = Vec::new();
+    let audit_user_id = auth.user_id.clone();
+    let repository = state.repository.clone();
+
+    for id_str in body.ids {
+        let Ok(file_id) = FileId::new(id_str.clone()) else {
+            continue;
+        };
+
+        let repo = repository.clone();
+        let fid = file_id.clone();
+        match tokio::task::spawn_blocking(move || repo.purge_deleted_file(&fid)).await {
+            Ok(Ok(true)) => {
+                log_audit_event(
+                    repository.as_ref(),
+                    AuditAction::FileDelete,
+                    Some(&audit_user_id),
+                    Some("file"),
+                    Some(id_str.as_str()),
+                    "success",
+                    Some("bulk purged from trash"),
+                );
+                purged.push(id_str);
+            }
+            _ => continue,
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "purged": purged,
+            "count": purged.len()
+        })),
+    )
+        .into_response()
+}
+
 pub(crate) async fn permanent_delete(
     State(state): State<HttpState>,
     auth: crate::auth::AuthContext,

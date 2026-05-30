@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface ConsoleCommand {
     id: string;
@@ -21,6 +22,13 @@
     onExecuteCommand = async () => '',
     commands = [],
   }: $$Props = $props();
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('modal');
+      return () => activeOverlays.remove('modal');
+    }
+  });
 
   let input = $state('');
   let history: Array<{ type: 'input' | 'output' | 'error'; text: string }> = $state([]);

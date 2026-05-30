@@ -281,6 +281,10 @@ impl FileRepository for MockRepo {
     ) -> Result<u64, tssp_ports::RepositoryError> {
         Ok(0)
     }
+
+    fn vacuum(&self) -> Result<(), tssp_ports::RepositoryError> {
+        Ok(())
+    }
 }
 
 impl NoteRepository for MockRepo {
@@ -390,6 +394,24 @@ impl NoteRepository for MockRepo {
         _target_id: &tssp_domain::NoteId,
     ) -> Result<Vec<tssp_domain::NoteId>, tssp_ports::RepositoryError> {
         Ok(vec![])
+    }
+
+    fn set_note_parent(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _parent_id: std::option::Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+
+    fn set_note_icon(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _icon: std::option::Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
     }
 }
 
@@ -596,6 +618,12 @@ impl FileRepository for FailingMockRepo {
             message: "pruning not available in test".to_owned(),
         })
     }
+
+    fn vacuum(&self) -> Result<(), tssp_ports::RepositoryError> {
+        Err(tssp_ports::RepositoryError::OperationFailed {
+            message: "vacuum not available in test".to_owned(),
+        })
+    }
 }
 
 impl NoteRepository for FailingMockRepo {
@@ -707,6 +735,24 @@ impl NoteRepository for FailingMockRepo {
         _target_id: &tssp_domain::NoteId,
     ) -> Result<Vec<tssp_domain::NoteId>, tssp_ports::RepositoryError> {
         Ok(vec![])
+    }
+
+    fn set_note_parent(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _parent_id: std::option::Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
+    }
+
+    fn set_note_icon(
+        &self,
+        _id: &tssp_domain::NoteId,
+        _icon: std::option::Option<&str>,
+        _updated_at: tssp_domain::UnixTimestamp,
+    ) -> Result<tssp_domain::NoteRecord, tssp_ports::RepositoryError> {
+        unimplemented!()
     }
 }
 

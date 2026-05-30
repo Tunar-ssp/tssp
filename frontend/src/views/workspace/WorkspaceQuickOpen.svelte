@@ -2,6 +2,7 @@
   import * as Icons from 'lucide-svelte';
   import { workspaceApi, type WorkspaceFileEntry } from '$lib/api';
   import FileIcon from '$lib/components/FileIcon.svelte';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface Props {
     workspaceId: string;
@@ -70,6 +71,13 @@
       .sort((a, b) => b.score - a.score)
       .slice(0, 50);
     return scored;
+  });
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('modal');
+      return () => activeOverlays.remove('modal');
+    }
   });
 
   $effect(() => {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Icons from 'lucide-svelte';
+  import { activeOverlays } from '$lib/stores/ui';
 
   interface Props {
     isOpen?: boolean;
@@ -7,6 +8,13 @@
   }
 
   let { isOpen = false, onClose }: Props = $props();
+
+  $effect(() => {
+    if (isOpen) {
+      activeOverlays.push('modal');
+      return () => activeOverlays.remove('modal');
+    }
+  });
 
   const shortcuts = [
     { group: 'Navigation', items: [

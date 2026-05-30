@@ -45,6 +45,8 @@ pub struct CreateNoteRequest {
     pub parent_id: Option<String>,
     /// Optional page icon.
     pub icon: Option<String>,
+    /// Optional explicit sort order.
+    pub sort_order: Option<i64>,
 }
 
 /// Input for replacing a note.
@@ -84,6 +86,7 @@ where
         let pinned_at = request.pin.then_some(1_u32);
         let parent_id = request.parent_id.filter(|value| !value.trim().is_empty());
         let icon = request.icon.filter(|value| !value.trim().is_empty());
+        let sort_order = request.sort_order.unwrap_or(0);
 
         let record = self
             .repository
@@ -99,6 +102,7 @@ where
                 owner_id: request.owner_id,
                 parent_id,
                 icon,
+                sort_order,
             })
             .map_err(NoteError::Repository)?;
 
@@ -411,6 +415,7 @@ mod tests {
                 owner_id: None,
                 parent_id: None,
                 icon: None,
+                sort_order: None,
             })
             .unwrap_or_else(|error| panic!("create failed: {error}"));
 
@@ -438,6 +443,7 @@ mod tests {
                 owner_id: None,
                 parent_id: None,
                 icon: None,
+                sort_order: 0,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -475,6 +481,7 @@ mod tests {
                 owner_id: None,
                 parent_id: None,
                 icon: None,
+                sort_order: 0,
             })
             .unwrap_or_else(|error| panic!("insert failed: {error}"));
 
@@ -508,6 +515,7 @@ mod tests {
                     owner_id: None,
                     parent_id: None,
                     icon: None,
+                    sort_order: 0,
                 })
                 .unwrap_or_else(|error| panic!("insert failed: {error}"));
         }

@@ -15,6 +15,47 @@
   }
 
   let { commands = [], commandOutput = '', executing = false, onRunCommand }: Props = $props();
+
+  import { api } from '$lib/api';
+  import { success, error } from '$lib/stores/notifications';
+
+  let localExecuting = $state(false);
+  let localOutput = $state('');
+
+  async function handleVacuum() {
+    localExecuting = true;
+    localOutput = 'Compacting database...';
+    try {
+      const res = await api.vacuumDatabase();
+      localOutput = res.message;
+      success('Database Vacuumed', 'Optimization complete');
+    } catch (err) {
+      localOutput = err instanceof Error ? err.message : 'Vacuum failed';
+      error('Vacuum Failed', localOutput);
+    } finally {
+      localExecuting = false;
+    }
+  }
+
+  async function handlePruneLogs() {
+    const days = window.prompt('Prune logs older than how many days?', '30');
+    if (!days) return;
+    const d = parseInt(days);
+    if (isNaN(d)) return;
+
+    localExecuting = true;
+    localOutput = `Pruning logs older than ${d} days...`;
+    try {
+      const res = await api.pruneAuditLogs(d);
+      localOutput = `Successfully removed ${res.removed_count} log entries.`;
+      success('Logs Pruned', localOutput);
+    } catch (err) {
+      localOutput = err instanceof Error ? err.message : 'Prune failed';
+      error('Prune Failed', localOutput);
+    } finally {
+      localExecuting = false;
+    }
+  }
 </script>
 
 <div class="admin-content">
@@ -24,8 +65,22 @@
         <h2>Maintenance actions</h2>
       </div>
       <div class="command-grid">
+        <button type="button" class="command-card" onclick={handleVacuum} disabled={executing || localExecuting}>
+          <div>
+            <strong>Vacuum database</strong>
+            <p>Reclaim unused space and optimize SQLite metadata.</p>
+          </div>
+          <Icons.Zap size={16} />
+        </button>
+        <button type="button" class="command-card" onclick={handlePruneLogs} disabled={executing || localExecuting}>
+          <div>
+            <strong>Prune audit logs</strong>
+            <p>Remove old activity history to save storage.</p>
+          </div>
+          <Icons.Trash2 size={16} />
+        </button>
         {#each commands as command (command.id)}
-          <button type="button" class="command-card" onclick={() => onRunCommand?.(command.name)} disabled={executing}>
+          <button type="button" class="command-card" onclick={() => onRunCommand?.(command.name)} disabled={executing || localExecuting}>
             <div>
               <strong>{command.name}</strong>
               <p>{command.description || 'Safe backend maintenance command'}</p>
@@ -40,7 +95,7 @@
       <div class="panel-head">
         <h2>Command output</h2>
       </div>
-      <pre class="command-output">{commandOutput || 'Run a maintenance command to inspect output here.'}</pre>
+      <pre class="command-output">{localOutput || commandOutput || 'Run a maintenance command to inspect output here.'}</pre>
     </article>
   </div>
 </div>

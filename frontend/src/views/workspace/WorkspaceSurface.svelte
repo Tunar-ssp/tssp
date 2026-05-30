@@ -40,6 +40,7 @@
   type SidebarView = 'explorer' | 'search';
 
   let showSidebar = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('workspace-sidebar-open') ?? 'true') : true);
+  let sidebarWidth = $state(typeof localStorage !== 'undefined' ? parseInt(localStorage.getItem('workspace-sidebar-width') ?? '280') : 280);
   let sidebarView = $state<SidebarView>('explorer');
   let showBottomPanel = $state(typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('workspace-bottom-panel-open') ?? 'false') : false);
   let contextMenu = $state({ visible: false, x: 0, y: 0, workspace: null as any });
@@ -142,6 +143,7 @@
   $effect(() => {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('workspace-sidebar-open', String(showSidebar));
+      localStorage.setItem('workspace-sidebar-width', String(sidebarWidth));
     }
   });
 
@@ -284,6 +286,7 @@
     if (activeFilePath) {
       const tabId = `file:${activeFilePath}`;
       openFileTabs = openFileTabs.map((t) => t.id === tabId ? { ...t, isDirty: true } : t);
+      import('$lib/stores/workspace').then(m => m.markFileDirty(activeFilePath!));
     } else {
       syncOpenTabs();
     }
@@ -352,7 +355,11 @@
     const result = replaceMatches(bodyDraft, query, replacement, options);
     bodyDraft = result.content;
     isModified = true;
-    syncOpenTabs();
+    if (activeFilePath) {
+      import('$lib/stores/workspace').then(m => m.markFileDirty(activeFilePath!));
+    } else {
+      syncOpenTabs();
+    }
     scheduleWorkspaceSave();
 
     if (result.replacementCount > 0) {
@@ -369,7 +376,11 @@
     const result = replaceMatches(bodyDraft, query, replacement, options);
     bodyDraft = result.content;
     isModified = true;
-    syncOpenTabs();
+    if (activeFilePath) {
+      import('$lib/stores/workspace').then(m => m.markFileDirty(activeFilePath!));
+    } else {
+      syncOpenTabs();
+    }
     scheduleWorkspaceSave();
 
     if (result.replacementCount > 0) {
@@ -518,6 +529,7 @@
   </aside>
 
   {#if showSidebar}
+    <div class="sidebar-container" style="width: {sidebarWidth}px">
     {#if $activeWorkspace}
       {#if sidebarView === 'search'}
         <WorkspaceSearch
@@ -545,6 +557,27 @@
         onCreateWorkspace={handleCreateWorkspace}
       />
     {/if}
+    <div
+      class="resizer"
+      role="separator"
+      aria-orientation="vertical"
+      onmousedown={(e) => {
+        const startX = e.clientX;
+        const startWidth = sidebarWidth;
+        const onMouseMove = (moveEvent: MouseEvent) => {
+          sidebarWidth = Math.max(160, Math.min(600, startWidth + (moveEvent.clientX - startX)));
+        };
+        const onMouseUp = () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          document.body.style.cursor = 'default';
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = 'col-resize';
+      }}
+    ></div>
+    </div>
   {/if}
 
   {#if !$activeWorkspace}
@@ -724,6 +757,31 @@
     padding: 8px 0;
     gap: 2px;
     flex-shrink: 0;
+    z-index: 20;
+  }
+
+  .sidebar-container {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    height: 100%;
+    z-index: 10;
+  }
+
+  .resizer {
+    width: 4px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.2s;
+    position: absolute;
+    right: -2px;
+    top: 0;
+    z-index: 30;
+  }
+
+  .resizer:hover, .resizer:active {
+    background: var(--blue);
   }
 
   .activity-btn {

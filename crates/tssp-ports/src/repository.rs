@@ -289,6 +289,13 @@ pub trait FileRepository {
     ///
     /// Returns [`RepositoryError`] when the delete operation fails.
     fn prune_old_audit_events(&self, older_than: UnixTimestamp) -> Result<u64, RepositoryError>;
+
+    /// Compacts the database by reclaiming unused space.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepositoryError`] when the maintenance fails.
+    fn vacuum(&self) -> Result<(), RepositoryError>;
 }
 
 /// Persists and queries Markdown notes.
@@ -626,6 +633,10 @@ where
 
     fn prune_old_audit_events(&self, older_than: UnixTimestamp) -> Result<u64, RepositoryError> {
         self.as_ref().prune_old_audit_events(older_than)
+    }
+
+    fn vacuum(&self) -> Result<(), RepositoryError> {
+        self.as_ref().vacuum()
     }
 }
 

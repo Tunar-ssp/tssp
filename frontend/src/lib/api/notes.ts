@@ -12,6 +12,8 @@ export interface Note {
   parent_id?: string | null;
   /** Optional page icon (emoji). */
   icon?: string | null;
+  /** Ordering position within the current level of the tree. */
+  sort_order: number;
 }
 
 export const notesApi = {

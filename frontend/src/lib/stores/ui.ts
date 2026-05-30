@@ -115,6 +115,28 @@ export const settingsTrayOpen = writable(false);
 export const shortcutsOverlayOpen = writable(false);
 export const selectionIntent = writable<SelectionIntent | null>(null);
 
+export type OverlayId = 'command-palette' | 'settings-tray' | 'shortcuts' | 'modal' | 'preview' | 'context-menu';
+const overlayStack = writable<OverlayId[]>([]);
+
+export const activeOverlays = {
+  subscribe: overlayStack.subscribe,
+  push: (id: OverlayId) => overlayStack.update(stack => [...stack.filter(i => i !== id), id]),
+  pop: () => {
+    let popped: OverlayId | undefined;
+    overlayStack.update(stack => {
+      popped = stack[stack.length - 1];
+      return stack.slice(0, -1);
+    });
+    return popped;
+  },
+  remove: (id: OverlayId) => overlayStack.update(stack => stack.filter(i => i !== id)),
+  isTop: (id: OverlayId) => {
+    const stack = get(overlayStack);
+    return stack[stack.length - 1] === id;
+  },
+  hasAny: derived(overlayStack, stack => stack.length > 0)
+};
+
 preferences.subscribe((value) => {
   applyDocumentPreferences(value);
   if (isBrowser()) {
@@ -160,22 +182,50 @@ export function showBanner(message: string, type: BannerType = 'info') {
 export function openCommandPalette(initialQuery = '') {
   commandQuery.set(initialQuery);
   commandPaletteOpen.set(true);
+  activeOverlays.push('command-palette');
 }
 
 export function closeCommandPalette() {
   commandPaletteOpen.set(false);
+  activeOverlays.remove('command-palette');
 }
 
 export function toggleCommandPalette() {
-  commandPaletteOpen.update((value) => !value);
+  const isOpen = get(commandPaletteOpen);
+  if (isOpen) closeCommandPalette();
+  else openCommandPalette();
+}
+
+export function openSettingsTray() {
+  settingsTrayOpen.set(true);
+  activeOverlays.push('settings-tray');
+}
+
+export function closeSettingsTray() {
+  settingsTrayOpen.set(false);
+  activeOverlays.remove('settings-tray');
 }
 
 export function toggleSettingsTray() {
-  settingsTrayOpen.update((value) => !value);
+  const isOpen = get(settingsTrayOpen);
+  if (isOpen) closeSettingsTray();
+  else openSettingsTray();
+}
+
+export function openShortcutsOverlay() {
+  shortcutsOverlayOpen.set(true);
+  activeOverlays.push('shortcuts');
+}
+
+export function closeShortcutsOverlay() {
+  shortcutsOverlayOpen.set(false);
+  activeOverlays.remove('shortcuts');
 }
 
 export function toggleShortcutsOverlay() {
-  shortcutsOverlayOpen.update((value) => !value);
+  const isOpen = get(shortcutsOverlayOpen);
+  if (isOpen) closeShortcutsOverlay();
+  else openShortcutsOverlay();
 }
 
 export function updatePreferences(next: Partial<ShellPreferences>) {
